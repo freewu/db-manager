@@ -42,11 +42,17 @@ else
   if [ -n "$previous" ]; then range="${previous}..HEAD"; else range="HEAD"; fi
 fi
 
-# The annotated tag message is the release summary. A tag created as
-# `git tag -a v1.0.0 -m "v1.0.0"` has an empty body and this stays blank.
+# The annotated tag message is the release summary. `just release` writes the
+# placeholder `Release v1.2.3` when no summary was given, which would only repeat
+# the release title, so treat it as empty. Paragraphs are preserved, leading and
+# trailing blank lines are not.
 summary=""
 if [ "$tag_exists" = true ]; then
-  summary=$(git tag -l --format='%(contents:body)' "$tag" | sed -e '/^[[:space:]]*$/d')
+  summary=$(git tag -l --format='%(contents)' "$tag" |
+    awk 'BEGIN { RS = "" } { out = out (NR > 1 ? "\n\n" : "") $0 } END { print out }')
+  if [ "$summary" = "Release v${version}" ]; then
+    summary=""
+  fi
 fi
 
 subjects=$(mktemp)

@@ -24,6 +24,9 @@ just sync "feat(sidebar): 索引成为一等资源"
 
 **不允许留下未提交的改动。** 任务结束时工作区必须是干净的（`git status --short` 无输出）。
 
+> 这些命令要在 **Windows 侧**执行（`just.exe`，或在 Windows 终端里跑 `git`）。
+> WSL 里的 `git push` 到不了外网，原因见 §3。
+
 ### 提交信息
 
 遵循 Conventional Commits，因为 **提交信息会直接变成下一个版本的 release message**：
