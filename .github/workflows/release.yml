@@ -1,0 +1,204 @@
+name: Release
+
+# Releases are tag driven:
+#
+#   just release 0.2.0 "一句话总结本版内容"
+#
+# That syncs the version into wails.json / Justfile / frontend/package.json /
+# app.go, commits, and pushes both the commit and the `v0.2.0` tag. The tag push
+# is what runs this workflow: it verifies the tree, builds the standalone
+# executables for Windows, macOS and Linux, then publishes the GitHub Release
+# (notes are rendered by scripts/release-notes.sh).
+#
+# `workflow_dispatch` runs the same matrix without publishing anything, which is
+# how you smoke test a change to this file.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: '24'
+  WAILS_VERSION: 'v2.16.0'
+
+jobs:
+  check:
+    name: Verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Version mirrors agree with wails.json
+        run: node scripts/version.mjs --check
+
+      # Guards against tagging a version that was never written into the tree,
+      # which would ship a binary whose `main.Version` disagrees with the tag.
+      - name: Tag matches wails.json
+        if: github.ref_type == 'tag'
+        run: node scripts/version.mjs --check "${GITHUB_REF_NAME#v}"
+
+      # `asserts/` is the single source of truth for the brand artwork;
+      # `just icons` refreshes the copies that the build consumes.
+      - name: Brand assets are in sync
+        run: |
+          cmp asserts/logo.png build/appicon.png
+          cmp asserts/logo.png frontend/public/logo.png
+
+      - run: go vet ./...
+      - run: go test ./...
+
+      - run: npm ci
+        working-directory: frontend
+
+      - run: npm run typecheck
+        working-directory: frontend
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-amd64
+            os: windows-latest
+            platform: windows/amd64
+            artifact: build/bin/db-manager.exe
+          - name: macos-universal
+            os: macos-latest
+            platform: darwin/universal
+            artifact: build/bin/db-manager-macos-universal.zip
+          - name: linux-amd64
+            os: ubuntu-22.04
+            platform: linux/amd64
+            artifact: build/bin/db-manager
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `git describe` in the notes script wants the tags.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Wails links against GTK3 + WebKitGTK on Linux. Pinned to 22.04 on
+      # purpose: it ships WebKitGTK 4.0, which every current distribution has,
+      # whereas 24.04 only has 4.1 and would need `-tags webkit2_41` plus a much
+      # narrower set of machines that can run the result.
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev
+
+      - name: Install the Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version=$(node -p "require('./wails.json').info.productVersion")
+          fi
+          echo "value=${version}" >>"$GITHUB_OUTPUT"
+          echo "Building ${version} for ${{ matrix.platform }}"
+
+      # `-clean` wipes build/bin so a reused runner cannot ship a stale binary.
+      # `-ldflags` is what makes the compiled binary report the release version.
+      - name: Build
+        shell: bash
+        run: |
+          wails build -clean -platform ${{ matrix.platform }} \
+            -ldflags "-X main.Version=${{ steps.version.outputs.value }}"
+
+      # A .app is a directory; a zip keeps the executable bit and the bundle
+      # layout intact, and is what users expect from a macOS download.
+      - name: Package the macOS bundle
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          cd build/bin
+          zip -qry db-manager-macos-universal.zip db-manager.app
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.artifact }}
+          if-no-files-found: error
+
+  release:
+    name: Publish
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: dist
+        run: |
+          sha256sum db-manager db-manager-macos-universal.zip db-manager.exe >checksums.txt
+          cat checksums.txt
+
+      - name: Generate the release notes
+        run: |
+          bash scripts/release-notes.sh "${GITHUB_REF_NAME}" >RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      # Re-running a failed release must not trip over the existing release,
+      # hence the `gh release edit` / `--clobber` branch.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets=(
+            dist/db-manager.exe
+            dist/db-manager-macos-universal.zip
+            dist/db-manager
+            dist/checksums.txt
+          )
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release edit "${GITHUB_REF_NAME}" \
+              --title "DB Manager ${GITHUB_REF_NAME#v}" \
+              --notes-file RELEASE_NOTES.md
+            gh release upload "${GITHUB_REF_NAME}" "${assets[@]}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" \
+              --title "DB Manager ${GITHUB_REF_NAME#v}" \
+              --notes-file RELEASE_NOTES.md \
+              "${assets[@]}"
+          fi
