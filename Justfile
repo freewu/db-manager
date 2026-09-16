@@ -55,6 +55,18 @@ build: icons
 build-fast: icons
     wails build -platform windows/amd64
 
+# Package the app for this machine: build, then archive the result into dist/
+# next to a checksum file. Purely local — it never touches git, so it is safe to
+# run on a dirty tree. Releasing to GitHub is `just publish`.
+#
+# The version stamped into the binary comes from wails.json; run
+# `node scripts/version.mjs <x.y.z>` first if you want it to match something.
+#
+# Package this machine's build into dist/ (no git involved).
+release: icons
+    wails build -clean -ldflags "-X main.Version={{version}}"
+    node scripts/package.mjs
+
 # Run the app in development mode: Vite dev server + Go live reload.
 dev: icons
     wails dev
@@ -104,14 +116,15 @@ doctor:
 # Remove every build artefact.
 [unix]
 clean:
-    rm -rf {{bin}} {{web}}/dist
+    rm -rf {{bin}} {{web}}/dist dist
 
 [windows]
 clean:
     if (Test-Path {{bin}}) { Remove-Item -Recurse -Force {{bin}} }
     if (Test-Path {{web}}/dist) { Remove-Item -Recurse -Force {{web}}/dist }
+    if (Test-Path dist) { Remove-Item -Recurse -Force dist }
 
-# ---------------------------------------------------------------- release ---
+# ------------------------------------------------------- version / release ---
 
 # Print the current version (single source of truth: wails.json).
 ver:
@@ -134,18 +147,19 @@ sync message:
     git commit -m "{{message}}"
     git push origin HEAD
 
-# Cut a release: bump the version in every file that carries it, commit, tag
-# and push. Pushing the tag runs .github/workflows/release.yml, which builds the
-# standalone Windows / macOS / Linux executables and publishes the GitHub
-# Release.
+# Cut a release for GitHub: bump the version in every file that carries it,
+# commit, tag and push. Pushing the tag runs .github/workflows/release.yml,
+# which builds the standalone Windows / macOS / Linux executables and publishes
+# the GitHub Release.
 #
-#   just release 0.2.0 "新增 Navicat 风格连接树，索引成为一等资源"
+#   just publish 0.2.0 "新增 Navicat 风格连接树，索引成为一等资源"
 #
 # The optional summary becomes the head of the release message — it is stored in
-# the annotated tag, so it travels with the tag and survives a re-run.
+# the annotated tag, so it travels with the tag and survives a re-run. Use
+# `just release` instead if you only want a package for this machine.
 #
-# Cut a release and trigger the GitHub Action.
-release v summary='':
+# Bump, tag and push, triggering the GitHub Action release.
+publish v summary='':
     node scripts/version.mjs {{v}}
     git add -A
     git commit -m "chore(release): v{{v}}"

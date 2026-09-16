@@ -42,7 +42,7 @@ else
   if [ -n "$previous" ]; then range="${previous}..HEAD"; else range="HEAD"; fi
 fi
 
-# The annotated tag message is the release summary. `just release` writes the
+# The annotated tag message is the release summary. `just publish` writes the
 # placeholder `Release v1.2.3` when no summary was given, which would only repeat
 # the release title, so treat it as empty. Paragraphs are preserved, leading and
 # trailing blank lines are not.

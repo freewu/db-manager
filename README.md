@@ -4,7 +4,7 @@
 
 第一阶段支持 **MySQL / PostgreSQL / SQLite**；驱动层已为非关系型引擎预留抽象，第二阶段可直接接入 **MongoDB / Oracle / SQL Server**，无需改动 service 与 UI 层。
 
-> 在本仓库写代码前先读 [`AGENTS.md`](AGENTS.md)：每次开发完成必须 commit + push，发版走 `just release <x.y.z>` 触发 GitHub Actions 打出三平台免安装可执行文件。
+> 在本仓库写代码前先读 [`AGENTS.md`](AGENTS.md)：每次开发完成必须 commit + push，本地打包用 `just release`，发版走 `just publish <x.y.z>` 触发 GitHub Actions 打出三平台免安装可执行文件。
 
 ## 功能
 
@@ -34,8 +34,9 @@ just install     # 安装前端依赖 + 下载 Go 模块
 just icons       # 同步品牌素材：asserts/ → 前端 favicon + build/appicon.png
 just dev         # 开发模式：Vite 热更新 + Go 热重载
 just build       # 生产构建，产物在 build/bin/db-manager.exe
+just release     # 本地打包：构建 + 归档到 dist/（带校验和），不碰 git
 just doctor      # 打印各个工具链版本
-just release 0.2.0 "本版总结"   # 发版：同步版本号 + 提交 + 打 tag + push
+just publish 0.2.0 "本版总结"   # 发版：同步版本号 + 提交 + 打 tag + push
 just --list      # 查看全部任务
 ```
 
@@ -60,10 +61,12 @@ wails build
 ├── asserts/                  # 品牌素材的唯一来源：logo.png、icon/<引擎>.png
 ├── scripts/
 │   ├── version.mjs           # 版本号同步与一致性校验
+│   ├── package.mjs           # 本地打包：归档到 dist/ 并生成 checksums.txt
 │   └── release-notes.sh      # 渲染 GitHub Release message
 ├── .github/workflows/
 │   ├── ci.yml                # main / PR：go vet+test、tsc+vite build、素材一致性
 │   └── release.yml           # tag v*：三平台可执行文件 + GitHub Release
+├── dist/                     # `just release` 的产物（已 gitignore）
 ├── build/                    # 图标、清单、安装包脚本（appicon.png 由 `just icons` 同步）
 ├── internal/
 │   ├── apperr/               # 错误码 + 脱敏（打码 password=... 与 URI userinfo）
@@ -136,10 +139,31 @@ just test
 
 ## 发布
 
+本地打包和对外发版是两件事。
+
+### 本地打包
+
+```sh
+just release
+```
+
+编译当前平台并把产物归档到 `dist/`，附 `checksums.txt`：
+
+```
+dist/db-manager-0.1.0-windows-amd64.exe
+ dist/checksums.txt
+```
+
+只在本机产出文件，**不做任何 git 操作**，脏工作区也能跑。前端资源已 `embed` 进可执行文件，
+所以拷走这一个文件就能跑，无需 Node/Go。macOS 上产出 `.tar.gz`（`.app` 是目录，不能只拿文件）。
+版本号取自 `wails.json`。
+
+### 发版到 GitHub
+
 发版只需要改版本号、打 tag、push，其余交给 GitHub Actions：
 
 ```sh
-just release 0.2.0 "新增 Navicat 风格连接树；索引成为一等资源"
+just publish 0.2.0 "新增 Navicat 风格连接树；索引成为一等资源"
 ```
 
 `scripts/version.mjs` 会把 `0.2.0` 同步到 `wails.json`、`Justfile`、
@@ -157,6 +181,7 @@ just release 0.2.0 "新增 Navicat 风格连接树；索引成为一等资源"
 
 前端产物已经 `embed` 进可执行文件，三平台产物都是免安装、单独可运行的。
 发版前可以先在本地预览 release message：`just notes v0.2.0`。
+不用 Actions、只想拿到本机能跑的文件时，用 `just release` 就够了。
 
 ## 路线图
 

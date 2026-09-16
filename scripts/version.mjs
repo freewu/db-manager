@@ -9,7 +9,7 @@
  *   node scripts/version.mjs --check   # fail if the mirrors drifted apart
  *   node scripts/version.mjs --get     # print the current version
  *
- * `just release 0.2.0` wraps the first form, so you normally never call this by
+ * `just publish 0.2.0` wraps the first form, so you normally never call this by
  * hand. Mirrors are rewritten with anchored regular expressions instead of
  * re-serialising JSON, which keeps the diffs to a single line per file.
  */
@@ -125,7 +125,7 @@ if (command === '--get') {
   if (problems.length > 0) {
     console.error('version.mjs: version mismatch:')
     for (const problem of problems) console.error(`  - ${problem}`)
-    console.error('  Run `just release <version>` (or `node scripts/version.mjs <version>`) to fix it.')
+    console.error('  Run `just publish <version>` (or `node scripts/version.mjs <version>`) to fix it.')
     process.exit(1)
   }
   console.log(`version.mjs: every mirror is at ${canonical}`)

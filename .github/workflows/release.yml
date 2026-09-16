@@ -2,7 +2,7 @@ name: Release
 
 # Releases are tag driven:
 #
-#   just release 0.2.0 "一句话总结本版内容"
+#   just publish 0.2.0 "一句话总结本版内容"
 #
 # That syncs the version into wails.json / Justfile / frontend/package.json /
 # app.go, commits, and pushes both the commit and the `v0.2.0` tag. The tag push
