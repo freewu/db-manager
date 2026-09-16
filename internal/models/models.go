@@ -398,6 +398,26 @@ type FileFilter struct {
 	Pattern     string `json:"pattern"`
 }
 
+// --- saved queries ---------------------------------------------------------
+
+// SavedQuery is a named SQL snippet kept in the user's favourites.
+//
+// Favourites are deliberately engine-agnostic: the same snippet can be loaded
+// into any query window, so Database and Driver are only hints recorded at save
+// time (the UI uses them to show where the snippet came from, never to block a
+// load).
+type SavedQuery struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	SQL  string `json:"sql"`
+
+	Database string     `json:"database,omitempty"`
+	Driver   DriverType `json:"driver,omitempty"`
+
+	CreatedAt int64 `json:"createdAt"`
+	UpdatedAt int64 `json:"updatedAt"`
+}
+
 // AppInfo is static metadata rendered on the welcome screen.
 type AppInfo struct {
 	Name       string `json:"name"`

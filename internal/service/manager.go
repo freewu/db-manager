@@ -596,6 +596,69 @@ func QueryTimeout(ms int) time.Duration {
 
 // --- UI state --------------------------------------------------------------
 
+// SavedQueries lists the query favourites, sorted by name.
+func (m *Manager) SavedQueries() ([]models.SavedQuery, error) {
+	list, err := m.store.LoadQueries()
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInternal, err, "read saved queries")
+	}
+	sort.SliceStable(list, func(i, j int) bool {
+		left, right := strings.ToLower(list[i].Name), strings.ToLower(list[j].Name)
+		if left == right {
+			return list[i].ID < list[j].ID
+		}
+		return left < right
+	})
+	return list, nil
+}
+
+// SaveSavedQuery validates and persists a favourite.
+//
+// An empty ID means "create", an existing one means "update" (the window uses
+// that to rename a snippet). Name and SQL are the only required fields; the
+// database and driver are hints recorded for display.
+func (m *Manager) SaveSavedQuery(query models.SavedQuery) (models.SavedQuery, error) {
+	query.Name = strings.TrimSpace(query.Name)
+	query.SQL = strings.TrimSpace(query.SQL)
+	if query.Name == "" {
+		return query, apperr.New(apperr.CodeInvalidConfig, "give the saved query a name")
+	}
+	if len([]rune(query.Name)) > 120 {
+		return query, apperr.New(apperr.CodeInvalidConfig, "the saved query name is too long (120 characters max)")
+	}
+	if query.SQL == "" {
+		return query, apperr.New(apperr.CodeInvalidConfig, "there is nothing to save: the editor is empty")
+	}
+
+	now := time.Now().UnixMilli()
+	if query.ID == "" {
+		query.ID = uuid.NewString()
+		query.CreatedAt = now
+	}
+	if query.CreatedAt == 0 {
+		query.CreatedAt = now
+	}
+	query.UpdatedAt = now
+
+	stored, err := m.store.UpsertQuery(query)
+	if err != nil {
+		return query, apperr.Wrap(apperr.CodeInternal, err, "save query favourite")
+	}
+	return stored, nil
+}
+
+// DeleteSavedQuery removes a favourite by id. Unknown ids are a no-op so a
+// double click cannot fail.
+func (m *Manager) DeleteSavedQuery(id string) error {
+	if strings.TrimSpace(id) == "" {
+		return apperr.New(apperr.CodeInvalidConfig, "query id is required")
+	}
+	if err := m.store.DeleteQuery(id); err != nil {
+		return apperr.Wrap(apperr.CodeInternal, err, "delete saved query")
+	}
+	return nil
+}
+
 // LoadState returns the persisted UI preferences.
 func (m *Manager) LoadState() (map[string]any, error) {
 	state, err := m.store.LoadState()

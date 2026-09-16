@@ -100,6 +100,21 @@ func (a *App) CloseConnection(sessionID string) error { return a.manager.Close(s
 // ListSessions returns the live sessions.
 func (a *App) ListSessions() []models.SessionInfo { return a.manager.Sessions() }
 
+// --- query favourites ------------------------------------------------------
+
+// ListSavedQueries returns every saved SQL snippet.
+func (a *App) ListSavedQueries() ([]models.SavedQuery, error) {
+	return a.manager.SavedQueries()
+}
+
+// SaveSavedQuery creates or renames a saved SQL snippet.
+func (a *App) SaveSavedQuery(query models.SavedQuery) (models.SavedQuery, error) {
+	return a.manager.SaveSavedQuery(query)
+}
+
+// DeleteSavedQuery removes a saved SQL snippet.
+func (a *App) DeleteSavedQuery(id string) error { return a.manager.DeleteSavedQuery(id) }
+
 // --- metadata --------------------------------------------------------------
 
 // ListDatabases returns the catalogs of a session.

@@ -16,6 +16,7 @@
 - **SQL 编辑器**：基于 CodeMirror 6，按驱动切换方言、SQL 语法高亮与补全、多语句执行、执行历史、`Ctrl/Cmd+Enter` 执行全部、`Ctrl/Cmd+Shift+Enter` 执行选中。
 - **结构查看器**：列、索引、外键、原始 DDL（优先使用引擎原生 DDL），DDL 可复制或导出。
 - **表设计器**：表格窗口的「结构」页就是编辑器 —— 直接改字段名 / 类型 / NULL / 默认值 / 主键 / 自增 / 注释，增删索引，右侧实时渲染将要执行的 SQL 与引擎限制警告；保存前无需联网猜测，保存时逐条执行并如实报告「第几条失败」（MySQL / PostgreSQL / SQLite 各自的限制都写在警告里）。
+- **查询收藏**：查询窗口工具条上的「Favourites」可以把当前 SQL 命名保存（默认用第一行非注释文本作名），下拉里一键载入、重命名或删除；收藏存在 `queries.json` 里，与连接配置互不影响，换窗口、换连接都能用。
 - **导出**：CSV / JSON / INSERT 脚本，可写入文件或复制到剪贴板。
 - **外观**：Navicat 式窗口骨架（菜单栏 + icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏。
 
@@ -72,7 +73,7 @@ wails build
 ├── build/                    # 图标、清单、安装包脚本（appicon.png 由 `just icons` 同步）
 ├── internal/
 │   ├── apperr/               # 错误码 + 脱敏（打码 password=... 与 URI userinfo）
-│   ├── config/store.go       # %APPDATA%/db-manager/connections.json（0600）
+│   ├── config/store.go       # %APPDATA%/db-manager/{connections,queries,state}.json（0600）
 │   ├── models/               # 跨层 DTO，时间统一为 int64 unix ms
 │   ├── drivers/
 │   │   ├── driver.go         # Driver / Conn / Dialect 契约 + 注册表（init 注册）
@@ -137,7 +138,8 @@ just test
 
 `internal/drivers/sqlite` 的测试覆盖了完整链路：目录查询、结构 + DDL、
 主键顺序分页、`COUNT(*)`、`contains` / `isNull` 过滤、内联更新（含写入 `NULL`）、
-过期主键返回 0 行、按主键删除。
+过期主键返回 0 行、按主键删除。`internal/config` 与 `internal/service` 还分别盯住了
+查询收藏的磁盘往返（更新不重复、删不掉别人的文件）与校验/排序/保留 `createdAt`。
 
 ## 发布
 
@@ -190,7 +192,8 @@ just publish 0.2.0 "新增 Navicat 风格连接树；索引成为一等资源"
 - [x] Phase 1：MySQL / PostgreSQL / SQLite（连接、浏览、编辑、SQL、结构、导出）
 - [ ] Phase 1.5：
   - [x] 表设计器：字段与索引的可视化编辑 + 实时 SQL 预览（Navicat 的「结构」页）
-  - [ ] DDL 编辑器、查询收藏、ER 图
+  - [x] 查询收藏：命名 SQL 片段，查询窗口里可载入 / 改名 / 删除
+  - [ ] DDL 编辑器、ER 图
 - [ ] Phase 2：MongoDB（文档编辑 + 查询语言）、Oracle、SQL Server
 - [ ] Phase 3：SSH 隧道、导入向导、数据对比、插件式扩展
 

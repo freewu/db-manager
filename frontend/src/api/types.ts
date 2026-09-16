@@ -352,5 +352,17 @@ export interface AppInfo {
   platform: string
 }
 
+/** A named SQL snippet kept in the user's favourites. */
+export interface SavedQuery {
+  id: string
+  name: string
+  sql: string
+  /** Where the snippet was captured: shown as a hint, never used to block a load. */
+  database?: string
+  driver?: DriverType
+  createdAt: number
+  updatedAt: number
+}
+
 /** Shape of the generated Wails bridge on `window.go.main.App`. */
 export type BackendBridge = Record<string, (...args: unknown[]) => Promise<unknown>>

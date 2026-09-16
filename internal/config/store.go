@@ -3,8 +3,10 @@
 //
 // Storage format notes:
 //
-//   - one JSON file holding every profile
-//   - the file is created with 0600 permissions on platforms that honour it
+//   - one JSON file holding every profile (connections.json), plus a second
+//     one for the query favourites (queries.json) so the two can evolve
+//     independently
+//   - the files are created with 0600 permissions on platforms that honour it
 //   - passwords are only written when the profile opts in via SavePassword;
 //     otherwise the user is asked on every connect attempt. This keeps the
 //     default posture "no secrets at rest" without forcing users to retype
@@ -25,16 +27,25 @@ import (
 const (
 	appDirName  = "db-manager"
 	fileName    = "connections.json"
+	queriesFile = "queries.json"
 	schemaVer   = 1
 	fileMode    = 0o600
 	dirMode     = 0o700
 	stateName   = "state.json"
 	maxProfiles = 500
+	maxQueries  = 500
 )
 
 type fileFormat struct {
 	Version     int                       `json:"version"`
 	Connections []models.ConnectionConfig `json:"connections"`
+}
+
+// queryFileFormat mirrors fileFormat for the query favourites file. It is a
+// separate file so an older build can keep reading connections.json untouched.
+type queryFileFormat struct {
+	Version int                 `json:"version"`
+	Queries []models.SavedQuery `json:"queries"`
 }
 
 // Store is a small, mutex guarded JSON store.
@@ -48,6 +59,16 @@ type Store struct {
 func New() (*Store, error) {
 	dir, err := ConfigDir()
 	if err != nil {
+		return nil, err
+	}
+	return NewAt(dir)
+}
+
+// NewAt returns a Store rooted at dir, creating the directory when needed.
+// Tests and portable installs use it to keep the JSON files out of the user
+// profile.
+func NewAt(dir string) (*Store, error) {
+	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return nil, err
 	}
 	return &Store{dir: dir, path: filepath.Join(dir, fileName)}, nil
@@ -188,6 +209,98 @@ func (s *Store) Find(id string) (models.ConnectionConfig, bool, error) {
 		}
 	}
 	return models.ConnectionConfig{}, false, nil
+}
+
+// --- query favourites ------------------------------------------------------
+
+// LoadQueries returns every saved query.
+func (s *Store) LoadQueries() ([]models.SavedQuery, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loadQueriesLocked()
+}
+
+func (s *Store) queriesPath() string { return filepath.Join(s.dir, queriesFile) }
+
+func (s *Store) loadQueriesLocked() ([]models.SavedQuery, error) {
+	raw, err := os.ReadFile(s.queriesPath())
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return []models.SavedQuery{}, nil
+		}
+		return nil, err
+	}
+	if len(raw) == 0 {
+		return []models.SavedQuery{}, nil
+	}
+	var parsed queryFileFormat
+	if err := json.Unmarshal(raw, &parsed); err != nil {
+		return nil, err
+	}
+	if parsed.Queries == nil {
+		parsed.Queries = []models.SavedQuery{}
+	}
+	return parsed.Queries, nil
+}
+
+func (s *Store) saveQueriesLocked(list []models.SavedQuery) error {
+	raw, err := json.MarshalIndent(queryFileFormat{Version: schemaVer, Queries: list}, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := s.queriesPath() + ".tmp"
+	if err := os.WriteFile(tmp, raw, fileMode); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.queriesPath())
+}
+
+// UpsertQuery inserts or updates a favourite and returns the stored value.
+func (s *Store) UpsertQuery(query models.SavedQuery) (models.SavedQuery, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	list, err := s.loadQueriesLocked()
+	if err != nil {
+		return query, err
+	}
+
+	replaced := false
+	for i := range list {
+		if list[i].ID == query.ID {
+			list[i] = query
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		if len(list) >= maxQueries {
+			return query, errors.New("saved query limit reached")
+		}
+		list = append(list, query)
+	}
+	if err := s.saveQueriesLocked(list); err != nil {
+		return query, err
+	}
+	return query, nil
+}
+
+// DeleteQuery removes a favourite by id.
+func (s *Store) DeleteQuery(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	list, err := s.loadQueriesLocked()
+	if err != nil {
+		return err
+	}
+	kept := make([]models.SavedQuery, 0, len(list))
+	for _, query := range list {
+		if query.ID != id {
+			kept = append(kept, query)
+		}
+	}
+	return s.saveQueriesLocked(kept)
 }
 
 // --- lightweight UI state (last used theme, window prefs, ...) -------------

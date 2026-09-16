@@ -30,6 +30,7 @@ import { downloadText, resultToCSV, resultToJSON, toInsertScript } from '../lib/
 import { formatDuration } from '../lib/format'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { DataGrid } from './DataGrid'
+import { QueryFavorites } from './QueryFavorites'
 import { SqlEditor } from './SqlEditor'
 
 const MAX_HISTORY = 25
@@ -204,6 +205,12 @@ export function QueryPane({ tab }: QueryPaneProps) {
             History
           </Button>
         </Dropdown>
+        <QueryFavorites
+          sql={sql}
+          driver={driver}
+          database={database}
+          onLoad={setSql}
+        />
         <Tooltip title="Clear editor">
           <Button size="small" icon={<ClearOutlined />} onClick={() => setSql('')} />
         </Tooltip>

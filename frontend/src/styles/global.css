@@ -342,6 +342,79 @@ body {
   gap: 8px;
 }
 
+/* --- query favourites ---------------------------------------------------- */
+
+/* Count badge on the toolbar button, so the list is discoverable when empty. */
+.dm-fav-count {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--dm-accent-soft);
+  color: var(--dm-accent-text);
+  font-size: 10.5px;
+  line-height: 15px;
+}
+
+/* One row of the favourites dropdown: name, source hint, edit/delete. */
+.dm-fav-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 260px;
+}
+
+.dm-fav-title {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-fav-meta {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--dm-null);
+}
+
+.dm-fav-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* Hidden until the row is hovered so the list stays calm. */
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.ant-dropdown-menu-item:hover .dm-fav-actions,
+.dm-fav-actions:focus-within {
+  opacity: 1;
+}
+
+.dm-fav-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dm-fav-action:hover {
+  background: var(--dm-tree-hover);
+  color: var(--dm-accent-text);
+}
+
+.dm-fav-action.is-danger:hover {
+  color: #d4380d;
+}
+
 .dm-empty {
   padding: 48px 16px;
 }

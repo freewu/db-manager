@@ -21,6 +21,7 @@ import type {
   QueryResult,
   RowDelete,
   SaveFileRequest,
+  SavedQuery,
   SessionInfo,
   TableDesign,
   TableStructure,
@@ -87,6 +88,11 @@ export const api = {
   loadState: () => invoke<Record<string, unknown>>('LoadState'),
   saveState: (state: Record<string, unknown>) => invoke<void>('SaveState', state),
   revealInExplorer: (path: string) => invoke<void>('RevealInExplorer', path),
+
+  // --- query favourites ---------------------------------------------------
+  listSavedQueries: () => invoke<SavedQuery[]>('ListSavedQueries'),
+  saveSavedQuery: (query: SavedQuery) => invoke<SavedQuery>('SaveSavedQuery', query),
+  deleteSavedQuery: (id: string) => invoke<void>('DeleteSavedQuery', id),
 
   // --- profiles -----------------------------------------------------------
   listConnections: () => invoke<ConnectionConfig[]>('ListConnections'),

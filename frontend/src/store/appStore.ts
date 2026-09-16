@@ -19,6 +19,7 @@ import type {
   ObjectInfo,
   ObjectKind,
   OpenRequest,
+  SavedQuery,
   SessionInfo,
   TableDesign,
   TableStructure,
@@ -95,6 +96,7 @@ interface AppState {
   theme: ThemeMode
   tree: TreeCache
   designs: Record<string, DesignState>
+  savedQueries: SavedQuery[]
   editorOpen: boolean
   editorDraft?: ConnectionConfig
 
@@ -102,6 +104,10 @@ interface AppState {
   setTheme: (theme: ThemeMode) => void
   openConnectionEditor: (draft?: ConnectionConfig) => void
   closeConnectionEditor: () => void
+
+  refreshSavedQueries: () => Promise<void>
+  saveSavedQuery: (query: SavedQuery) => Promise<SavedQuery>
+  deleteSavedQuery: (id: string) => Promise<void>
 
   refreshConnections: () => Promise<void>
   saveConnection: (cfg: ConnectionConfig) => Promise<ConnectionConfig>
@@ -168,6 +174,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   theme: 'light',
   tree: emptyTree(),
   designs: {},
+  savedQueries: [],
   editorOpen: false,
 
   openConnectionEditor(draft) {
@@ -180,10 +187,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async bootstrap() {
     try {
-      const [appInfo, drivers, connections, persisted] = await Promise.all([
+      const [appInfo, drivers, connections, savedQueries, persisted] = await Promise.all([
         api.appInfo(),
         api.listDrivers(),
         api.listConnections(),
+        // A missing or unreadable favourites file must not block startup.
+        api.listSavedQueries().catch(() => [] as SavedQuery[]),
         api.loadState().catch(() => ({}) as Record<string, unknown>),
       ])
 
@@ -196,6 +205,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         appInfo,
         drivers,
         connections,
+        savedQueries,
         theme,
       })
     } catch (error) {
@@ -214,6 +224,22 @@ export const useAppStore = create<AppState>((set, get) => ({
   async refreshConnections() {
     const connections = await api.listConnections()
     set({ connections })
+  },
+
+  async refreshSavedQueries() {
+    const savedQueries = await api.listSavedQueries()
+    set({ savedQueries })
+  },
+
+  async saveSavedQuery(query) {
+    const saved = await api.saveSavedQuery(query)
+    await get().refreshSavedQueries()
+    return saved
+  },
+
+  async deleteSavedQuery(id) {
+    await api.deleteSavedQuery(id)
+    await get().refreshSavedQueries()
   },
 
   async saveConnection(cfg) {
