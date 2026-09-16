@@ -207,6 +207,80 @@ type TableStructure struct {
 	DDL         string           `json:"ddl"`
 }
 
+// --- table designer --------------------------------------------------------
+
+// TableDesign is the *desired* definition of one table, produced by the table
+// designer window.
+//
+// The designer always sends the whole definition rather than a diff: the
+// backend compares it against the live catalog structure and renders the
+// statements that turn one into the other. That keeps the dialect knowledge in
+// one place and makes the preview and the applied script the exact same code
+// path.
+//
+type TableDesign struct {
+	SessionID string `json:"sessionId"`
+	Database  string `json:"database,omitempty"`
+	Schema    string `json:"schema,omitempty"`
+	Object    string `json:"object"`
+
+	Columns []DesignColumn `json:"columns"`
+	Indexes []DesignIndex  `json:"indexes"`
+}
+
+// DesignColumn is one field of a table design.
+//
+type DesignColumn struct {
+	// Name is what the column should be called. OriginalName is the catalog
+	// name it currently has (empty for a column that is about to be created),
+	// so a rename is just a difference between the two.
+	Name         string `json:"name"`
+	OriginalName string `json:"originalName,omitempty"`
+
+	// DataType is the complete type text as the engine spells it, e.g.
+	// "varchar(255)" or "timestamp with time zone".
+	DataType string `json:"dataType"`
+
+	Nullable bool `json:"nullable"`
+	// DefaultValue is raw SQL (Navicat behaves the same way): the user types
+	// 'text', 0 or CURRENT_TIMESTAMP and it is emitted verbatim. nil means "no
+	// default", an empty string means DEFAULT ''.
+	DefaultValue  *string `json:"defaultValue,omitempty"`
+	PrimaryKey    bool    `json:"primaryKey"`
+	AutoIncrement bool    `json:"autoIncrement"`
+	Comment       string  `json:"comment,omitempty"`
+}
+
+// DesignIndex is one index of a table design.
+type DesignIndex struct {
+	Name         string   `json:"name"`
+	OriginalName string   `json:"originalName,omitempty"`
+	Columns      []string `json:"columns"`
+	Unique       bool     `json:"unique"`
+}
+
+// DesignPlan is what the designer shows before anything is applied: the script
+// it would run, plus everything the user should know about it.
+type DesignPlan struct {
+	Statements []string `json:"statements"`
+	// Warnings explain what this engine cannot express, or what the script
+	// does beyond what was asked (e.g. a primary key column forced NOT NULL).
+	Warnings []string `json:"warnings"`
+	// Destructive is true when the script drops a column or an index.
+	Destructive bool `json:"destructive"`
+}
+
+// DesignResult is the outcome of applying a design.
+type DesignResult struct {
+	Plan     DesignPlan `json:"plan"`
+	Executed []string   `json:"executed"`
+	// FailedIndex is the index into Plan.Statements that failed, or -1 when the
+	// whole script ran.
+	FailedIndex int      `json:"failedIndex"`
+	Error       string   `json:"error,omitempty"`
+	Messages    []string `json:"messages,omitempty"`
+}
+
 // ColumnMeta describes one column of a result set.
 type ColumnMeta struct {
 	Name         string `json:"name"`

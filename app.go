@@ -127,6 +127,19 @@ func (a *App) ListIndexes(sessionID, database, schema string) ([]models.IndexEnt
 	return a.manager.Indexes(sessionID, database, schema)
 }
 
+// --- table designer --------------------------------------------------------
+
+// PlanTableDesign returns the script that would bring a table in line with a
+// design, without running it.
+func (a *App) PlanTableDesign(design models.TableDesign) (*models.DesignPlan, error) {
+	return a.manager.PlanDesign(design)
+}
+
+// ApplyTableDesign applies a design and reports how far it got.
+func (a *App) ApplyTableDesign(design models.TableDesign) (*models.DesignResult, error) {
+	return a.manager.ApplyDesign(design)
+}
+
 // --- data ------------------------------------------------------------------
 
 // FetchRows returns one page of rows for the data grid.

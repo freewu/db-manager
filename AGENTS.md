@@ -138,6 +138,16 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
 - **`tsconfig` 开了 `noUnusedLocals` / `noUnusedParameters`**：删代码时记得删导入，
   否则 `tsc` 直接失败。
 - **antd Tree 的 node key 必须全局唯一**：占位/错误节点用 `placeholder:${scope}` / `error:${scope}` 这种带作用域的前缀。
+- **表设计器（结构页）发送的是「完整目标定义」，不是 diff**：`TableDesign` 是用户想要的样子，
+  后端 `sqlbase.PlanAlter` 拿实时 catalog 结构对比后渲染语句 —— **预览与保存走同一条代码路径**。
+  由此派生几条硬规则：
+  - `ApplyDesign` 只接收设计、不接收 SQL，前端无法借此发任意 SQL；它先重新 plan 一次，再**逐条**执行。
+  - 没有事务包裹（`Conn.Execute` 无 Tx 接口，DDL 也不可回滚）：失败时返回 `FailedIndex`/`Error`，
+    如实报告「第几条失败、已执行几条」，不假装全部成功。
+  - 默认值**逐字输出**为原始 SQL（用户自己写 `'text'` / `0` / `CURRENT_TIMESTAMP`）；
+    `nil` 表示「无默认」，与 `DEFAULT ''` 不是一回事。
+  - 引擎表达不了的变更写进 `Plan.Warnings` **而不是静默跳过**（尤其 SQLite）。
+  - 字段改名时索引跟着改：前端在重命名时同步索引列，后端把只写了旧名字的索引列也重映射到新名字。
 - 后端新增能力时按 `drivers.Driver` → `Conn` → `Dialect` 契约落地，并在 `init()` 里 `drivers.Register`。
 
 ---

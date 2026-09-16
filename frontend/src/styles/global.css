@@ -905,3 +905,122 @@ body {
   width: 15px;
   height: 15px;
 }
+
+/* -------------------------------------------------------------- table designer */
+
+/* The structure tab of a table window is a small designer: a command strip, the
+   field grid, the index grid and the SQL the draft would produce. */
+.dm-designer {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.dm-designer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--dm-border);
+  background: var(--dm-chrome-bg);
+}
+
+.dm-designer-toolbar .dm-toolbar-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--dm-border);
+}
+
+.dm-designer-toolbar .dm-toolbar-right {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dm-designer-split {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.dm-designer-split .ant-splitter-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dm-designer-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.dm-designer-heading {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--dm-null);
+  border-bottom: 1px solid var(--dm-border);
+}
+
+/* One grid row per field: dense inputs instead of a full-height cell. */
+.dm-design-grid .ant-table-tbody > tr > td {
+  padding: 3px 6px;
+}
+
+.dm-design-grid .ant-input,
+.dm-design-grid .ant-input-affix-wrapper,
+.dm-design-grid .ant-select-selector {
+  font-size: 12px;
+}
+
+.dm-design-grid .ant-table-summary > tr > td {
+  background: var(--dm-chrome-bg);
+  padding: 3px 6px;
+}
+
+.dm-design-preview {
+  flex: 0 0 auto;
+  max-height: 42%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--dm-border);
+}
+
+.dm-design-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  background: var(--dm-chrome-bg);
+  border-bottom: 1px solid var(--dm-border);
+}
+
+.dm-design-preview-head .dm-spacer {
+  flex: 1 1 auto;
+}
+
+.dm-design-preview-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+}
+
+.dm-design-preview-body .dm-ddl {
+  max-height: none;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}

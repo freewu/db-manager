@@ -401,10 +401,7 @@ export function TablePane({ tab }: TablePaneProps) {
 
       {view !== 'data' ? (
         <StructureView
-          sessionId={tab.sessionId}
-          database={database}
-          schema={schema}
-          object={object}
+          tab={tab}
           section={view}
           reloadToken={structureToken}
         />

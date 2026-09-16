@@ -165,6 +165,65 @@ export interface TableStructure {
   ddl: string
 }
 
+/* --- table designer ------------------------------------------------------ */
+
+/**
+ * The *desired* definition of a table, as edited in the structure tab.
+ *
+ * The whole definition is sent rather than a diff: the backend compares it with
+ * the live catalog structure and renders the statements that turn one into the
+ * other, so the SQL preview and the applied script are the same thing.
+ */
+export interface TableDesign {
+  sessionId: string
+  database?: string
+  schema?: string
+  object: string
+  columns: DesignColumn[]
+  indexes: DesignIndex[]
+}
+
+export interface DesignColumn {
+  name: string
+  /** The catalog name this field currently has; empty for a new field. */
+  originalName?: string
+  dataType: string
+  nullable: boolean
+  /**
+   * Raw SQL: `'text'`, `0` or `CURRENT_TIMESTAMP` are emitted verbatim.
+   * `null` means “no default”, which is not the same as `DEFAULT ''`.
+   */
+  defaultValue?: string | null
+  primaryKey: boolean
+  autoIncrement: boolean
+  comment?: string
+}
+
+export interface DesignIndex {
+  name: string
+  originalName?: string
+  columns: string[]
+  unique: boolean
+}
+
+/** What the designer would run, shown before anything is applied. */
+export interface DesignPlan {
+  statements: string[]
+  /** What this engine cannot express, or what the script does beyond the draft. */
+  warnings: string[]
+  /** True when the script drops a column or an index. */
+  destructive: boolean
+}
+
+export interface DesignResult {
+  plan: DesignPlan
+  executed: string[]
+  /** Index into `plan.statements` that failed, or -1 when the whole script ran. */
+  failedIndex: number
+  error?: string
+  messages?: string[]
+}
+
 export interface ColumnMeta {
   name: string
   databaseType?: string

@@ -20,8 +20,11 @@ import type {
   ObjectKind,
   OpenRequest,
   SessionInfo,
+  TableDesign,
+  TableStructure,
 } from '../api/types'
 import { databaseKey, FOLDER_LABEL, indexesKey, namespaceKey, objectsKey } from '../lib/tree'
+import { designFrom } from '../lib/design'
 
 export type TabKind = 'query' | 'table' | 'objects'
 
@@ -47,6 +50,17 @@ export interface WorkspaceTab {
 }
 
 export type ThemeMode = 'light' | 'dark'
+
+/**
+ * Table designer state, kept per table window so switching between the Data and
+ * Structure sub-tabs does not throw the draft away.
+ */
+export interface DesignState {
+  /** The definition as the user has it right now. */
+  draft: TableDesign
+  /** The catalog structure the draft was prefilled from. */
+  baseline: TableStructure
+}
 
 interface TreeCache {
   databases: Record<string, string[]>
@@ -80,6 +94,7 @@ interface AppState {
   activeTabId?: string
   theme: ThemeMode
   tree: TreeCache
+  designs: Record<string, DesignState>
   editorOpen: boolean
   editorDraft?: ConnectionConfig
 
@@ -117,6 +132,15 @@ interface AppState {
     view?: TableView,
   ) => void
   setTabView: (tabId: string, view: TableView) => void
+
+  /**
+   * Makes sure a table window has a draft. An existing draft is kept unless
+   * `reset` is set, so a reload never silently discards edits.
+   */
+  ensureDesign: (tabId: string, structure: TableStructure, reset?: boolean) => void
+  updateDesign: (tabId: string, draft: TableDesign) => void
+  dropDesign: (tabId: string) => void
+
   closeTab: (tabId: string) => void
   closeAllTabs: () => void
   setActiveTab: (tabId: string) => void
@@ -127,6 +151,14 @@ interface AppState {
 
 const STATE_KEY = 'ui'
 
+/** Copy of an object without one key (drafts must die with their window). */
+function withoutKey<T>(source: Record<string, T>, key: string): Record<string, T> {
+  if (!source[key]) return source
+  const out = { ...source }
+  delete out[key]
+  return out
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   boot: 'loading',
   drivers: [],
@@ -135,6 +167,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   tabs: [],
   theme: 'light',
   tree: emptyTree(),
+  designs: {},
   editorOpen: false,
 
   openConnectionEditor(draft) {
@@ -214,6 +247,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       set((state) => {
         const sessions = state.sessions.filter((s) => s.id !== sessionId)
         const tabs = state.tabs.filter((t) => t.sessionId !== sessionId)
+        const gone = new Set(
+          state.tabs.filter((t) => t.sessionId === sessionId).map((t) => t.id),
+        )
+        const designs: Record<string, DesignState> = {}
+        for (const [key, value] of Object.entries(state.designs)) {
+          if (!gone.has(key)) designs[key] = value
+        }
         const activeTabId =
           state.activeTabId && tabs.some((t) => t.id === state.activeTabId)
             ? state.activeTabId
@@ -222,7 +262,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           state.activeSessionId === sessionId
             ? sessions[sessions.length - 1]?.id
             : state.activeSessionId
-        return { sessions, tabs, activeTabId, activeSessionId }
+        return { sessions, tabs, designs, activeTabId, activeSessionId }
       })
     }
   },
@@ -442,6 +482,36 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
 
+  ensureDesign(tabId, structure, reset = false) {
+    set((state) => {
+      if (!reset && state.designs[tabId]) return state
+      const sessionId = state.tabs.find((tab) => tab.id === tabId)?.sessionId ?? ''
+      return {
+        designs: {
+          ...state.designs,
+          [tabId]: { draft: designFrom(structure, sessionId), baseline: structure },
+        },
+      }
+    })
+  },
+
+  updateDesign(tabId, draft) {
+    set((state) => {
+      const current = state.designs[tabId]
+      if (!current) return state
+      return { designs: { ...state.designs, [tabId]: { ...current, draft } } }
+    })
+  },
+
+  dropDesign(tabId) {
+    set((state) => {
+      if (!state.designs[tabId]) return state
+      const designs = { ...state.designs }
+      delete designs[tabId]
+      return { designs }
+    })
+  },
+
   closeTab(tabId) {
     set((state) => {
       const index = state.tabs.findIndex((t) => t.id === tabId)
@@ -451,12 +521,12 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (state.activeTabId === tabId) {
         activeTabId = tabs[Math.min(index, tabs.length - 1)]?.id
       }
-      return { tabs, activeTabId }
+      return { tabs, activeTabId, designs: withoutKey(state.designs, tabId) }
     })
   },
 
   closeAllTabs() {
-    set({ tabs: [], activeTabId: undefined })
+    set({ tabs: [], activeTabId: undefined, designs: {} })
   },
 
   setActiveTab(tabId) {

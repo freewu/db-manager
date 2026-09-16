@@ -17,6 +17,7 @@ import (
 	"dbmanager/internal/config"
 	"dbmanager/internal/drivers"
 	"dbmanager/internal/drivers/planned"
+	"dbmanager/internal/drivers/sqlbase"
 	"dbmanager/internal/models"
 )
 
@@ -472,6 +473,76 @@ func (m *Manager) Execute(req models.ExecRequest) (*models.QueryResult, error) {
 		TimeoutMS: req.TimeoutMS,
 		ReadOnly:  readOnly,
 	})
+}
+
+// --- table designer --------------------------------------------------------
+
+// PlanDesign renders the script that turns the live table into the designer's
+// draft. Nothing is executed: this is the SQL preview the designer shows next
+// to the fields.
+func (m *Manager) PlanDesign(design models.TableDesign) (*models.DesignPlan, error) {
+	s, err := m.session(design.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(design.Object) == "" {
+		return nil, apperr.New(apperr.CodeInvalidConfig, "object name is required")
+	}
+
+	ctx, cancel := m.ctx(60 * time.Second)
+	defer cancel()
+	current, err := s.conn.Structure(ctx, design.Database, design.Schema, design.Object)
+	if err != nil {
+		return nil, err
+	}
+
+	plan, err := sqlbase.PlanAlter(s.conn.Dialect(), current, design)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInvalidConfig, err, "cannot design table %s", design.Object)
+	}
+	return &plan, nil
+}
+
+// ApplyDesign plans the draft again and runs the resulting statements one by
+// one.
+//
+// The draft is planned here rather than sent as SQL by the window, so the script
+// that runs is produced by the same code that produced the preview the user
+// approved. Because DDL cannot be rolled back on every engine, the statements
+// run one at a time and the result says exactly how far the script got.
+func (m *Manager) ApplyDesign(design models.TableDesign) (*models.DesignResult, error) {
+	s, err := m.session(design.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if s.readOnly {
+		return nil, apperr.New(apperr.CodeReadOnly, "this connection is read-only")
+	}
+
+	plan, err := m.PlanDesign(design)
+	if err != nil {
+		return nil, err
+	}
+
+	result := &models.DesignResult{Plan: *plan, Executed: []string{}, FailedIndex: -1}
+	for i, statement := range plan.Statements {
+		ctx, cancel := m.ctx(QueryTimeout(0))
+		res, err := s.conn.Execute(ctx, drivers.ExecRequest{
+			Database: design.Database,
+			SQL:      statement,
+		})
+		cancel()
+		if err != nil {
+			result.FailedIndex = i
+			result.Error = err.Error()
+			return result, nil
+		}
+		result.Executed = append(result.Executed, statement)
+		if res != nil {
+			result.Messages = append(result.Messages, res.Messages...)
+		}
+	}
+	return result, nil
 }
 
 // --- row edits -------------------------------------------------------------

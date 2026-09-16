@@ -9,6 +9,8 @@ import type {
   BackendBridge,
   CellUpdate,
   ConnectionConfig,
+  DesignPlan,
+  DesignResult,
   DriverInfo,
   ExecRequest,
   FetchRequest,
@@ -20,6 +22,7 @@ import type {
   RowDelete,
   SaveFileRequest,
   SessionInfo,
+  TableDesign,
   TableStructure,
   TestResult,
 } from './types'
@@ -107,6 +110,12 @@ export const api = {
     invoke<IndexEntry[]>('ListIndexes', sessionId, database, schema),
   getStructure: (sessionId: string, database: string, schema: string, object: string) =>
     invoke<TableStructure>('GetStructure', sessionId, database, schema, object),
+
+  // --- table designer -----------------------------------------------------
+  planTableDesign: (design: TableDesign) =>
+    invoke<DesignPlan>('PlanTableDesign', design),
+  applyTableDesign: (design: TableDesign) =>
+    invoke<DesignResult>('ApplyTableDesign', design),
 
   // --- data ---------------------------------------------------------------
   fetchRows: (req: FetchRequest) => invoke<FetchResult>('FetchRows', req),
