@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
 import { Button, Space, Tabs, Tag, Tooltip, Typography } from 'antd'
 import type { TabsProps } from 'antd'
-import { CodeOutlined, PlusOutlined, TableOutlined } from '@ant-design/icons'
+import { CodeOutlined, FolderOutlined, PlusOutlined, TableOutlined } from '@ant-design/icons'
 
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
+import { ObjectListPane } from './ObjectListPane'
 import { QueryPane } from './QueryPane'
 import { TablePane } from './TablePane'
 import { WelcomePane } from './WelcomePane'
@@ -25,7 +26,13 @@ export function Workspace() {
         label: <TabLabel tab={tab} sessionName={sessions.find((s) => s.id === tab.sessionId)?.name} />,
         closable: true,
         children:
-          tab.kind === 'query' ? <QueryPane tab={tab} /> : <TablePane tab={tab} />,
+          tab.kind === 'query' ? (
+            <QueryPane tab={tab} />
+          ) : tab.kind === 'objects' ? (
+            <ObjectListPane tab={tab} />
+          ) : (
+            <TablePane tab={tab} />
+          ),
       })),
     [sessions, tabs],
   )
@@ -72,6 +79,8 @@ function TabLabel({ tab, sessionName }: { tab: WorkspaceTab; sessionName?: strin
     <Space size={6} className="dm-tab-label">
       {tab.kind === 'query' ? (
         <CodeOutlined style={{ opacity: 0.7 }} />
+      ) : tab.kind === 'objects' ? (
+        <FolderOutlined style={{ opacity: 0.7 }} />
       ) : (
         <TableOutlined style={{ opacity: 0.7 }} />
       )}

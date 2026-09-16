@@ -3,14 +3,11 @@ import { App as AntApp, Button, Dropdown, Empty, Input, Modal, Space, Tooltip, T
 import type { MenuProps, TreeDataNode, TreeProps } from 'antd'
 import {
   AppstoreOutlined,
-  ContainerOutlined,
   DatabaseOutlined,
   DeleteOutlined,
   DisconnectOutlined,
   EditOutlined,
-  EyeOutlined,
   FolderOutlined,
-  FunctionOutlined,
   KeyOutlined,
   MinusSquareOutlined,
   NumberOutlined,
@@ -25,7 +22,8 @@ import {
 import type { ConnectionConfig, DriverInfo, IndexEntry, ObjectInfo, SessionInfo } from '../api/types'
 import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
-import { useAppStore, type TableView } from '../store/appStore'
+import { useAppStore, type ListScope, type TableView } from '../store/appStore'
+import { objectIcon } from './objectIcon'
 import {
   databaseKey,
   decodeNode,
@@ -66,6 +64,7 @@ export function ConnectionSidebar() {
   const loadIndexes = useAppStore((s) => s.loadIndexes)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
   const openTableTab = useAppStore((s) => s.openTableTab)
+  const openObjectsTab = useAppStore((s) => s.openObjectsTab)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const closeSession = useAppStore((s) => s.closeSession)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
@@ -161,6 +160,15 @@ export function ConnectionSidebar() {
     [openTableTab, setActiveSession],
   )
 
+  /** Opens the Navicat-style object list window for one explorer folder. */
+  const openList = useCallback(
+    (sessionId: string, database: string, schema: string, list: ListScope) => {
+      setActiveSession(sessionId)
+      openObjectsTab(sessionId, database, schema, list)
+    },
+    [openObjectsTab, setActiveSession],
+  )
+
   const refreshSession = useCallback(
     (sessionId: string) => {
       invalidateSession(sessionId)
@@ -219,14 +227,32 @@ export function ConnectionSidebar() {
 
       return {
         key: encodeNode({ t: 'indexFolder', sessionId, database, schema }),
-        title: indexes ? `Indexes (${indexes.length})` : 'Indexes',
+        title: (
+          <NodeMenu
+            items={[
+              {
+                key: 'list',
+                icon: <UnorderedListOutlined />,
+                label: 'Open object list',
+                onClick: () => openList(sessionId, database, schema, 'index'),
+              },
+              {
+                key: 'refresh',
+                icon: <ReloadOutlined />,
+                label: 'Reload index list',
+                onClick: () => void loadIndexes(sessionId, database, schema),
+              },
+            ]}
+          >
+            <span>{indexes ? `Indexes (${indexes.length})` : 'Indexes'}</span>
+          </NodeMenu>
+        ),
         icon: <KeyOutlined />,
-        selectable: false,
         isLeaf: false,
         children,
       }
     },
-    [loadIndexes, tree.errors, tree.indexes, tree.loading],
+    [loadIndexes, openList, tree.errors, tree.indexes, tree.loading],
   )
   const buildFolders = useCallback(
     (sessionId: string, database: string, schema: string): TreeDataNode[] => {
@@ -246,9 +272,34 @@ export function ConnectionSidebar() {
         if (!items || items.length === 0) continue
         folders.push({
           key: encodeNode({ t: 'folder', sessionId, database, schema, kind }),
-          title: `${FOLDER_LABEL[kind]} (${items.length})`,
+          title: (
+            <NodeMenu
+              items={[
+                {
+                  key: 'list',
+                  icon: <UnorderedListOutlined />,
+                  label: 'Open object list',
+                  onClick: () => openList(sessionId, database, schema, kind),
+                },
+                {
+                  key: 'query',
+                  icon: <EditOutlined />,
+                  label: 'New query',
+                  onClick: () => openQueryTab(sessionId, database),
+                },
+                { type: 'divider' as const },
+                {
+                  key: 'refresh',
+                  icon: <ReloadOutlined />,
+                  label: 'Reload objects',
+                  onClick: () => void loadObjects(sessionId, database, schema),
+                },
+              ]}
+            >
+              <span>{`${FOLDER_LABEL[kind]} (${items.length})`}</span>
+            </NodeMenu>
+          ),
           icon: <FolderOutlined />,
-          selectable: false,
           children: items.map((object) => ({
             key: encodeNode({
               t: 'object',
@@ -302,7 +353,7 @@ export function ConnectionSidebar() {
       folders.push(buildIndexFolder(sessionId, database, schema))
       return folders
     },
-    [buildIndexFolder, openObject, openQueryTab, tree.objects],
+    [buildIndexFolder, loadObjects, openList, openObject, openQueryTab, tree.objects],
   )
 
   const buildNamespace = useCallback(
@@ -507,6 +558,21 @@ export function ConnectionSidebar() {
       }
 
       setActiveSession(ref.sessionId)
+      if (ref.t === 'folder') {
+        // Navicat reveals the folder's contents and its object list together.
+        const key = info.node.key
+        setExpandedKeys((current) =>
+          current.some((k) => String(k) === String(key)) ? current : [...current, key],
+        )
+        openList(ref.sessionId, ref.database, ref.schema, ref.kind)
+      }
+      if (ref.t === 'indexFolder') {
+        const key = info.node.key
+        setExpandedKeys((current) =>
+          current.some((k) => String(k) === String(key)) ? current : [...current, key],
+        )
+        openList(ref.sessionId, ref.database, ref.schema, 'index')
+      }
       if (ref.t === 'object') {
         const objects = tree.objects[objectsKey(ref.sessionId, ref.database, ref.schema)] ?? []
         const object = objects.find((o) => o.name === ref.object)
@@ -518,7 +584,7 @@ export function ConnectionSidebar() {
         if (object) openObject(ref.sessionId, ref.database, ref.schema, object, 'indexes')
       }
     },
-    [openObject, sessionForConnection, setActiveSession, tree.objects],
+    [openList, openObject, sessionForConnection, setActiveSession, tree.objects],
   )
 
   const handleExpand = useCallback<NonNullable<TreeProps['onExpand']>>((keys) => {
@@ -762,22 +828,6 @@ export function ConnectionSidebar() {
 }
 
 /* ------------------------------------------------------------------ helpers */
-
-function objectIcon(kind: ObjectInfo['kind']): ReactNode {
-  switch (kind) {
-    case 'view':
-    case 'materialized_view':
-      return <EyeOutlined />
-    case 'collection':
-      return <ContainerOutlined />
-    case 'sequence':
-      return <NumberOutlined />
-    case 'procedure':
-      return <FunctionOutlined />
-    default:
-      return <TableOutlined />
-  }
-}
 
 function objectTooltip(object: ObjectInfo): string {
   const parts = [object.name]

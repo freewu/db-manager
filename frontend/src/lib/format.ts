@@ -4,7 +4,8 @@ import type { CellValue, ColumnMeta } from '../api/types'
 
 /** Formats a byte count using binary units. */
 export function formatBytes(bytes: number | null | undefined): string {
-  if (bytes == null || Number.isNaN(bytes)) return '—'
+  // Negative values are the "unknown" sentinel some engines use.
+  if (bytes == null || bytes < 0 || Number.isNaN(bytes)) return '—'
   if (bytes < 1024) return `${bytes} B`
   const units = ['KiB', 'MiB', 'GiB', 'TiB', 'PiB']
   let value = bytes / 1024

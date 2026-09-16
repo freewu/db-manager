@@ -21,12 +21,15 @@ import type {
   OpenRequest,
   SessionInfo,
 } from '../api/types'
-import { databaseKey, indexesKey, namespaceKey, objectsKey } from '../lib/tree'
+import { databaseKey, FOLDER_LABEL, indexesKey, namespaceKey, objectsKey } from '../lib/tree'
 
-export type TabKind = 'query' | 'table'
+export type TabKind = 'query' | 'table' | 'objects'
 
 /** Sub-views of a table/view window (Navicat-style bottom tab strip). */
 export type TableView = 'data' | 'structure' | 'indexes' | 'foreignKeys' | 'ddl'
+
+/** Object-list windows: one per folder of the explorer tree. */
+export type ListScope = ObjectKind | 'index'
 
 export interface WorkspaceTab {
   id: string
@@ -39,6 +42,8 @@ export interface WorkspaceTab {
   objectKind?: ObjectKind
   /** Which sub-view of a table window is active. */
   view?: TableView
+  /** Object-list windows only: which folder the list is scoped to. */
+  list?: ListScope
 }
 
 export type ThemeMode = 'light' | 'dark'
@@ -98,6 +103,12 @@ interface AppState {
   invalidateSession: (sessionId: string) => void
 
   openQueryTab: (sessionId: string, database?: string) => void
+  openObjectsTab: (
+    sessionId: string,
+    database: string,
+    schema: string,
+    list: ListScope,
+  ) => void
   openTableTab: (
     sessionId: string,
     database: string,
@@ -374,6 +385,24 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set((state) => ({
       tabs: [...state.tabs, tab],
+      activeTabId: id,
+      activeSessionId: sessionId,
+    }))
+  },
+
+  openObjectsTab(sessionId, database, schema, list) {
+    const id = `objects:${sessionId}:${database}:${schema}:${list}`
+    const tab: WorkspaceTab = {
+      id,
+      kind: 'objects',
+      sessionId,
+      title: list === 'index' ? 'Indexes' : FOLDER_LABEL[list],
+      database,
+      schema,
+      list,
+    }
+    set((state) => ({
+      tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       activeTabId: id,
       activeSessionId: sessionId,
     }))
