@@ -163,6 +163,16 @@ jobs:
         with:
           fetch-depth: 0
 
+      # `actions/checkout` records the tag as a lightweight ref pointing at the
+      # commit, because for a tag push `github.sha` is the commit the tag points
+      # to. `%(contents)` of a lightweight ref is the *commit* message, so the
+      # hand written release summary would silently become the last commit body.
+      # Fetch the real annotated tag object before rendering the notes.
+      - name: Fetch the annotated tag
+        run: |
+          git fetch --force origin "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          git cat-file -t "refs/tags/${GITHUB_REF_NAME}"
+
       - uses: actions/download-artifact@v4
         with:
           path: dist

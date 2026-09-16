@@ -42,17 +42,31 @@ else
   if [ -n "$previous" ]; then range="${previous}..HEAD"; else range="HEAD"; fi
 fi
 
-# The annotated tag message is the release summary. `just publish` writes the
-# placeholder `Release v1.2.3` when no summary was given, which would only repeat
-# the release title, so treat it as empty. Paragraphs are preserved, leading and
-# trailing blank lines are not.
+# The annotated tag message is the release summary — `just publish` stores the
+# hand written summary of the version there, and writes the placeholder
+# `Release v1.2.3` when none was given, which would only repeat the release
+# title, so treat it as empty. Paragraphs are preserved, leading and trailing
+# blank lines are not.
+#
+# The ref has to be an annotated *tag* object. On a lightweight tag `%(contents)`
+# resolves straight to the commit and returns the **commit message**, which would
+# silently replace the summary with the body of the last commit. (GitHub's
+# actions/checkout leaves such a lightweight ref behind, which is why the release
+# workflow fetches the tag object again before calling this script.)
 summary=""
 if [ "$tag_exists" = true ]; then
-  summary=$(git tag -l --format='%(contents)' "$tag" |
-    awk 'BEGIN { RS = "" } { out = out (NR > 1 ? "\n\n" : "") $0 } END { print out }')
-  if [ "$summary" = "Release v${version}" ]; then
-    summary=""
-  fi
+  case "$(git cat-file -t "refs/tags/${tag}" 2>/dev/null || echo missing)" in
+    tag)
+      summary=$(git tag -l --format='%(contents)' "$tag" |
+        awk 'BEGIN { RS = "" } { out = out (NR > 1 ? "\n\n" : "") $0 } END { print out }')
+      if [ "$summary" = "Release v${version}" ]; then
+        summary=""
+      fi
+      ;;
+    *)
+      echo "${self}: ${tag} is not an annotated tag in this clone, so there is no release summary" >&2
+      ;;
+  esac
 fi
 
 subjects=$(mktemp)
