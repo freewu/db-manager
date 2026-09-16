@@ -9,8 +9,8 @@
 一轮任务做完、验证全绿之后，必须依次执行：
 
 ```sh
-# 1) 验证（WSL 里必须带 .exe，见 §3）
-/mnt/d/env/nodejs/node.exe frontend/node_modules/typescript/bin/tsc --noEmit
+# 1) 验证（WSL 里必须带 .exe，见 §3；前端命令要在 frontend/ 下跑）
+cd frontend && /mnt/d/env/nodejs/node.exe node_modules/typescript/bin/tsc --noEmit && cd ..
 /mnt/d/env/go/go1.26.5/bin/go.exe vet ./... && /mnt/d/env/go/go1.26.5/bin/go.exe test ./...
 
 # 2) 提交并推送
@@ -164,11 +164,13 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
 ### 验证命令（提交前必须全绿）
 
 ```sh
-# 前端
-/mnt/d/env/nodejs/node.exe frontend/node_modules/typescript/bin/tsc --noEmit
-/mnt/d/env/nodejs/node.exe frontend/node_modules/vite/bin/vite.js build
+# 前端（必须在 frontend/ 下跑：vite 要在那里找 index.html，tsc 要在那里找 tsconfig）
+cd /mnt/e/work/github/db-manager/frontend
+/mnt/d/env/nodejs/node.exe node_modules/typescript/bin/tsc --noEmit
+/mnt/d/env/nodejs/node.exe node_modules/vite/bin/vite.js build
 
-# 后端
+# 后端（在仓库根目录）
+cd /mnt/e/work/github/db-manager
 /mnt/d/env/go/go1.26.5/bin/go.exe build ./... && \
 /mnt/d/env/go/go1.26.5/bin/go.exe vet ./... && \
 /mnt/d/env/go/go1.26.5/bin/go.exe test ./...

@@ -1,27 +1,35 @@
 :root {
   --dm-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", "Cascadia Mono", Consolas,
     "Liberation Mono", Menlo, monospace;
-  --dm-sidebar-bg: #f6f7f9;
+  --dm-sidebar-bg: #ffffff;
   --dm-surface: #ffffff;
-  --dm-statusbar-bg: #eceef1;
+  --dm-statusbar-bg: #f0f0f0;
   --dm-border: rgba(5, 5, 5, 0.09);
   --dm-null: #9aa1ab;
-  --dm-tree-hover: rgba(0, 0, 0, 0.04);
+  --dm-tree-hover: rgba(0, 0, 0, 0.05);
 
   /* Brand green (#36ab60) — must stay in sync with the Ant Design
      `colorPrimary` token in App.tsx. */
   --dm-accent: #36ab60;
   --dm-accent-soft: #dff2e6;
   --dm-accent-text: #1f7a44;
-  --dm-toolbar-bg: #f2f4f7;
-  --dm-toolbar-border: rgba(5, 5, 5, 0.1);
+
+  /* Navicat chrome: the menu bar, command ribbon and status bar share one flat
+     #f0f0f0 band; the panes between them stay white. `--dm-hot-*` is the
+     rolled-over button tint Navicat uses. */
+  --dm-chrome-bg: #f0f0f0;
+  --dm-chrome-border: #d9d9d9;
+  --dm-hot-bg: #cce8ff;
+  --dm-hot-text: #17537f;
+  --dm-toolbar-bg: var(--dm-chrome-bg);
+  --dm-toolbar-border: var(--dm-chrome-border);
   --dm-tree-row-height: 22px;
 }
 
 [data-theme='dark'] {
-  --dm-sidebar-bg: #15171d;
+  --dm-sidebar-bg: #191b22;
   --dm-surface: #1b1d24;
-  --dm-statusbar-bg: #101216;
+  --dm-statusbar-bg: #1f2229;
   --dm-border: rgba(255, 255, 255, 0.09);
   --dm-null: #6b7280;
   --dm-tree-hover: rgba(255, 255, 255, 0.05);
@@ -31,8 +39,12 @@
      `colorPrimary`, because 15px glyphs need more contrast on a dark surface. */
   --dm-accent-soft: #1b3229;
   --dm-accent-text: #7fd9a1;
-  --dm-toolbar-bg: #1f2229;
-  --dm-toolbar-border: rgba(255, 255, 255, 0.08);
+  --dm-chrome-bg: #1f2229;
+  --dm-chrome-border: #2c3038;
+  --dm-hot-bg: #24405c;
+  --dm-hot-text: #cfe6ff;
+  --dm-toolbar-bg: var(--dm-chrome-bg);
+  --dm-toolbar-border: var(--dm-chrome-border);
 }
 
 html,
@@ -58,6 +70,13 @@ body {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+
+/* Menu bar + ribbon stay glued together at the top, like Navicat. */
+.app-chrome {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
 }
 
 .app-body {
@@ -454,69 +473,161 @@ body {
 /* Navicat-style chrome                                                */
 /* =================================================================== */
 
-/* ----------------------------------------------------------- ribbon bar */
+/* ------------------------------------------------------------- menu bar */
 
-.dm-toolbar {
+.dm-menubar {
   display: flex;
-  align-items: center;
-  gap: 2px;
+  align-items: stretch;
   flex: 0 0 auto;
-  height: 36px;
-  padding: 0 8px;
-  background: var(--dm-toolbar-bg);
-  border-bottom: 1px solid var(--dm-toolbar-border);
+  height: 24px;
+  padding: 0 4px;
+  background: var(--dm-chrome-bg);
+  font-size: 12px;
+  user-select: none;
 }
 
-.dm-toolbar-brand {
-  display: flex;
+.dm-menubar-item {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding-inline: 4px 8px;
+  height: 100%;
+  padding: 0 9px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+}
+
+.dm-menubar-item:hover,
+.dm-menubar-item:focus-visible {
+  background: var(--dm-hot-bg);
+  color: var(--dm-hot-text);
+  outline: none;
+}
+
+.dm-about p {
+  margin: 0 0 6px;
   font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--dm-accent-text);
+}
+
+/* ---------------------------------------------------------------- ribbon */
+
+.dm-ribbon {
+  display: flex;
+  align-items: stretch;
+  gap: 1px;
+  flex: 0 0 auto;
+  height: 56px;
+  padding: 3px 6px;
+  background: var(--dm-chrome-bg);
+  border-bottom: 1px solid var(--dm-chrome-border);
+  overflow: hidden;
+}
+
+.dm-ribbon-cell,
+.dm-ribbon-dropdown {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.dm-ribbon-button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 54px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: default;
+}
+
+.dm-ribbon-button:hover:not(:disabled),
+.dm-ribbon-button:focus-visible:not(:disabled) {
+  background: var(--dm-hot-bg);
+  border-color: color-mix(in srgb, var(--dm-hot-bg) 55%, #7eb4e2);
+  color: var(--dm-hot-text);
+  outline: none;
+}
+
+/* Disabled commands keep their slot (Navicat's layout) but never lie: they
+   grey out and hand pointer events to the wrapper so the tooltip still shows. */
+.dm-ribbon-button:disabled {
+  opacity: 0.42;
+  pointer-events: none;
+}
+
+.dm-ribbon-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 22px;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.dm-ribbon-glyph.is-loading {
+  animation: dm-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes dm-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.dm-ribbon-label {
+  font-size: 11px;
+  line-height: 1.15;
   white-space: nowrap;
 }
 
-.dm-toolbar-sep {
+.dm-ribbon-sep {
   width: 1px;
-  height: 18px;
-  margin: 0 6px;
-  background: var(--dm-toolbar-border);
+  margin: 5px 4px;
+  background: var(--dm-chrome-border);
   flex: 0 0 auto;
 }
 
-.dm-toolbar-spacer {
+.dm-ribbon-spacer {
   flex: 1 1 auto;
 }
 
-.dm-toolbar-button.ant-btn {
+.dm-ribbon-status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 26px;
   padding-inline: 8px;
-  font-size: 12px;
-}
-
-.dm-toolbar-button.ant-btn > .anticon {
-  font-size: 13px;
-}
-
-.dm-toolbar-icon.ant-btn {
-  height: 26px;
-  width: 26px;
-}
-
-.dm-toolbar-status {
   font-size: 11px;
   opacity: 0.55;
-  padding-inline: 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 320px;
+}
+
+.dm-ribbon-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  align-self: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  cursor: default;
+}
+
+.dm-ribbon-icon:hover {
+  background: var(--dm-hot-bg);
+  border-color: color-mix(in srgb, var(--dm-hot-bg) 55%, #7eb4e2);
+  color: var(--dm-hot-text);
 }
 
 /* -------------------------------------------------------- explorer pane */

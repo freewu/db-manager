@@ -35,19 +35,20 @@ export function AppRoot() {
       theme={{
         algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
         token: {
-          fontSize: 13,
-          borderRadius: 6,
+          // Navicat is a dense 9pt UI: small type, square corners, flat chrome.
+          fontSize: 12,
+          borderRadius: 3,
           // Brand green. Keep in sync with `--dm-accent` in styles/global.css.
           colorPrimary: '#36ab60',
-          colorBgLayout: dark ? '#101216' : '#eef0f3',
+          colorBgLayout: dark ? '#101216' : '#f0f0f0',
           fontFamily:
             '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif',
         },
         components: {
           Table: { cellPaddingBlockSM: 2, cellPaddingInlineSM: 8 },
-          Tree: { titleHeight: 24 },
-          Tabs: { horizontalItemPadding: '6px 12px' },
-          Layout: { bodyBg: dark ? '#101216' : '#eef0f3' },
+          Tree: { titleHeight: 22 },
+          Tabs: { horizontalItemPadding: '4px 10px' },
+          Layout: { bodyBg: dark ? '#101216' : '#f0f0f0' },
         },
       }}
     >

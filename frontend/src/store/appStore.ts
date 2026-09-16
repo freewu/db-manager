@@ -107,6 +107,7 @@ interface AppState {
   ) => void
   setTabView: (tabId: string, view: TableView) => void
   closeTab: (tabId: string) => void
+  closeAllTabs: () => void
   setActiveTab: (tabId: string) => void
 
   driverOf: (sessionId: string) => DriverInfo | undefined
@@ -423,6 +424,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return { tabs, activeTabId }
     })
+  },
+
+  closeAllTabs() {
+    set({ tabs: [], activeTabId: undefined })
   },
 
   setActiveTab(tabId) {

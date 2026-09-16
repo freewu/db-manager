@@ -1,24 +1,39 @@
 import { useState, type ReactNode } from 'react'
-import { Button, Dropdown, Tooltip } from 'antd'
+import { Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import {
+  ApiOutlined,
   BulbOutlined,
+  ClockCircleOutlined,
+  CloudUploadOutlined,
   CodeOutlined,
+  DiffOutlined,
   DisconnectOutlined,
-  PlusOutlined,
+  EyeOutlined,
+  FileTextOutlined,
+  FunctionOutlined,
   ReloadOutlined,
+  SwapOutlined,
+  SyncOutlined,
+  TableOutlined,
   ThunderboltOutlined,
+  UserOutlined,
 } from '@ant-design/icons'
 
 import { useAppStore } from '../store/appStore'
 import { useConnect } from '../hooks/useConnect'
-import { appLogo, driverIconOrLogo } from '../lib/assets'
+import { driverIconOrLogo } from '../lib/assets'
+
+/** Tooltip for commands whose backend is not written yet. */
+const SOON = 'Not available yet — the editor behind this command is still to come'
 
 /**
- * Navicat-style ribbon: a flat row of grouped commands above the workspace.
+ * Navicat-style ribbon: flat, grouped, icon-over-label buttons.
  *
- * Only commands that map to something real are shown — no decorative menus —
- * so the toolbar stays honest about what the app can do today.
+ * The button set mirrors Navicat's main window one-for-one so the layout reads
+ * the same. Commands we cannot honour yet stay visible but disabled and carry
+ * a tooltip explaining why — a dead button is worse than an honest gap, but an
+ * empty toolbar is not the layout we are after.
  */
 export function MainToolbar() {
   const connections = useAppStore((s) => s.connections)
@@ -37,27 +52,25 @@ export function MainToolbar() {
   const [refreshing, setRefreshing] = useState(false)
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
-  const closedProfiles = connections.filter(
-    (c) => !sessions.some((s) => s.connectionId === c.id),
-  )
+  const openConnectionIds = new Set(sessions.map((s) => s.connectionId))
+  const closedProfiles = connections.filter((c) => !openConnectionIds.has(c.id))
 
   const connectMenu: MenuProps = {
-    items:
-      closedProfiles.length === 0
-        ? [{ key: 'none', label: 'Every saved connection is open', disabled: true }]
-        : closedProfiles.map((profile) => ({
-            key: profile.id,
-            label: profile.name,
-            icon: (
-              <img
-                src={driverIconOrLogo(profile.driver)}
-                alt=""
-                className="dm-menu-icon"
-                draggable={false}
-              />
-            ),
-            onClick: () => void connect(profile),
-          })),
+    items: closedProfiles.length
+      ? closedProfiles.map((profile) => ({
+          key: profile.id,
+          label: profile.name,
+          icon: (
+            <img
+              src={driverIconOrLogo(profile.driver)}
+              alt=""
+              className="dm-menu-icon"
+              draggable={false}
+            />
+          ),
+          onClick: () => void connect(profile),
+        }))
+      : [{ key: 'none', label: 'Every saved connection is open', disabled: true }],
   }
 
   const refresh = async () => {
@@ -72,23 +85,16 @@ export function MainToolbar() {
   }
 
   return (
-    <div className="dm-toolbar">
-      <div className="dm-toolbar-brand" title={appInfo ? `v${appInfo.version}` : undefined}>
-        <img src={appLogo} alt="" className="dm-brand-logo" draggable={false} />
-        <span>{appInfo?.name ?? 'DB Manager'}</span>
-      </div>
-
-      <span className="dm-toolbar-sep" />
-
-      <ToolbarButton
-        icon={<PlusOutlined />}
+    <div className="dm-ribbon">
+      <RibbonButton
+        icon={<ApiOutlined />}
         label="Connection"
         hint="Create a new connection profile"
         onClick={() => openEditor()}
       />
       <Dropdown menu={connectMenu} trigger={['click']} placement="bottomLeft">
-        <span>
-          <ToolbarButton
+        <span className="dm-ribbon-dropdown">
+          <RibbonButton
             icon={<ThunderboltOutlined />}
             label="Open"
             hint="Open a saved connection"
@@ -96,7 +102,7 @@ export function MainToolbar() {
           />
         </span>
       </Dropdown>
-      <ToolbarButton
+      <RibbonButton
         icon={<DisconnectOutlined />}
         label="Close"
         hint="Close the active connection"
@@ -104,16 +110,16 @@ export function MainToolbar() {
         onClick={() => activeSession && void closeSession(activeSession.id)}
       />
 
-      <span className="dm-toolbar-sep" />
+      <span className="dm-ribbon-sep" />
 
-      <ToolbarButton
+      <RibbonButton
         icon={<CodeOutlined />}
-        label="Query"
-        hint="New query tab"
+        label="New Query"
+        hint="Open a new SQL editor"
         disabled={!activeSession}
         onClick={() => activeSession && openQueryTab(activeSession.id, activeSession.database)}
       />
-      <ToolbarButton
+      <RibbonButton
         icon={<ReloadOutlined />}
         label="Refresh"
         hint="Reload the active connection's catalog"
@@ -122,26 +128,45 @@ export function MainToolbar() {
         onClick={() => void refresh()}
       />
 
-      <div className="dm-toolbar-spacer" />
+      <span className="dm-ribbon-sep" />
 
-      <div className="dm-toolbar-status">
-        {activeSession ? `${activeSession.name} · ${activeSession.driver}` : 'not connected'}
+      <RibbonButton icon={<TableOutlined />} label="Table" hint={SOON} />
+      <RibbonButton icon={<EyeOutlined />} label="View" hint={SOON} />
+      <RibbonButton icon={<FunctionOutlined />} label="Function" hint={SOON} />
+      <RibbonButton icon={<UserOutlined />} label="User" hint={SOON} />
+
+      <span className="dm-ribbon-sep" />
+
+      <RibbonButton icon={<CloudUploadOutlined />} label="Backup" hint={SOON} />
+      <RibbonButton icon={<ClockCircleOutlined />} label="Auto Run" hint={SOON} />
+      <RibbonButton icon={<SwapOutlined />} label="Transfer" hint={SOON} />
+      <RibbonButton icon={<SyncOutlined />} label="Data Sync" hint={SOON} />
+      <RibbonButton icon={<DiffOutlined />} label="Structure Sync" hint={SOON} />
+      <RibbonButton icon={<FileTextOutlined />} label="Report" hint={SOON} />
+
+      <div className="dm-ribbon-spacer" />
+
+      <div className="dm-ribbon-status" title={appInfo ? `v${appInfo.version}` : undefined}>
+        {activeSession
+          ? `${activeSession.name} · ${activeSession.driver}${activeSession.database ? ` · ${activeSession.database}` : ''}`
+          : 'not connected'}
       </div>
 
       <Tooltip title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}>
-        <Button
-          size="small"
-          type="text"
-          className="dm-toolbar-icon"
-          icon={<BulbOutlined />}
+        <button
+          type="button"
+          className="dm-ribbon-icon"
+          aria-label="Switch theme"
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        />
+        >
+          <BulbOutlined />
+        </button>
       </Tooltip>
     </div>
   )
 }
 
-function ToolbarButton({
+function RibbonButton({
   icon,
   label,
   hint,
@@ -157,17 +182,21 @@ function ToolbarButton({
   onClick?: () => void
 }) {
   const button = (
-    <Button
-      size="small"
-      type="text"
-      className="dm-toolbar-button"
-      icon={icon}
+    <button
+      type="button"
+      className={`dm-ribbon-button${disabled ? ' is-disabled' : ''}`}
       disabled={disabled}
-      loading={loading}
       onClick={onClick}
     >
-      {label}
-    </Button>
+      <span className={`dm-ribbon-glyph${loading ? ' is-loading' : ''}`}>{icon}</span>
+      <span className="dm-ribbon-label">{label}</span>
+    </button>
   )
-  return hint ? <Tooltip title={hint}>{button}</Tooltip> : button
+  return hint ? (
+    <Tooltip title={hint}>
+      <span className="dm-ribbon-cell">{button}</span>
+    </Tooltip>
+  ) : (
+    button
+  )
 }
