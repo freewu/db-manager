@@ -335,6 +335,53 @@ type ScriptAnalysis struct {
 	Refused int `json:"refused"`
 }
 
+// --- ER diagram ------------------------------------------------------------
+
+// SchemaGraph is the ER diagram's input: the objects of one namespace, their
+// columns and the foreign keys between them.
+type SchemaGraph struct {
+	Driver   string      `json:"driver,omitempty"`
+	Database string      `json:"database"`
+	Schema   string      `json:"schema"`
+	Nodes    []GraphNode `json:"nodes"`
+	Edges    []GraphEdge `json:"edges"`
+	// Warnings lists objects whose columns or keys could not be read. They
+	// still appear in the diagram, just without their details.
+	Warnings []string `json:"warnings"`
+	// Truncated is set when the namespace holds more objects than the cap.
+	Truncated bool `json:"truncated"`
+}
+
+// GraphNode is one box of the diagram.
+type GraphNode struct {
+	Name    string        `json:"name"`
+	Kind    ObjectKind    `json:"kind"`
+	Comment string        `json:"comment,omitempty"`
+	Columns []GraphColumn `json:"columns"`
+}
+
+// GraphColumn is one line inside a node.
+type GraphColumn struct {
+	Name       string `json:"name"`
+	Type       string `json:"type"`
+	Nullable   bool   `json:"nullable"`
+	PrimaryKey bool   `json:"primaryKey"`
+}
+
+// GraphEdge is a foreign key rendered as an arrow.
+type GraphEdge struct {
+	// From is the child table (the one holding the foreign key).
+	From       string   `json:"from"`
+	FromColumn []string `json:"fromColumns"`
+	// To is the referenced (parent) table. It may point outside the namespace,
+	// in which case no node exists for it and the UI draws a stub.
+	To       string   `json:"to"`
+	ToColumn []string `json:"toColumns"`
+	Name     string   `json:"name,omitempty"`
+	OnDelete string   `json:"onDelete,omitempty"`
+	OnUpdate string   `json:"onUpdate,omitempty"`
+}
+
 // SortSpec is one ORDER BY entry of a data-grid request.
 type SortSpec struct {
 	Column string `json:"column"`

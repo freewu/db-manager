@@ -1,10 +1,11 @@
 import { useMemo } from 'react'
 import { Button, Space, Tabs, Tag, Tooltip, Typography } from 'antd'
 import type { TabsProps } from 'antd'
-import { CodeOutlined, FileTextOutlined, FolderOutlined, PlusOutlined, TableOutlined } from '@ant-design/icons'
+import { CodeOutlined, FileTextOutlined, FolderOutlined, PartitionOutlined, PlusOutlined, TableOutlined } from '@ant-design/icons'
 
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { DdlPane } from './DdlPane'
+import { ErDiagramPane } from './ErDiagramPane'
 import { ObjectListPane } from './ObjectListPane'
 import { QueryPane } from './QueryPane'
 import { TablePane } from './TablePane'
@@ -33,6 +34,8 @@ export function Workspace() {
             <ObjectListPane tab={tab} />
           ) : tab.kind === 'ddl' ? (
             <DdlPane tab={tab} />
+          ) : tab.kind === 'er' ? (
+            <ErDiagramPane tab={tab} />
           ) : (
             <TablePane tab={tab} />
           ),
@@ -86,6 +89,8 @@ function TabLabel({ tab, sessionName }: { tab: WorkspaceTab; sessionName?: strin
         <FolderOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'ddl' ? (
         <FileTextOutlined style={{ opacity: 0.7 }} />
+      ) : tab.kind === 'er' ? (
+        <PartitionOutlined style={{ opacity: 0.7 }} />
       ) : (
         <TableOutlined style={{ opacity: 0.7 }} />
       )}

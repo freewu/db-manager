@@ -142,6 +142,13 @@ func (a *App) ListIndexes(sessionID, database, schema string) ([]models.IndexEnt
 	return a.manager.Indexes(sessionID, database, schema)
 }
 
+// --- ER diagram ------------------------------------------------------------
+
+// GetSchemaGraph returns the objects, columns and foreign keys of a namespace.
+func (a *App) GetSchemaGraph(sessionID, database, schema string) (*models.SchemaGraph, error) {
+	return a.manager.Graph(sessionID, database, schema)
+}
+
 // --- scripts (DDL editor) --------------------------------------------------
 
 // AnalyzeSQL inspects a script without running it (statement kinds + warnings).

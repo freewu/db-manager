@@ -72,6 +72,17 @@ type Conn interface {
 	Dialect() Dialect
 }
 
+// Grapher is an optional Conn capability: describe a whole namespace (objects,
+// their columns and the foreign keys between them) in one call.
+//
+// The ER diagram window needs exactly this. Drivers that cannot describe
+// relationships simply do not implement Grapher, and the service falls back to
+// reading each object's Structure — same result, more round trips. Adding the
+// method to Conn instead would have forced every future driver to fake it.
+type Grapher interface {
+	Graph(ctx context.Context, database, schema string) (*models.SchemaGraph, error)
+}
+
 // FetchRequest is the driver-level page request (no session ids).
 type FetchRequest struct {
 	Database   string

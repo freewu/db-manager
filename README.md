@@ -17,6 +17,7 @@
 - **结构查看器**：列、索引、外键、原始 DDL（优先使用引擎原生 DDL），DDL 可复制或导出。
 - **表设计器**：表格窗口的「结构」页就是编辑器 —— 直接改字段名 / 类型 / NULL / 默认值 / 主键 / 自增 / 注释，增删索引，右侧实时渲染将要执行的 SQL 与引擎限制警告；保存前无需联网猜测，保存时逐条执行并如实报告「第几条失败」（MySQL / PostgreSQL / SQLite 各自的限制都写在警告里）。
 - **查询收藏**：查询窗口工具条上的「Favourites」可以把当前 SQL 命名保存（默认用第一行非注释文本作名），下拉里一键载入、重命名或删除；收藏存在 `queries.json` 里，与连接配置互不影响，换窗口、换连接都能用。
+- **ER 图**：在 schema（没有 schema 层的引擎就是 database）节点右键即可打开该命名空间的关系图 —— 一张 `GetSchemaGraph` 就把对象、字段与它们之间的外键取回来，节点按外键方向分层，主键高亮，箭头悬停显示「哪一列引用哪一列」；支持拖动平移、滚轮缩放、按名搜索、隐藏/显示字段、网格开关，点节点直接打开该表，还能把当前这张图导出成自包含的 SVG。跨命名空间的外键画成虚线 stub，读不到字段的对象仍在图里但会列出警告，超过 300 个对象时明确提示只画了前 300 个。
 - **DDL 编辑器**：把对象的定义开成可编辑的脚本窗口 —— 工具条、对象树右键「Edit DDL…」或结构页的「Edit in DDL editor」都能进；编辑器下方是**后端算出来的干跑结果**（逐条语句标出 query / DDL / DML、标红 DROP、TRUNCATE、无 WHERE 的 DELETE/UPDATE，并说明只读连接会拒掉几条），真正点「Run script」时只对破坏性脚本弹二次确认；执行完顺手刷新目录树与索引缓存。
 - **导出**：CSV / JSON / INSERT 脚本，可写入文件或复制到剪贴板。
 - **外观**：Navicat 式窗口骨架（菜单栏 + icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏。
@@ -77,7 +78,7 @@ wails build
 │   ├── config/store.go       # %APPDATA%/db-manager/{connections,queries,state}.json（0600）
 │   ├── models/               # 跨层 DTO，时间统一为 int64 unix ms
 │   ├── drivers/
-│   │   ├── driver.go         # Driver / Conn / Dialect 契约 + 注册表（init 注册）
+│   │   ├── driver.go         # Driver / Conn / Dialect / Grapher 契约 + 注册表（init 注册）
 │   │   ├── sqlutil/          # 标识符引用、WHERE / ORDER BY 构造（纯字符串+参数位）
 │   │   ├── sqlbase/          # 通用 database/sql 实现：连接池、分页、脚本执行、DDL、行变更
 │   │   ├── mysql/ postgres/ sqlite/   # 只提供 DSN、Dialect 与目录查询
@@ -102,6 +103,8 @@ wails build
 `Databases / Schemas / Objects / Structure / Fetch / Execute` 都可以由文档型引擎用
 「database → collection → field」映射实现，`Execute` 则翻译为自己的查询语言。
 新增引擎只需实现 `Driver` 并在 `init()` 中 `drivers.Register`。
+少数能力是**可选**的：比如 ER 图需要的 `drivers.Grapher`（一次取回整个命名空间），
+`sqlbase` 已经实现，没实现的驱动由 service 退化成逐个对象的 `Structure`，图照样能画。
 
 ### `sqlbase` 用一个包实现全部 SQL 引擎
 
@@ -142,7 +145,9 @@ just test
 过期主键返回 0 行、按主键删除。`internal/config` 与 `internal/service` 还分别盯住了
 查询收藏的磁盘往返（更新不重复、删不掉别人的文件）与校验/排序/保留 `createdAt`；
 `internal/drivers/sqlutil` 则用纯函数盯住脚本干跑的分类与破坏性判定（注释里的 `drop` 不算，
-无 `WHERE` 的 `DELETE` 要算），不依赖任何数据库。
+无 `WHERE` 的 `DELETE` 要算），不依赖任何数据库；ER 图在 SQLite 上端到端跑一遍
+（外键方向、主键/可空标记、跨命名空间的目标名），service 层再用一个只实现 `Conn`
+的包装验证「没有 `Grapher` 时退化成逐对象 `Structure`」这条路。
 
 ## 发布
 
@@ -193,11 +198,11 @@ just publish 0.2.0 "新增 Navicat 风格连接树；索引成为一等资源"
 ## 路线图
 
 - [x] Phase 1：MySQL / PostgreSQL / SQLite（连接、浏览、编辑、SQL、结构、导出）
-- [ ] Phase 1.5：
+- [x] Phase 1.5：
   - [x] 表设计器：字段与索引的可视化编辑 + 实时 SQL 预览（Navicat 的「结构」页）
   - [x] 查询收藏：命名 SQL 片段，查询窗口里可载入 / 改名 / 删除
   - [x] DDL 编辑器：对象定义开成可编辑脚本，附逐条语句的干跑预警
-  - [ ] ER 图
+  - [x] ER 图：命名空间的关系图，可搜索 / 缩放 / 导出 SVG，点节点开表
 - [ ] Phase 2：MongoDB（文档编辑 + 查询语言）、Oracle、SQL Server
 - [ ] Phase 3：SSH 隧道、导入向导、数据对比、插件式扩展
 

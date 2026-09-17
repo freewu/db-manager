@@ -416,6 +416,116 @@ func (m *Manager) Structure(sessionID, database, schema, object string) (*models
 	return s.conn.Structure(ctx, database, schema, object)
 }
 
+// Graph describes a whole namespace for the ER diagram: objects, columns and
+// the foreign keys between them.
+//
+// Drivers that implement drivers.Grapher answer in one bounded round trip; for
+// the others the same information is assembled from per-object Structure calls,
+// so every shipped engine gets a diagram even before it grows a Grapher.
+func (m *Manager) Graph(sessionID, database, schema string) (*models.SchemaGraph, error) {
+	s, err := m.session(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := m.ctx(120 * time.Second)
+	defer cancel()
+
+	if grapher, ok := s.conn.(drivers.Grapher); ok {
+		return grapher.Graph(ctx, database, schema)
+	}
+	return m.graphByStructure(ctx, s, database, schema)
+}
+
+// graphByStructure builds a graph out of one Structure call per object. It runs
+// the same job as sqlbase.Graph, with the same bounded concurrency, for drivers
+// that cannot describe a namespace themselves.
+func (m *Manager) graphByStructure(ctx context.Context, s *session, database, schema string) (*models.SchemaGraph, error) {
+	objects, err := s.conn.Objects(ctx, database, schema)
+	if err != nil {
+		return nil, err
+	}
+	graph := &models.SchemaGraph{
+		Driver:   string(s.driver.Info().Type),
+		Database: database,
+		Schema:   schema,
+		Nodes:    make([]models.GraphNode, 0, len(objects)),
+		Edges:    []models.GraphEdge{},
+		Warnings: []string{},
+	}
+
+	const workers = 4
+	type result struct {
+		structure *models.TableStructure
+		err       error
+	}
+	results := make([]result, len(objects))
+	indexes := make(chan int)
+	var wg sync.WaitGroup
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range indexes {
+				structure, err := s.conn.Structure(ctx, database, schema, objects[i].Name)
+				results[i] = result{structure: structure, err: err}
+			}
+		}()
+	}
+	for i := range objects {
+		indexes <- i
+	}
+	close(indexes)
+	wg.Wait()
+
+	known := make(map[string]string, len(objects))
+	for _, object := range objects {
+		known[strings.ToLower(object.Name)] = object.Name
+	}
+
+	for i, object := range objects {
+		graph.Nodes = append(graph.Nodes, models.GraphNode{
+			Name:    object.Name,
+			Kind:    object.Kind,
+			Comment: object.Comment,
+			Columns: []models.GraphColumn{},
+		})
+		if results[i].err != nil || results[i].structure == nil {
+			message := object.Name + ": structure is unavailable"
+			if results[i].err != nil {
+				message = object.Name + ": " + results[i].err.Error()
+			}
+			graph.Warnings = append(graph.Warnings, message)
+			continue
+		}
+
+		structure := results[i].structure
+		for _, column := range structure.Columns {
+			graph.Nodes[len(graph.Nodes)-1].Columns = append(
+				graph.Nodes[len(graph.Nodes)-1].Columns,
+				models.GraphColumn{
+					Name:       column.Name,
+					Type:       column.DataType,
+					Nullable:   column.Nullable,
+					PrimaryKey: column.PrimaryKey,
+				})
+		}
+		for _, fk := range structure.ForeignKeys {
+			graph.Edges = append(graph.Edges, models.GraphEdge{
+				From:       object.Name,
+				FromColumn: fk.Columns,
+				To:         fk.ReferencedTable,
+				ToColumn:   fk.ReferencedColumns,
+				Name:       fk.Name,
+				OnDelete:   fk.OnDelete,
+				OnUpdate:   fk.OnUpdate,
+			})
+		}
+	}
+
+	sort.Strings(graph.Warnings)
+	return graph, nil
+}
+
 // Indexes lists every index of a namespace (used by the explorer tree).
 func (m *Manager) Indexes(sessionID, database, schema string) ([]models.IndexEntry, error) {
 	s, err := m.session(sessionID)

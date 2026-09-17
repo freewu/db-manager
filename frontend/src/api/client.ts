@@ -22,6 +22,7 @@ import type {
   RowDelete,
   SaveFileRequest,
   SavedQuery,
+  SchemaGraph,
   ScriptAnalysis,
   SessionInfo,
   TableDesign,
@@ -127,6 +128,9 @@ export const api = {
   // --- data ---------------------------------------------------------------
   fetchRows: (req: FetchRequest) => invoke<FetchResult>('FetchRows', req),
   executeSql: (req: ExecRequest) => invoke<QueryResult>('ExecuteSQL', req),
+  /** Objects, columns and foreign keys of a namespace, for the ER diagram. */
+  getSchemaGraph: (sessionId: string, database: string, schema: string) =>
+    invoke<SchemaGraph>('GetSchemaGraph', sessionId, database, schema),
   /** Dry run for the DDL editor: statement kinds + destructive warnings. */
   analyzeSql: (sessionId: string, sql: string) =>
     invoke<ScriptAnalysis>('AnalyzeSQL', sessionId, sql),

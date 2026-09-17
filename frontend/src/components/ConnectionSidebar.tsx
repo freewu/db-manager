@@ -12,6 +12,7 @@ import {
   KeyOutlined,
   MinusSquareOutlined,
   NumberOutlined,
+  PartitionOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
@@ -68,6 +69,7 @@ export function ConnectionSidebar() {
   const openObjectsTab = useAppStore((s) => s.openObjectsTab)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const openDdlTab = useAppStore((s) => s.openDdlTab)
+  const openErTab = useAppStore((s) => s.openErTab)
   const closeSession = useAppStore((s) => s.closeSession)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
 
@@ -399,7 +401,33 @@ export function ConnectionSidebar() {
         } else if (schemas) {
           children = schemas.map((schema) => ({
             key: encodeNode({ t: 'schema', sessionId: session.id, database, schema }),
-            title: schema,
+            title: (
+              <NodeMenu
+                items={[
+                  {
+                    key: 'er',
+                    icon: <PartitionOutlined />,
+                    label: 'ER diagram',
+                    onClick: () => openErTab(session.id, database, schema),
+                  },
+                  {
+                    key: 'ddl',
+                    icon: <CodeOutlined />,
+                    label: 'New DDL script…',
+                    onClick: () => openDdlTab(session.id, database, schema),
+                  },
+                  { type: 'divider' as const },
+                  {
+                    key: 'refresh',
+                    icon: <ReloadOutlined />,
+                    label: 'Reload objects',
+                    onClick: () => void loadObjects(session.id, database, schema),
+                  },
+                ]}
+              >
+                <span>{schema}</span>
+              </NodeMenu>
+            ),
             icon: <AppstoreOutlined />,
             isLeaf: false,
           }))
@@ -419,7 +447,33 @@ export function ConnectionSidebar() {
       const ns = namespaceKey(session.id, database, database)
       return {
         key: encodeNode({ t: 'db', sessionId: session.id, database }),
-        title: database,
+        title: (
+          <NodeMenu
+            items={[
+              {
+                key: 'er',
+                icon: <PartitionOutlined />,
+                label: 'ER diagram',
+                onClick: () => openErTab(session.id, database, database),
+              },
+              {
+                key: 'ddl',
+                icon: <CodeOutlined />,
+                label: 'New DDL script…',
+                onClick: () => openDdlTab(session.id, database, database),
+              },
+              { type: 'divider' as const },
+              {
+                key: 'refresh',
+                icon: <ReloadOutlined />,
+                label: 'Reload objects',
+                onClick: () => void loadObjects(session.id, database, database),
+              },
+            ]}
+          >
+            <span>{database}</span>
+          </NodeMenu>
+        ),
         icon: <DatabaseOutlined />,
         isLeaf: false,
         children: tree.loaded[ns] || tree.errors[ns]
@@ -430,7 +484,10 @@ export function ConnectionSidebar() {
     [
       buildNamespace,
       driverOfType,
+      loadObjects,
       loadSchemas,
+      openDdlTab,
+      openErTab,
       tree.errors,
       tree.loaded,
       tree.loading,

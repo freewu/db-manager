@@ -27,7 +27,7 @@ import type {
 import { databaseKey, FOLDER_LABEL, indexesKey, namespaceKey, objectsKey } from '../lib/tree'
 import { designFrom } from '../lib/design'
 
-export type TabKind = 'query' | 'table' | 'objects' | 'ddl'
+export type TabKind = 'query' | 'table' | 'objects' | 'ddl' | 'er'
 
 /** Sub-views of a table/view window (Navicat-style bottom tab strip). */
 export type TableView = 'data' | 'structure' | 'indexes' | 'foreignKeys' | 'ddl'
@@ -147,6 +147,9 @@ interface AppState {
     schema: string,
     object?: string,
   ) => void
+  /** Opens the ER diagram of one namespace (schema, or database when there is
+   * no schema layer). */
+  openErTab: (sessionId: string, database: string, schema: string) => void
   setTabView: (tabId: string, view: TableView) => void
 
   /**
@@ -522,6 +525,23 @@ export const useAppStore = create<AppState>((set, get) => ({
       database,
       schema,
       object,
+    }
+    set((state) => ({
+      tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
+      activeTabId: id,
+      activeSessionId: sessionId,
+    }))
+  },
+
+  openErTab(sessionId, database, schema) {
+    const id = `er:${sessionId}:${database}:${schema}`
+    const tab: WorkspaceTab = {
+      id,
+      kind: 'er',
+      sessionId,
+      title: schema ? `ER · ${schema}` : 'ER diagram',
+      database,
+      schema,
     }
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],

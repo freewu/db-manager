@@ -165,6 +165,46 @@ export interface TableStructure {
   ddl: string
 }
 
+/* --- ER diagram ---------------------------------------------------------- */
+
+/** One line inside a diagram node. */
+export interface GraphColumn {
+  name: string
+  type: string
+  nullable: boolean
+  primaryKey: boolean
+}
+
+/** One box of the ER diagram. */
+export interface GraphNode {
+  name: string
+  kind: ObjectKind
+  comment?: string
+  columns: GraphColumn[]
+}
+
+/** A foreign key rendered as an arrow. `to` may point outside the namespace. */
+export interface GraphEdge {
+  from: string
+  fromColumns: string[]
+  to: string
+  toColumns: string[]
+  name?: string
+  onDelete?: string
+  onUpdate?: string
+}
+
+/** What the backend hands the ER window: a whole namespace at once. */
+export interface SchemaGraph {
+  driver?: DriverType
+  database: string
+  schema: string
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  warnings: string[]
+  truncated: boolean
+}
+
 /* --- scripts (DDL editor) ------------------------------------------------ */
 
 /** One statement of a script plus how the app will treat it. */

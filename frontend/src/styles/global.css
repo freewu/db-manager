@@ -424,6 +424,26 @@ body {
   line-height: 17px;
 }
 
+/* --- ER diagram --------------------------------------------------------- */
+
+/* The canvas owns the pan/zoom gestures, so it must not scroll under them. */
+.dm-er-canvas {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.dm-er-canvas:active {
+  cursor: grabbing;
+}
+
+.dm-er-svg {
+  display: block;
+  user-select: none;
+}
+
 .dm-fav-action:hover {
   background: var(--dm-tree-hover);
   color: var(--dm-accent-text);
