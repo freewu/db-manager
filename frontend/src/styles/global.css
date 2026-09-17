@@ -343,7 +343,6 @@ body {
 }
 
 /* --- query favourites ---------------------------------------------------- */
-
 /* Count badge on the toolbar button, so the list is discoverable when empty. */
 .dm-fav-count {
   margin-left: 6px;
@@ -404,6 +403,25 @@ body {
   color: inherit;
   font-size: 12px;
   cursor: pointer;
+}
+
+/* --- DDL editor --------------------------------------------------------- */
+
+/* The dry-run strip: one chip per statement, destructive ones in red. */
+.dm-ddl-analyze {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--dm-border);
+}
+
+.dm-ddl-analyze .dm-ddl-chip {
+  margin: 0;
+  font-size: 11px;
+  line-height: 17px;
 }
 
 .dm-fav-action:hover {
@@ -1001,7 +1019,8 @@ body {
   background: var(--dm-chrome-bg);
 }
 
-.dm-designer-toolbar .dm-toolbar-sep {
+.dm-designer-toolbar .dm-toolbar-sep,
+.dm-editor-toolbar .dm-toolbar-sep {
   width: 1px;
   height: 18px;
   margin: 0 4px;

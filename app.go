@@ -142,6 +142,13 @@ func (a *App) ListIndexes(sessionID, database, schema string) ([]models.IndexEnt
 	return a.manager.Indexes(sessionID, database, schema)
 }
 
+// --- scripts (DDL editor) --------------------------------------------------
+
+// AnalyzeSQL inspects a script without running it (statement kinds + warnings).
+func (a *App) AnalyzeSQL(sessionID, sql string) (*models.ScriptAnalysis, error) {
+	return a.manager.AnalyzeScript(sessionID, sql)
+}
+
 // --- table designer --------------------------------------------------------
 
 // PlanTableDesign returns the script that would bring a table in line with a

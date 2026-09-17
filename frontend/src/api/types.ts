@@ -165,6 +165,28 @@ export interface TableStructure {
   ddl: string
 }
 
+/* --- scripts (DDL editor) ------------------------------------------------ */
+
+/** One statement of a script plus how the app will treat it. */
+export interface ScriptStatement {
+  index: number
+  kind: 'query' | 'ddl' | 'dml' | 'unknown'
+  /** Comment-stripped single-line rendering of the statement. */
+  preview: string
+  destructive: boolean
+  reason?: string
+}
+
+/** The dry run shown next to the DDL editor before anything runs. */
+export interface ScriptAnalysis {
+  statements: ScriptStatement[]
+  warnings: string[]
+  destructive: boolean
+  readOnly: boolean
+  /** Statements a read-only session would refuse. */
+  refused: number
+}
+
 /* --- table designer ------------------------------------------------------ */
 
 /**

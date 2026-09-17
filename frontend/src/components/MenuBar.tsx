@@ -4,6 +4,7 @@ import {
   CheckOutlined,
   CodeOutlined,
   DisconnectOutlined,
+  FileTextOutlined,
   LinkOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -69,6 +70,7 @@ export function MenuBar() {
   const closeTab = useAppStore((s) => s.closeTab)
   const closeAllTabs = useAppStore((s) => s.closeAllTabs)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
+  const openDdlTab = useAppStore((s) => s.openDdlTab)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
   const loadDatabases = useAppStore((s) => s.loadDatabases)
   const setTheme = useAppStore((s) => s.setTheme)
@@ -182,6 +184,11 @@ export function MenuBar() {
         break
       case 'tools.query':
         if (activeSessionId) openQueryTab(activeSessionId, activeSession?.database)
+        break
+      case 'tools.ddl':
+        if (activeSessionId) {
+          openDdlTab(activeSessionId, activeSession?.database ?? '', '')
+        }
         break
       case 'tools.refresh':
         void refresh()
@@ -310,6 +317,12 @@ export function MenuBar() {
           key: 'tools.query',
           label: 'New Query',
           icon: <CodeOutlined />,
+          disabled: !activeSessionId,
+        },
+        {
+          key: 'tools.ddl',
+          label: 'New DDL Script',
+          icon: <FileTextOutlined />,
           disabled: !activeSessionId,
         },
         {

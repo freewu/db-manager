@@ -27,7 +27,7 @@ import type {
 import { databaseKey, FOLDER_LABEL, indexesKey, namespaceKey, objectsKey } from '../lib/tree'
 import { designFrom } from '../lib/design'
 
-export type TabKind = 'query' | 'table' | 'objects'
+export type TabKind = 'query' | 'table' | 'objects' | 'ddl'
 
 /** Sub-views of a table/view window (Navicat-style bottom tab strip). */
 export type TableView = 'data' | 'structure' | 'indexes' | 'foreignKeys' | 'ddl'
@@ -136,6 +136,16 @@ interface AppState {
     schema: string,
     object: ObjectInfo,
     view?: TableView,
+  ) => void
+  /**
+   * Opens the DDL editor. With `object` it starts from that object's live
+   * definition; without it, from a template for a new object.
+   */
+  openDdlTab: (
+    sessionId: string,
+    database: string,
+    schema: string,
+    object?: string,
   ) => void
   setTabView: (tabId: string, view: TableView) => void
 
@@ -500,6 +510,24 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeSessionId: sessionId,
       }
     })
+  },
+
+  openDdlTab(sessionId, database, schema, object) {
+    const id = `ddl:${sessionId}:${database}:${schema}:${object ?? '*'}`
+    const tab: WorkspaceTab = {
+      id,
+      kind: 'ddl',
+      sessionId,
+      title: object ? `${object} DDL` : 'DDL script',
+      database,
+      schema,
+      object,
+    }
+    set((state) => ({
+      tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
+      activeTabId: id,
+      activeSessionId: sessionId,
+    }))
   },
 
   setTabView(tabId, view) {

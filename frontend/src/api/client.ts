@@ -22,6 +22,7 @@ import type {
   RowDelete,
   SaveFileRequest,
   SavedQuery,
+  ScriptAnalysis,
   SessionInfo,
   TableDesign,
   TableStructure,
@@ -126,6 +127,9 @@ export const api = {
   // --- data ---------------------------------------------------------------
   fetchRows: (req: FetchRequest) => invoke<FetchResult>('FetchRows', req),
   executeSql: (req: ExecRequest) => invoke<QueryResult>('ExecuteSQL', req),
+  /** Dry run for the DDL editor: statement kinds + destructive warnings. */
+  analyzeSql: (sessionId: string, sql: string) =>
+    invoke<ScriptAnalysis>('AnalyzeSQL', sessionId, sql),
   updateCell: (req: CellUpdate) => invoke<number>('UpdateCell', req),
   deleteRow: (req: RowDelete) => invoke<number>('DeleteRow', req),
 

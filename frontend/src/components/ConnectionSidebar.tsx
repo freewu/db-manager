@@ -3,6 +3,7 @@ import { App as AntApp, Button, Dropdown, Empty, Input, Modal, Space, Tooltip, T
 import type { MenuProps, TreeDataNode, TreeProps } from 'antd'
 import {
   AppstoreOutlined,
+  CodeOutlined,
   DatabaseOutlined,
   DeleteOutlined,
   DisconnectOutlined,
@@ -66,6 +67,7 @@ export function ConnectionSidebar() {
   const openTableTab = useAppStore((s) => s.openTableTab)
   const openObjectsTab = useAppStore((s) => s.openObjectsTab)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
+  const openDdlTab = useAppStore((s) => s.openDdlTab)
   const closeSession = useAppStore((s) => s.closeSession)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
 
@@ -287,6 +289,12 @@ export function ConnectionSidebar() {
                   label: 'New query',
                   onClick: () => openQueryTab(sessionId, database),
                 },
+                {
+                  key: 'ddl',
+                  icon: <CodeOutlined />,
+                  label: 'New DDL script…',
+                  onClick: () => openDdlTab(sessionId, database, schema),
+                },
                 { type: 'divider' as const },
                 {
                   key: 'refresh',
@@ -332,6 +340,12 @@ export function ConnectionSidebar() {
                     label: 'New query',
                     onClick: () => openQueryTab(sessionId, database),
                   },
+                  {
+                    key: 'ddl',
+                    icon: <CodeOutlined />,
+                    label: 'Edit DDL…',
+                    onClick: () => openDdlTab(sessionId, database, schema, object.name),
+                  },
                   { type: 'divider' as const },
                   {
                     key: 'copy',
@@ -353,7 +367,7 @@ export function ConnectionSidebar() {
       folders.push(buildIndexFolder(sessionId, database, schema))
       return folders
     },
-    [buildIndexFolder, loadObjects, openList, openObject, openQueryTab, tree.objects],
+    [buildIndexFolder, loadObjects, openDdlTab, openList, openObject, openQueryTab, tree.objects],
   )
 
   const buildNamespace = useCallback(

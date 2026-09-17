@@ -18,6 +18,7 @@ import (
 	"dbmanager/internal/drivers"
 	"dbmanager/internal/drivers/planned"
 	"dbmanager/internal/drivers/sqlbase"
+	"dbmanager/internal/drivers/sqlutil"
 	"dbmanager/internal/models"
 )
 
@@ -473,6 +474,23 @@ func (m *Manager) Execute(req models.ExecRequest) (*models.QueryResult, error) {
 		TimeoutMS: req.TimeoutMS,
 		ReadOnly:  readOnly,
 	})
+}
+
+// --- scripts (DDL editor) --------------------------------------------------
+
+// AnalyzeScript reports what a script would do without running it. It is the
+// dry run the DDL editor shows next to the editor.
+func (m *Manager) AnalyzeScript(sessionID, sql string) (*models.ScriptAnalysis, error) {
+	s, err := m.session(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(sql) == "" {
+		return nil, apperr.New(apperr.CodeInvalidConfig, "there is nothing to analyse yet")
+	}
+
+	analysis := sqlutil.Analyze(sql, s.readOnly)
+	return &analysis, nil
 }
 
 // --- table designer --------------------------------------------------------

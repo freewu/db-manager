@@ -18,6 +18,7 @@ import {
   CopyOutlined,
   DeleteOutlined,
   DownloadOutlined,
+  EditOutlined,
   PlusOutlined,
   ReloadOutlined,
   WarningOutlined,
@@ -58,6 +59,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   const design = useAppStore((s) => s.designs[tab.id])
   const ensureDesign = useAppStore((s) => s.ensureDesign)
   const updateDesign = useAppStore((s) => s.updateDesign)
+  const openDdlTab = useAppStore((s) => s.openDdlTab)
 
   const database = tab.database ?? session?.database ?? ''
   const schema = tab.schema ?? ''
@@ -295,6 +297,15 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
           <Tooltip title="Copy DDL">
             <Button size="small" icon={<CopyOutlined />} onClick={() => copy(structure.ddl, 'DDL')}>
               Copy
+            </Button>
+          </Tooltip>
+          <Tooltip title="Open this definition in the DDL editor, where it can be changed and run">
+            <Button
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => openDdlTab(tab.sessionId, database, schema, object)}
+            >
+              Edit in DDL editor
             </Button>
           </Tooltip>
           <Button size="small" icon={<DownloadOutlined />} onClick={() => void saveDDL()}>

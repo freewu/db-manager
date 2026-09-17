@@ -307,6 +307,34 @@ type QueryResult struct {
 	Messages       []string `json:"messages,omitempty"`
 }
 
+// --- scripts (DDL editor) --------------------------------------------------
+
+// ScriptStatement is one statement of a script plus how the app will treat it.
+type ScriptStatement struct {
+	// Index is the zero-based position of the statement in the script.
+	Index int    `json:"index"`
+	Kind  string `json:"kind"`
+	// Preview is the comment-stripped, single-line rendering of the statement.
+	Preview string `json:"preview"`
+	// Destructive marks statements that can lose schema or data.
+	Destructive bool   `json:"destructive"`
+	Reason      string `json:"reason,omitempty"`
+}
+
+// ScriptAnalysis is the dry run the DDL editor shows before running anything.
+//
+// It is produced without contacting the server: the editor uses it to warn
+// about destructive statements and to explain what a read-only session would
+// refuse, not to validate syntax.
+type ScriptAnalysis struct {
+	Statements  []ScriptStatement `json:"statements"`
+	Warnings    []string          `json:"warnings"`
+	Destructive bool              `json:"destructive"`
+	ReadOnly    bool              `json:"readOnly"`
+	// Refused counts the statements a read-only session would reject.
+	Refused int `json:"refused"`
+}
+
 // SortSpec is one ORDER BY entry of a data-grid request.
 type SortSpec struct {
 	Column string `json:"column"`
