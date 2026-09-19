@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { App as AntApp, Form, Input, Modal, Typography } from 'antd'
+import { App as AntApp, Input, Modal, Typography } from 'antd'
 
 import { toMessage } from '../api/client'
 import type { ConnectionConfig } from '../api/types'
@@ -45,8 +45,18 @@ export function ConnectProvider({ children }: { children: ReactNode }) {
   const [promptError, setPromptError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   // The password field submits on Enter through both `onPressEnter` and the
-  // form's `onFinish`; a ref keeps the two from opening two connections.
+  // dialog's OK button; a ref keeps the two from opening two connections.
   const busy = useRef(false)
+  // Which profile the prompt is showing. Re-opening the prompt for the profile
+  // that is already on screen (the explorer can ask again while the dialog is
+  // up) must not wipe what the user has typed into it.
+  const prompted = useRef<string | null>(null)
+
+  const showPrompt = useCallback((config: ConnectionConfig) => {
+    if (prompted.current !== config.id) setPassword('')
+    prompted.current = config.id
+    setPrompt(config)
+  }, [])
 
   const open = useCallback(
     async (config: ConnectionConfig, secret?: string) => {
@@ -65,7 +75,7 @@ export function ConnectProvider({ children }: { children: ReactNode }) {
           message.error(text)
         } else {
           // Offer the credential prompt so the user can retry or fix the secret.
-          setPrompt(config)
+          showPrompt(config)
           setPromptError(text)
         }
         return false
@@ -73,7 +83,7 @@ export function ConnectProvider({ children }: { children: ReactNode }) {
         setPendingId(null)
       }
     },
-    [message, openConnection],
+    [message, openConnection, showPrompt],
   )
 
   const connect = useCallback(
@@ -82,14 +92,14 @@ export function ConnectProvider({ children }: { children: ReactNode }) {
         await open(config)
         return
       }
-      setPrompt(config)
-      setPassword('')
+      showPrompt(config)
       setPromptError(null)
     },
-    [open],
+    [open, showPrompt],
   )
 
   const closePrompt = useCallback(() => {
+    prompted.current = null
     setPrompt(null)
     setPassword('')
     setPromptError(null)
@@ -140,17 +150,20 @@ export function ConnectProvider({ children }: { children: ReactNode }) {
           </Typography.Paragraph>
         )}
 
-        <Form layout="vertical" onFinish={() => void submit()}>
-          <Form.Item label="Password" style={{ marginBottom: 4 }}>
-            <Input.Password
-              autoFocus
-              value={password}
-              placeholder={prompt?.username ? `password for ${prompt.username}` : 'password'}
-              onChange={(event) => setPassword(event.target.value)}
-              onPressEnter={() => void submit()}
-            />
-          </Form.Item>
-        </Form>
+        {/* Deliberately not an antd Form: the field is not part of a form, and a
+            nameless `Form.Item` pushes every keystroke into a form store keyed by
+            an empty name path. */}
+        <label className="dm-field-label" htmlFor="dm-connect-password">
+          Password
+        </label>
+        <Input.Password
+          id="dm-connect-password"
+          autoFocus
+          value={password}
+          placeholder={prompt?.username ? `password for ${prompt.username}` : 'password'}
+          onChange={(event) => setPassword(event.target.value)}
+          onPressEnter={() => void submit()}
+        />
       </Modal>
     </ConnectContext.Provider>
   )

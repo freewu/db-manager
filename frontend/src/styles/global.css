@@ -700,6 +700,13 @@ body {
   font-size: 12px;
 }
 
+/* Label for a lone field outside a form (the connect password prompt). */
+.dm-field-label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
 /* ---------------------------------------------------------------- ribbon */
 
 .dm-ribbon {

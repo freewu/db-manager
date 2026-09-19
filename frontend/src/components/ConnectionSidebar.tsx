@@ -94,33 +94,37 @@ export function ConnectionSidebar() {
   )
 
   /**
-   * A node only counts as "loaded" once its data actually arrived, so a failed
-   * or cancelled load can be retried by expanding the node again.
+   * True once a node actually has data behind it.
+   *
+   * rc-tree re-triggers `loadData` on *every* render for an expanded node that
+   * is not listed in `loadedKeys`, so this must never be used to filter that
+   * prop — a filtered key makes the tree reload, which re-renders, which
+   * reloads… Only consult it while handling an expand, so a node whose load
+   * failed or was cancelled gets one fresh attempt per expand.
    */
-  const effectiveLoadedKeys = useMemo(
-    () =>
-      loadedKeys.filter((key) => {
-        const ref = decodeNode(String(key))
-        if (!ref) return false
-        switch (ref.t) {
-          case 'connection':
-            return Boolean(sessionForConnection(ref.connectionId))
-          case 'db': {
-            const session = sessions.find((s) => s.id === ref.sessionId)
-            const ns = driverOfType(session?.driver)?.supportsSchema
-              ? databaseKey(ref.sessionId, ref.database)
-              : namespaceKey(ref.sessionId, ref.database, ref.database)
-            return Boolean(tree.loaded[ns])
-          }
-          case 'schema':
-            return Boolean(tree.loaded[namespaceKey(ref.sessionId, ref.database, ref.schema)])
-          case 'indexFolder':
-            return Boolean(tree.loaded[indexesKey(ref.sessionId, ref.database, ref.schema)])
-          default:
-            return true
+  const hasData = useCallback(
+    (key: string): boolean => {
+      const ref = decodeNode(key)
+      if (!ref) return true
+      switch (ref.t) {
+        case 'connection':
+          return Boolean(sessionForConnection(ref.connectionId))
+        case 'db': {
+          const session = sessions.find((s) => s.id === ref.sessionId)
+          const ns = driverOfType(session?.driver)?.supportsSchema
+            ? databaseKey(ref.sessionId, ref.database)
+            : namespaceKey(ref.sessionId, ref.database, ref.database)
+          return Boolean(tree.loaded[ns])
         }
-      }),
-    [driverOfType, loadedKeys, sessionForConnection, sessions, tree.loaded],
+        case 'schema':
+          return Boolean(tree.loaded[namespaceKey(ref.sessionId, ref.database, ref.schema)])
+        case 'indexFolder':
+          return Boolean(tree.loaded[indexesKey(ref.sessionId, ref.database, ref.schema)])
+        default:
+          return true
+      }
+    },
+    [driverOfType, sessionForConnection, sessions, tree.loaded],
   )
 
   /** Merges profiles and ad-hoc sessions into the pane's root list. */
@@ -486,6 +490,7 @@ export function ConnectionSidebar() {
       driverOfType,
       loadObjects,
       loadSchemas,
+      loadedKeys,
       openDdlTab,
       openErTab,
       tree.errors,
@@ -498,10 +503,24 @@ export function ConnectionSidebar() {
   const treeData = useMemo<TreeDataNode[]>(() => {
     return visibleRoots.map((root) => {
       const session = root.session
+      const connectionKey = encodeNode({ t: 'connection', connectionId: root.id })
 
       let children: TreeDataNode[] | undefined
       if (!session) {
-        if (pending === root.id) children = [placeholderNode(root.id, 'Connecting…')]
+        // A node that carries children is never handed to `loadData` again, so
+        // the hint below may only appear once the key is known to be loaded —
+        // otherwise the connection could never be opened from here.
+        if (pending === root.id) {
+          children = [placeholderNode(root.id, 'Connecting…')]
+        } else if (loadedKeys.some((key) => String(key) === connectionKey)) {
+          children = [
+            emptyNode(
+              root.id,
+              'Not connected — expand this node again to retry',
+              'Use “Open connection” in the context menu, or collapse and expand this node, to try again.',
+            ),
+          ]
+        }
       } else if (tree.loading[session.id]) {
         children = [placeholderNode(session.id, 'Loading databases…')]
       } else if (tree.errors[session.id]) {
@@ -522,7 +541,7 @@ export function ConnectionSidebar() {
 
       const connected = Boolean(session)
       return {
-        key: encodeNode({ t: 'connection', connectionId: root.id }),
+        key: connectionKey,
         title: (
           <NodeMenu items={connectionMenuItems(root, session)}>
             <span className="dm-connection-node">
@@ -661,9 +680,25 @@ export function ConnectionSidebar() {
     [openList, openObject, sessionForConnection, setActiveSession, tree.objects],
   )
 
-  const handleExpand = useCallback<NonNullable<TreeProps['onExpand']>>((keys) => {
-    setExpandedKeys(keys as React.Key[])
-  }, [])
+  const handleExpand = useCallback<NonNullable<TreeProps['onExpand']>>(
+    (keys) => {
+      const next = keys as React.Key[]
+      const open = new Set(expandedKeys.map(String))
+      const fresh = next.filter((key) => !open.has(String(key)))
+      setExpandedKeys(next)
+
+      // Expanding a node that never received its data is how the user asks for
+      // another try. Drop those keys from `loadedKeys` once, so rc-tree runs a
+      // single fresh load instead of retrying on every render.
+      if (fresh.length === 0) return
+      const retry = new Set(fresh.map(String))
+      setLoadedKeys((current) => {
+        const kept = current.filter((key) => !retry.has(String(key)) || hasData(String(key)))
+        return kept.length === current.length ? current : kept
+      })
+    },
+    [expandedKeys, hasData],
+  )
 
   const handleLoad = useCallback<NonNullable<TreeProps['onLoad']>>((keys) => {
     setLoadedKeys(keys as React.Key[])
@@ -783,7 +818,7 @@ export function ConnectionSidebar() {
             treeData={treeData}
             expandedKeys={expandedKeys}
             selectedKeys={selectedKeys}
-            loadedKeys={effectiveLoadedKeys}
+            loadedKeys={loadedKeys}
             loadData={handleLoadData}
             onExpand={handleExpand}
             onSelect={handleSelect}
@@ -951,11 +986,15 @@ function placeholderNode(scope: string, text: string): TreeDataNode {
 }
 
 /** Terminal hint for a namespace that legitimately has nothing in it. */
-function emptyNode(scope: string, text: string): TreeDataNode {
+function emptyNode(scope: string, text: string, tip?: string): TreeDataNode {
   return {
     key: `empty:${scope}`,
     title: (
-      <Tooltip title="Create one with CREATE DATABASE … in a query tab, then reload the catalog.">
+      <Tooltip
+        title={
+          tip ?? 'Create one with CREATE DATABASE … in a query tab, then reload the catalog.'
+        }
+      >
         <span style={{ opacity: 0.6, fontSize: 12 }}>{text}</span>
       </Tooltip>
     ),

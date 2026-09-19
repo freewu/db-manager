@@ -134,6 +134,18 @@ MySQL / PostgreSQL / SQLite 仅声明一份 `Spec`（`DSN` 构造函数、`Diale
 前后端之间不会把密码回传到 UI：`ConnectionConfig.Redacted()` 会剥离密码并置
 `HasPassword`，`apperr.Sanitize()` 会把日志与错误里的 `password=…`、URI userinfo 打码。
 
+密码提示框是普通受控 `Input.Password`（**不在 antd `Form` 里**：无名 `Form.Item` 的
+校验/取值会把表单 store 覆盖成用户输入的那串字符），重复调用 `connect()` 也不会清空
+已经敲进去的内容。
+
+### 连接树
+
+展开连接节点就是「连上它」：一次只发起一次加载，失败或取消后把节点**折叠再展开**
+即重试一次，可以随时从右键菜单「Open connection」重连。
+`loadedKeys` 直接交给 rc-tree（**不能过滤** —— 它会驱动 rc-tree 内部的 loaded 状态，
+过滤掉一个 key 就等于让这棵树在每次渲染时重新加载，即死循环），「有没有数据」的判断
+只在展开事件里用一次。加载失败的分支都带一个 Retry 按钮。
+
 ## 测试
 
 ```sh
