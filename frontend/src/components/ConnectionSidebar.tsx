@@ -513,7 +513,10 @@ export function ConnectionSidebar() {
         // is the level Navicat shows, and it keeps the load/expand state simple.
         const databases = tree.databases[session.id]
         if (databases) {
-          children = databases.map((database) => buildDatabaseNode(session, database))
+          children =
+            databases.length > 0
+              ? databases.map((database) => buildDatabaseNode(session, database))
+              : [emptyNode(session.id, 'No databases on this server yet')]
         }
       }
 
@@ -944,6 +947,20 @@ function placeholderNode(scope: string, text: string): TreeDataNode {
     isLeaf: true,
     selectable: false,
     icon: <ReloadOutlined spin />,
+  }
+}
+
+/** Terminal hint for a namespace that legitimately has nothing in it. */
+function emptyNode(scope: string, text: string): TreeDataNode {
+  return {
+    key: `empty:${scope}`,
+    title: (
+      <Tooltip title="Create one with CREATE DATABASE … in a query tab, then reload the catalog.">
+        <span style={{ opacity: 0.6, fontSize: 12 }}>{text}</span>
+      </Tooltip>
+    ),
+    isLeaf: true,
+    selectable: false,
   }
 }
 

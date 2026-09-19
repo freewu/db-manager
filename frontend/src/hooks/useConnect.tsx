@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
@@ -43,6 +44,9 @@ export function ConnectProvider({ children }: { children: ReactNode }) {
   const [password, setPassword] = useState('')
   const [promptError, setPromptError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // The password field submits on Enter through both `onPressEnter` and the
+  // form's `onFinish`; a ref keeps the two from opening two connections.
+  const busy = useRef(false)
 
   const open = useCallback(
     async (config: ConnectionConfig, secret?: string) => {
@@ -92,12 +96,14 @@ export function ConnectProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const submit = useCallback(async () => {
-    if (!prompt) return
+    if (!prompt || busy.current) return
+    busy.current = true
     setSubmitting(true)
     try {
       const ok = await open(prompt, password)
       if (ok) closePrompt()
     } finally {
+      busy.current = false
       setSubmitting(false)
     }
   }, [closePrompt, open, password, prompt])

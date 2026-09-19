@@ -66,10 +66,13 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
   }, [database, isIndexes, loadIndexes, loadObjects, schema, tab.sessionId])
 
   // A window can be opened before its folder was ever expanded in the tree.
+  // A recorded error stops the effect from retrying on every render turn — the
+  // failure message and the reload buttons own the retry instead; invalidating
+  // the session cache clears the error and brings the automatic load back.
   useEffect(() => {
-    if (!database || !schema || loaded || loading) return
+    if (!database || !schema || loaded || loading || error) return
     reload()
-  }, [database, loaded, loading, reload, schema])
+  }, [database, error, loaded, loading, reload, schema])
 
   const rows = useMemo<ObjectInfo[]>(() => {
     if (isIndexes) return []

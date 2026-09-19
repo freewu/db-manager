@@ -26,8 +26,9 @@ import (
 
 const defaultPort = 3306
 
-// systemDatabases are hidden from the explorer by default; they are noise for
-// the overwhelming majority of users.
+// systemDatabases are the schemas every MySQL server ships with. They are
+// hidden from the explorer as long as the server has something else to show;
+// see visibleDatabases.
 var systemDatabases = map[string]bool{
 	"information_schema": true,
 	"performance_schema": true,
@@ -250,18 +251,37 @@ func (introspector) Databases(ctx context.Context, q sqlbase.Querier) ([]string,
 	}
 	defer rows.Close()
 
-	out := []string{}
+	all := []string{}
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
 			return nil, err
 		}
+		all = append(all, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return visibleDatabases(all), nil
+}
+
+// visibleDatabases hides the schemas MySQL ships with — they are noise once the
+// server has real databases. A brand new server has nothing else though, and an
+// explorer with no children reads as a broken connection, so in that case the
+// system schemas are kept (they are still browsable, and the alternative is an
+// empty tree with nothing to click).
+func visibleDatabases(all []string) []string {
+	out := make([]string, 0, len(all))
+	for _, name := range all {
 		if systemDatabases[strings.ToLower(name)] {
 			continue
 		}
 		out = append(out, name)
 	}
-	return out, rows.Err()
+	if len(out) == 0 && len(all) > 0 {
+		return all
+	}
+	return out
 }
 
 // Schemas is empty: MySQL has no schema layer below the database.
