@@ -1449,3 +1449,31 @@ body {
   color: var(--dm-accent-text);
   border-bottom-color: var(--dm-accent);
 }
+
+/* ---- connection form: the test-connection answer -------------------------- */
+
+/* The result of "Test connection" hangs over the button that asked for it: it
+   reports on the values that are on screen, so it belongs to the dialog rather
+   than to a corner of the window, and it has to travel with it. Positioned
+   against the button, so no measurement — and no stale position — is involved. */
+.dm-test-slot {
+  position: relative;
+  display: inline-flex;
+}
+
+.dm-test-notice {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 380px;
+  max-width: 72vw;
+  z-index: 20;
+}
+
+/* Floating, so it reads as something on top of the form and not as a section
+   the footer grew. */
+.dm-test-notice .ant-alert {
+  box-shadow:
+    0 6px 16px -8px rgba(0, 0, 0, 0.16),
+    0 9px 28px 0 rgba(0, 0, 0, 0.08);
+}

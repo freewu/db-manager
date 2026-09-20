@@ -67,11 +67,19 @@ export function ConnectionDialog() {
   const closeEditor = useAppStore((s) => s.closeConnectionEditor)
   const saveConnection = useAppStore((s) => s.saveConnection)
 
-  const { message, notification } = AntApp.useApp()
+  const { message } = AntApp.useApp()
   const [form] = Form.useForm<ConnectionValues>()
   const [tab, setTab] = useState<ConnectionTab>('basic')
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
+  /**
+   * The last test outcome, shown above the button that asked for it.
+   *
+   * `seq` counts the attempts: pressing Test again with the same outcome has to
+   * restart the auto-dismiss timer, and the panel has to stay mounted while it
+   * does so (remounting it would blink).
+   */
+  const [test, setTest] = useState<{ result: TestResult; seq: number } | null>(null)
 
   // The draft is the only source of the driver; fall back to the first
   // implemented one so a malformed draft still lands on a usable page.
@@ -189,14 +197,16 @@ export function ConnectionDialog() {
     const values = await validateAll()
     if (!values) return
     setTesting(true)
+    const show = (result: TestResult) =>
+      setTest((current) => ({ result, seq: (current?.seq ?? 0) + 1 }))
     try {
-      notifyTest(notification, await api.testConnection(collect(values)))
+      show(await api.testConnection(collect(values)))
     } catch (error) {
-      notifyTest(notification, { ok: false, message: toMessage(error), latencyMs: 0 })
+      show({ ok: false, message: toMessage(error), latencyMs: 0 })
     } finally {
       setTesting(false)
     }
-  }, [collect, notification, validateAll])
+  }, [collect, validateAll])
 
   const handleSave = useCallback(async () => {
     const values = await validateAll()
@@ -237,9 +247,20 @@ export function ConnectionDialog() {
       footer={
         <Space>
           <Button onClick={closeEditor}>Cancel</Button>
-          <Button icon={<ThunderboltOutlined />} loading={testing} onClick={() => void handleTest()}>
-            Test connection
-          </Button>
+          {/* The answer to a test belongs over the button that asked for it:
+              the values it judges are the ones in this dialog. */}
+          <div className="dm-test-slot">
+            {test ? (
+              <TestNotice
+                result={test.result}
+                seq={test.seq}
+                onClose={() => setTest(null)}
+              />
+            ) : null}
+            <Button icon={<ThunderboltOutlined />} loading={testing} onClick={() => void handleTest()}>
+              Test connection
+            </Button>
+          </div>
           <Button type="primary" loading={saving} onClick={() => void handleSave()}>
             Save
           </Button>
@@ -302,28 +323,38 @@ export function ConnectionDialog() {
 }
 
 /**
- * How long a test result stays on screen. Hovering holds it open, which is what
- * a long refusal needs.
- *
- * Both outcomes share one duration, and that is not laziness: a notice whose
- * duration is shortened to "stay open" while its timer is still running is
- * closed on the spot (the timer reads `0 >= 0`), so a sticky failure replacing a
- * timed success would flash and vanish.
+ * How long a test result stays on screen, in seconds. Hovering holds it open,
+ * which is what a long refusal needs.
  */
 const TEST_TOAST_MS = 6
 
 /**
- * Report a test result, as a toast on top of the dialog.
+ * The test result, floating directly above the "Test connection" button.
  *
- * A toast and not a banner in the form: testing checks the values that are
- * already on screen, and its answer should not reflow the fields or leave a
- * stale "succeeded" behind once they are edited. One key covers both outcomes,
- * so pressing the button again updates the toast instead of stacking them.
+ * A panel pinned to the button rather than a toast in the corner of the window:
+ * the answer is about the values in this dialog, and it has to travel with it
+ * (the window can be moved, and the dialog is the only thing on screen that
+ * matters while it is open). It dismisses itself after `TEST_TOAST_MS`, or on
+ * hover it waits until the pointer leaves, so a long server message can be read
+ * to the end.
  */
-function notifyTest(
-  notification: ReturnType<typeof AntApp.useApp>['notification'],
-  result: TestResult,
-) {
+function TestNotice({
+  result,
+  seq,
+  onClose,
+}: {
+  result: TestResult
+  seq: number
+  onClose: () => void
+}) {
+  const [held, setHeld] = useState(false)
+
+  useEffect(() => {
+    if (held) return undefined
+    const timer = window.setTimeout(onClose, TEST_TOAST_MS * 1000)
+    return () => window.clearTimeout(timer)
+  }, [held, onClose, seq])
+
   const detail = [
     result.serverVersion,
     result.connectedDatabase ? `db=${result.connectedDatabase}` : null,
@@ -333,18 +364,27 @@ function notifyTest(
     .filter(Boolean)
     .join(' · ')
 
-  const shared = {
-    key: 'connection-test',
-    title: result.ok ? 'Connection succeeded' : 'Connection failed',
-    description: (
-      <div className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
-        {[result.message, result.ok ? detail : ''].filter(Boolean).join('\n')}
-      </div>
-    ),
-  }
-
-  if (result.ok) notification.success({ ...shared, duration: TEST_TOAST_MS })
-  else notification.error({ ...shared, duration: TEST_TOAST_MS })
+  return (
+    <div
+      className="dm-test-notice"
+      role="status"
+      onMouseEnter={() => setHeld(true)}
+      onMouseLeave={() => setHeld(false)}
+    >
+      <Alert
+        type={result.ok ? 'success' : 'error'}
+        showIcon
+        closable
+        onClose={onClose}
+        title={result.ok ? 'Connection succeeded' : 'Connection failed'}
+        description={
+          <div className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
+            {[result.message, result.ok ? detail : ''].filter(Boolean).join('\n')}
+          </div>
+        }
+      />
+    </div>
+  )
 }
 
 function driverFor(drivers: DriverInfo[], type: DriverType | undefined): DriverInfo | undefined {
