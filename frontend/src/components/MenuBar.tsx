@@ -12,6 +12,7 @@ import {
 } from '@ant-design/icons'
 
 import { AboutProject } from './AboutProject'
+import { connectionTypeItems, driverFromKey } from './ConnectionTypeMenu'
 import { useAppStore } from '../store/appStore'
 import { useConnect } from '../hooks/useConnect'
 import { PROJECT_URL, openExternal } from '../lib/about'
@@ -26,6 +27,9 @@ import { driverIconOrLogo } from '../lib/assets'
  */
 
 type MenuItem = NonNullable<MenuProps['items']>[number]
+
+/** `File ▸ New Connection ▸ <driver>`; the driver menu keys carry this prefix. */
+const NEW_CONNECTION_PREFIX = 'file.new.'
 
 /** Wails injects `window.runtime`; the app must survive without it (browser dev). */
 interface DesktopRuntime {
@@ -50,13 +54,14 @@ export function MenuBar() {
   const { modal } = AntApp.useApp()
 
   const connections = useAppStore((s) => s.connections)
+  const drivers = useAppStore((s) => s.drivers)
+  const openConnectionEditor = useAppStore((s) => s.openConnectionEditor)
   const sessions = useAppStore((s) => s.sessions)
   const activeSessionId = useAppStore((s) => s.activeSessionId)
   const tabs = useAppStore((s) => s.tabs)
   const activeTabId = useAppStore((s) => s.activeTabId)
   const theme = useAppStore((s) => s.theme)
   const appInfo = useAppStore((s) => s.appInfo)
-  const openConnectionPicker = useAppStore((s) => s.openConnectionPicker)
   const closeSession = useAppStore((s) => s.closeSession)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
@@ -100,6 +105,11 @@ export function MenuBar() {
   }
 
   const run = (key: string) => {
+    if (key.startsWith(NEW_CONNECTION_PREFIX)) {
+      const driver = driverFromKey(key)
+      if (driver) openConnectionEditor({ driver })
+      return
+    }
     if (key.startsWith('file.open.')) {
       const profile = connections.find((c) => c.id === key.slice('file.open.'.length))
       if (profile) void connect(profile)
@@ -118,9 +128,6 @@ export function MenuBar() {
       return
     }
     switch (key) {
-      case 'file.new':
-        openConnectionPicker()
-        break
       case 'file.close':
         if (activeSession) void closeSession(activeSession.id)
         break
@@ -199,7 +206,12 @@ export function MenuBar() {
       key: 'file',
       label: 'File',
       items: [
-        { key: 'file.new', label: 'New Connection…', icon: <PlusOutlined /> },
+        {
+          key: 'file.new',
+          label: 'New Connection',
+          icon: <PlusOutlined />,
+          children: connectionTypeItems(drivers, NEW_CONNECTION_PREFIX),
+        },
         {
           key: 'file.open',
           label: 'Open Connection',

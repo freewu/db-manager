@@ -19,6 +19,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons'
 
+import { ConnectionTypeDropdown } from './ConnectionTypeMenu'
 import { useAppStore } from '../store/appStore'
 import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
@@ -38,7 +39,6 @@ export function MainToolbar() {
   const connections = useAppStore((s) => s.connections)
   const sessions = useAppStore((s) => s.sessions)
   const activeSessionId = useAppStore((s) => s.activeSessionId)
-  const openPicker = useAppStore((s) => s.openConnectionPicker)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const closeSession = useAppStore((s) => s.closeSession)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
@@ -82,12 +82,15 @@ export function MainToolbar() {
 
   return (
     <div className="dm-ribbon">
-      <RibbonButton
-        icon={<ApiOutlined />}
-        label="Connection"
-        hint="Create a new connection profile"
-        onClick={openPicker}
-      />
+      <ConnectionTypeDropdown>
+        <span className="dm-ribbon-dropdown">
+          <RibbonButton
+            icon={<ApiOutlined />}
+            label="Connection"
+            hint="Create a new connection profile"
+          />
+        </span>
+      </ConnectionTypeDropdown>
       <Dropdown menu={connectMenu} trigger={['click']} placement="bottomLeft">
         <span className="dm-ribbon-dropdown">
           <RibbonButton

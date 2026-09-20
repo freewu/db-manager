@@ -27,6 +27,7 @@ import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
 import { quoteIdent } from '../lib/format'
 import { useAppStore, type ListScope, type TableView } from '../store/appStore'
+import { ConnectionTypeDropdown, connectionTypeItems, driverFromKey } from './ConnectionTypeMenu'
 import { objectIcon } from './objectIcon'
 import {
   databaseKey,
@@ -62,7 +63,6 @@ export function ConnectionSidebar() {
   const connections = useAppStore((s) => s.connections)
   const tree = useAppStore((s) => s.tree)
   const openEditor = useAppStore((s) => s.openConnectionEditor)
-  const openPicker = useAppStore((s) => s.openConnectionPicker)
   const loadDatabases = useAppStore((s) => s.loadDatabases)
   const loadSchemas = useAppStore((s) => s.loadSchemas)
   const loadObjects = useAppStore((s) => s.loadObjects)
@@ -804,17 +804,21 @@ export function ConnectionSidebar() {
     }
   }, [blankMenu])
 
-  const blankMenuItems: MenuProps['items'] = [
-    { key: 'new', icon: <PlusOutlined />, label: 'New connection' },
-  ]
+  // Right-clicking empty space is already the "new connection" gesture, so the
+  // menu lists the drivers directly instead of asking a second time.
+  const blankMenuItems: MenuProps['items'] = connectionTypeItems(drivers)
 
   return (
     <div className="dm-sidebar" onContextMenu={openBlankMenu}>
       <div className="dm-sidebar-header">
         <span className="dm-sidebar-title">Connections</span>
-        <Tooltip title="New connection">
-          <Button size="small" type="text" icon={<PlusOutlined />} onClick={openPicker} />
-        </Tooltip>
+        <ConnectionTypeDropdown>
+          <span className="dm-dropdown-anchor">
+            <Tooltip title="New connection">
+              <Button size="small" type="text" icon={<PlusOutlined />} />
+            </Tooltip>
+          </span>
+        </ConnectionTypeDropdown>
         <Tooltip title="Collapse all">
           <Button size="small" type="text" icon={<MinusSquareOutlined />} onClick={collapseAll} />
         </Tooltip>
@@ -846,9 +850,11 @@ export function ConnectionSidebar() {
             description={<span style={{ fontSize: 12 }}>No connections yet</span>}
             style={{ marginTop: 40 }}
           >
-            <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openPicker}>
-              New connection
-            </Button>
+            <ConnectionTypeDropdown>
+              <Button type="primary" size="small" icon={<PlusOutlined />}>
+                New connection
+              </Button>
+            </ConnectionTypeDropdown>
           </Empty>
         ) : visibleRoots.length === 0 ? (
           <Empty
@@ -893,9 +899,10 @@ export function ConnectionSidebar() {
           <Menu
             items={blankMenuItems}
             selectable={false}
-            onClick={() => {
+            onClick={({ key }) => {
               setBlankMenu(null)
-              openPicker()
+              const driver = driverFromKey(key)
+              if (driver) openEditor({ driver })
             }}
           />
         </div>

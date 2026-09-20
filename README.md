@@ -8,7 +8,7 @@
 
 ## 功能
 
-- **连接管理**：连接配置的增删改查、连通性测试、SQLite 文件选择、TLS（CA / 证书 / 私钥）、自定义 DSN 参数、只读标记、颜色标签、密码可选保存。新建连接先进**侧边面板选类型**（MySQL / PostgreSQL / SQLite 各一张卡片，还没实现的引擎也列出来但点不动），再落到**这个引擎自己的那一页** —— 走网络的要地址、端口、账号与 TLS，SQLite 只要一个文件加一个附加库别名，两边不会互相看到无关字段（保存下来的配置也照着这一页来，文件型连接不会混进 host / port / ssl）；编辑已有连接同样按它的驱动打开对应那页。
+- **连接管理**：连接配置的增删改查、连通性测试、SQLite 文件选择、TLS（CA / 证书 / 私钥）、自定义 DSN 参数、只读标记、颜色标签、密码可选保存。新建连接先点出**驱动菜单**（命令条 `Connection`、连接树的 `+`、`File ▸ New Connection`、面板空白处右键，四处挂的是同一份列表，就展开在你刚点的那个东西下面），再落到**这个引擎自己的那一页** —— 走网络的要地址、端口、账号与 TLS，SQLite 只要一个文件加一个附加库别名，两边不会互相看到无关字段（保存下来的配置也照着这一页来，文件型连接不会混进 host / port / ssl）；编辑已有连接同样按它的驱动打开对应那页。
 - **对象浏览器**：会话 → 数据库 → Schema → 表 / 视图 / 索引 的懒加载树，右键菜单支持打开数据、新建查询、复制名称。
 - **对象列表**：点击树里的表 / 视图 / 索引文件夹，在右侧开出 Navicat 风格的对象网格（名称 / 类型 / 行数 / 大小 / 引擎 / 注释，索引列还有所属表 / 列 / 唯一性 / 主键 / 方法），支持列排序、列筛选、底部关键字过滤，单击打开对象、双击进入设计视图。
 - **数据网格**：分页、服务端排序、服务端过滤（14 种操作符）、列宽自适应、长文本悬浮预览、多选、行详情抽屉（JSON / INSERT 预览）。
@@ -174,20 +174,26 @@ URI userinfo 打码。`HasPassword` 为真的连接要是连不上，只报错�
 
 ### 新建连接：先选驱动，再填那一页
 
-「新建连接」不是一个通用表单加一堆按驱动隐藏的字段，而是两步：
+「新建连接」不是先弹一个通用表单、再靠 Driver 下拉换页，而是两步：
 
-1. `ConnectionTypePicker`（`Drawer`，右侧滑出）把 `ListDrivers` 的结果按 `sortOrder` 列成卡片，
-   卡片上写清这个引擎是什么路数（`port 3306 · databases` / `local file`）；`implemented=false`
-   的驱动进「Planned」分组，看得见但点不动 —— 空菜单比禁用按钮更让人困惑。
+1. `connectionTypeItems()`（`ConnectionTypeMenu.tsx`）把 `ListDrivers` 按 `sortOrder` 排成一份两行的
+   菜单项 —— 第一行引擎名，第二行是这个引擎的路数（「A local .db file — no server, no credentials」）；
+   `implemented=false` 的驱动在分隔线下面，看得见但点不动 —— 空菜单比禁用按钮更让人困惑。
+   这份列表挂在四个入口上：命令条 `Connection`、连接树的 `+`、`File ▸ New Connection`（子菜单）、
+   面板空白处右键（`dm-blank-menu` 直接列引擎，不再多一次「New connection」跳转）。
+   按钮上挂菜单要小心：`Dropdown` 的 `onClick` 会注入给子元素，中间隔一个 `Tooltip` 就被吞掉，
+   这类触发点外面套一层 `<span class="dm-dropdown-anchor">`。
 2. 选中后 `openConnectionEditor({ driver })` 只带一个**草稿**（`ConnectionDraft = Partial<ConnectionConfig> &
    Pick<ConnectionConfig, 'driver'>`），`ConnectionDialog` 拿到草稿后按 `driverForm(type)` 查出该驱动的页面
    渲染，其余（显示名、只读、颜色标签、连通性测试、保存）留在外壳里。
+   **驱动不再在弹窗里选**：草稿里已经定了，弹窗顶部用一行只读的引擎名 + 一句说明告诉你在配什么，
+   换引擎就回菜单里点另一个。菜单项的 key 带前缀（`file.new.mysql`），`driverFromKey()` 只取最后一段。
 
 页面在 `frontend/src/connection/`：`shared.tsx` 放各页共用的字段零件（`HostPortFields`、`CredentialsFields`、
 `TlsFields`、`FilePathField`…），`MysqlConnect.tsx` / `PostgresConnect.tsx` / `SqliteConnect.tsx` 各导出一个
 `DriverForm = { Fields, summary }`，`index.ts` 的 `DRIVER_FORMS` 是唯一注册点 —— 加引擎就是加一个文件加一行注册。
 外壳不按驱动名写 if：`requiresFile` 决定 `collect()` 往配置里放 filePath 还是 host/port/username/ssl，
-页面决定这些字段长什么样。弹窗里的 Driver 下拉是同一套切换（选错类型可以直接改），改动会重置端口与默认库。
+页面决定这些字段长什么样。
 
 ### 连接树
 
@@ -201,7 +207,7 @@ URI userinfo 打码。`HasPassword` 为真的连接要是连不上，只报错�
 
 | 右键处 | 菜单 |
 | --- | --- |
-| 面板空白处 | New connection（打开类型面板） |
+| 面板空白处 | 引擎列表（MySQL / PostgreSQL / SQLite，未实现的置灰） |
 | 未连接的连接 | Open connection / Edit connection… |
 | 已连接的连接 | New query / Refresh / New database… / Edit connection… / Disconnect |
 

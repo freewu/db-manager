@@ -101,13 +101,10 @@ interface AppState {
   savedQueries: SavedQuery[]
   editorOpen: boolean
   editorDraft?: ConnectionDraft
-  /** Side panel that picks which driver a new connection is for. */
-  pickerOpen: boolean
 
   bootstrap: () => Promise<void>
   setTheme: (theme: ThemeMode) => void
-  openConnectionPicker: () => void
-  closeConnectionPicker: () => void
+  /** Takes the driver the user picked from the "new connection" menu. */
   openConnectionEditor: (draft?: ConnectionDraft) => void
   closeConnectionEditor: () => void
 
@@ -197,21 +194,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   designs: {},
   savedQueries: [],
   editorOpen: false,
-  pickerOpen: false,
 
-  openConnectionPicker() {
-    set({ pickerOpen: true })
-  },
-
-  closeConnectionPicker() {
-    set({ pickerOpen: false })
-  },
-
-  // Opening the editor always closes the picker: picking a driver is the only
-  // thing the picker does, and a panel left standing behind the modal would
-  // swallow the next click.
   openConnectionEditor(draft) {
-    set({ pickerOpen: false, editorOpen: true, editorDraft: draft })
+    set({ editorOpen: true, editorDraft: draft })
   },
 
   closeConnectionEditor() {

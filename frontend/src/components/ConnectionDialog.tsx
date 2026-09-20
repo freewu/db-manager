@@ -1,15 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  Alert,
-  App as AntApp,
-  Button,
-  Divider,
-  Form,
-  Modal,
-  Select,
-  Space,
-  Switch,
-} from 'antd'
+import { useCallback, useEffect, useState } from 'react'
+import { Alert, App as AntApp, Button, Divider, Form, Modal, Space, Switch } from 'antd'
 import {
   CheckCircleOutlined,
   ThunderboltOutlined,
@@ -39,7 +29,11 @@ import { useAppStore } from '../store/appStore'
  * It owns the modal, the form instance, the values that are the same whatever
  * you are connecting to (name, read-only, colour) and the test/save path; the
  * fields that only make sense for one engine live in `src/connection/*.tsx`
- * and are dispatched on the selected driver.
+ * and are dispatched on the driver the draft carries.
+ *
+ * The driver itself is not editable here: it was picked from the "new
+ * connection" menu, which is the only thing that decides it. Switching engines
+ * means picking a different entry there.
  */
 export function ConnectionDialog() {
   const open = useAppStore((s) => s.editorOpen)
@@ -54,19 +48,17 @@ export function ConnectionDialog() {
   const [saving, setSaving] = useState(false)
   const [testResult, setTestResult] = useState<TestResult | null>(null)
 
-  const selectedDriver = Form.useWatch('driver', form)
-
-  const driverInfo = useMemo(
-    () => drivers.find((d) => d.type === selectedDriver),
-    [drivers, selectedDriver],
-  )
+  // The draft is the only source of the driver; fall back to the first
+  // implemented one so a malformed draft still lands on a usable page.
+  const driverInfo =
+    driverFor(drivers, draft?.driver) ?? drivers.find((d) => d.implemented)
   const page = driverForm(driverInfo?.type)
   const isFile = driverInfo?.requiresFile ?? false
   const showNetwork = !isFile
   const showCredentials = !isFile
 
   // Reset the form whenever the dialog opens with a different profile. A draft
-  // coming from the picker carries only a driver, so everything else falls back
+  // coming from the menu carries only a driver, so everything else falls back
   // to that driver's defaults.
   useEffect(() => {
     if (!open) return
@@ -96,22 +88,6 @@ export function ConnectionDialog() {
     }
     form.setFieldsValue(values)
   }, [draft, drivers, form, open])
-
-  const handleDriverChange = useCallback(
-    (value: DriverType) => {
-      const info = drivers.find((d) => d.type === value)
-      const currentName = form.getFieldValue('name')
-      form.setFieldsValue({
-        port: info?.defaultPort,
-        database: info?.defaultDatabase ?? '',
-        name:
-          currentName ||
-          (info ? `${info.displayName} @ ${form.getFieldValue('host') ?? 'localhost'}` : ''),
-      })
-      setTestResult(null)
-    },
-    [drivers, form],
-  )
 
   const collect = useCallback(
     (values: ConnectionValues): ConnectionConfig => {
@@ -218,43 +194,35 @@ export function ConnectionDialog() {
       <Form<ConnectionValues>
         form={form}
         layout="vertical"
-        initialValues={blankValues(drivers.find((d) => d.implemented))}
+        initialValues={blankValues(driverInfo)}
         onValuesChange={() => setTestResult(null)}
       >
-        <Form.Item
-          name="driver"
-          label="Driver"
-          rules={[{ required: true, message: 'Pick a driver' }]}
-        >
-          <Select
-            onChange={handleDriverChange}
-            options={drivers.map((d) => ({
-              value: d.type,
-              label: (
-                <Space size={6}>
-                  {driverIcon(d.type) ? (
-                    <img
-                      src={driverIcon(d.type)}
-                      alt=""
-                      draggable={false}
-                      className="dm-driver-icon"
-                    />
-                  ) : null}
-                  <span>{d.implemented ? d.displayName : `${d.displayName} — planned`}</span>
-                </Space>
-              ),
-              disabled: !d.implemented,
-            }))}
-          />
-        </Form.Item>
+        {/* Which engine this page belongs to: a label, not a choice — the type
+            was already picked from the new-connection menu. */}
+        {driverInfo ? (
+          <div className="dm-driver-head">
+            {driverIcon(driverInfo.type) ? (
+              <img
+                src={driverIcon(driverInfo.type)}
+                alt=""
+                draggable={false}
+                className="dm-driver-icon"
+              />
+            ) : null}
+            <div className="dm-driver-head-text">
+              <div className="dm-driver-head-name">{driverInfo.displayName}</div>
+              <div className="dm-driver-head-summary">{page?.summary ?? driverInfo.notes}</div>
+            </div>
+          </div>
+        ) : null}
 
-        {driverInfo && !driverInfo.implemented ? (
+        {driverInfo && !page ? (
           <Alert
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
-            title="Planned driver"
-            description={driverInfo.notes}
+            title={`No ${driverInfo.displayName} form yet`}
+            description="The driver is registered, but its connection page has not been written."
           />
         ) : null}
 
