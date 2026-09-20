@@ -645,20 +645,6 @@ body {
   margin: 0 auto;
 }
 
-.dm-welcome-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px;
-}
-
-.dm-welcome-card {
-  cursor: pointer;
-}
-
-.dm-welcome-card .ant-card-body {
-  padding: 10px 12px;
-}
-
 /* ------------------------------------------------------------- splitter */
 
 .app-body .ant-splitter-bar-dragger::before {
@@ -937,21 +923,6 @@ body {
 
 /* ------------------------------------------------------------ brand marks */
 
-.dm-brand-logo {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
-  flex: 0 0 auto;
-  border-radius: 4px;
-}
-
-.dm-brand-logo.is-large {
-  width: 28px;
-  height: 28px;
-  vertical-align: -6px;
-  margin-inline-end: 6px;
-}
-
 /* Vendor logos for the connection panes and pickers. They are square PNGs with
    transparency, so `contain` keeps every engine glyph at its natural ratio. */
 .dm-driver-icon {
@@ -1193,12 +1164,6 @@ body {
 }
 
 /* ------------------------------------------------------ about this project */
-
-.dm-welcome-divider {
-  margin: 28px 0 20px;
-  border: 0;
-  border-top: 1px solid var(--dm-border);
-}
 
 .dm-about-project .ant-typography {
   margin-bottom: 10px;
