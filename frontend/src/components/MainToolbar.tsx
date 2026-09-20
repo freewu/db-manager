@@ -3,7 +3,6 @@ import { Dropdown, Tooltip } from 'antd'
 import type { MenuProps } from 'antd'
 import {
   ApiOutlined,
-  BulbOutlined,
   ClockCircleOutlined,
   CloudUploadOutlined,
   CodeOutlined,
@@ -44,9 +43,6 @@ export function MainToolbar() {
   const closeSession = useAppStore((s) => s.closeSession)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
   const loadDatabases = useAppStore((s) => s.loadDatabases)
-  const theme = useAppStore((s) => s.theme)
-  const setTheme = useAppStore((s) => s.setTheme)
-  const appInfo = useAppStore((s) => s.appInfo)
 
   const { connect, pending } = useConnect()
   const [refreshing, setRefreshing] = useState(false)
@@ -143,25 +139,6 @@ export function MainToolbar() {
       <RibbonButton icon={<SyncOutlined />} label="Data Sync" hint={SOON} />
       <RibbonButton icon={<DiffOutlined />} label="Structure Sync" hint={SOON} />
       <RibbonButton icon={<FileTextOutlined />} label="Report" hint={SOON} />
-
-      <div className="dm-ribbon-spacer" />
-
-      <div className="dm-ribbon-status" title={appInfo ? `v${appInfo.version}` : undefined}>
-        {activeSession
-          ? `${activeSession.name} · ${activeSession.driver}${activeSession.database ? ` · ${activeSession.database}` : ''}`
-          : 'not connected'}
-      </div>
-
-      <Tooltip title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}>
-        <button
-          type="button"
-          className="dm-ribbon-icon"
-          aria-label="Switch theme"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        >
-          <BulbOutlined />
-        </button>
-      </Tooltip>
     </div>
   )
 }

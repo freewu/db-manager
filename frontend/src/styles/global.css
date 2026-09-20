@@ -796,43 +796,6 @@ body {
   flex: 0 0 auto;
 }
 
-.dm-ribbon-spacer {
-  flex: 1 1 auto;
-}
-
-.dm-ribbon-status {
-  display: inline-flex;
-  align-items: center;
-  padding-inline: 8px;
-  font-size: 11px;
-  opacity: 0.55;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 320px;
-}
-
-.dm-ribbon-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  align-self: center;
-  width: 26px;
-  height: 26px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  background: transparent;
-  color: inherit;
-  font-size: 14px;
-  cursor: default;
-}
-
-.dm-ribbon-icon:hover {
-  background: var(--dm-hot-bg);
-  border-color: color-mix(in srgb, var(--dm-hot-bg) 55%, #7eb4e2);
-  color: var(--dm-hot-text);
-}
-
 /* -------------------------------------------------------- explorer pane */
 
 .dm-sidebar-search {
