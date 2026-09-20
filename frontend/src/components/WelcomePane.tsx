@@ -4,6 +4,7 @@ import { PlusOutlined, RocketOutlined, TableOutlined } from '@ant-design/icons'
 import { useAppStore } from '../store/appStore'
 import { useConnect } from '../hooks/useConnect'
 import { appLogo, driverIconOrLogo } from '../lib/assets'
+import { AboutProject } from './AboutProject'
 import { describeProfile } from './ConnectionSidebar'
 
 /** Shown when no tab is open. */
@@ -121,6 +122,9 @@ export function WelcomePane() {
             cell to edit it.
           </Typography.Text>
         </div>
+
+        <hr className="dm-welcome-divider" />
+        <AboutProject />
       </div>
     </div>
   )

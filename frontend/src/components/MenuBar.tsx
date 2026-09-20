@@ -11,8 +11,10 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons'
 
+import { AboutProject } from './AboutProject'
 import { useAppStore } from '../store/appStore'
 import { useConnect } from '../hooks/useConnect'
+import { PROJECT_URL, openExternal } from '../lib/about'
 import { driverIconOrLogo } from '../lib/assets'
 
 /**
@@ -28,17 +30,10 @@ type MenuItem = NonNullable<MenuProps['items']>[number]
 /** Wails injects `window.runtime`; the app must survive without it (browser dev). */
 interface DesktopRuntime {
   Quit?: () => void
-  BrowserOpenURL?: (url: string) => void
 }
 
 function desktopRuntime(): DesktopRuntime | undefined {
   return (window as unknown as { runtime?: DesktopRuntime }).runtime
-}
-
-function openExternal(url: string) {
-  const runtime = desktopRuntime()
-  if (runtime?.BrowserOpenURL) runtime.BrowserOpenURL(url)
-  else window.open(url, '_blank', 'noopener')
 }
 
 /** Runs a document command against whatever editable element has focus. */
@@ -49,8 +44,6 @@ function execCommand(command: string) {
     // Nothing focusable — silently ignore, like a real menu item would.
   }
 }
-
-const PROJECT_URL = 'https://github.com/freewu/db-manager'
 
 export function MenuBar() {
   const { connect } = useConnect()
@@ -96,26 +89,11 @@ export function MenuBar() {
   const showAbout = () => {
     modal.info({
       title: `About ${appInfo?.name ?? 'DB Manager'}`,
-      width: 420,
+      width: 520,
       okText: 'Close',
       content: (
         <div className="dm-about">
-          <p>
-            Version {appInfo?.version ?? '—'} · {appInfo?.platform ?? '—'}
-          </p>
-          <p>Go backend {appInfo?.goVersion ?? '—'}</p>
-          <p>MySQL / PostgreSQL / SQLite client built with Wails and React.</p>
-          <p>
-            <a
-              href={PROJECT_URL}
-              onClick={(event) => {
-                event.preventDefault()
-                openExternal(PROJECT_URL)
-              }}
-            >
-              {PROJECT_URL}
-            </a>
-          </p>
+          <AboutProject />
         </div>
       ),
     })

@@ -1191,3 +1191,97 @@ body {
   word-break: break-all;
   font-size: 12.5px;
 }
+
+/* ------------------------------------------------------ about this project */
+
+.dm-welcome-divider {
+  margin: 28px 0 20px;
+  border: 0;
+  border-top: 1px solid var(--dm-border);
+}
+
+.dm-about-project .ant-typography {
+  margin-bottom: 10px;
+}
+
+.dm-about-lead {
+  font-size: 12.5px;
+  max-width: 620px;
+}
+
+.dm-shield-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dm-shield-group {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dm-shield-group-title {
+  font-size: 12px;
+  line-height: 19px;
+  opacity: 0.6;
+}
+
+/* shields.io flat-square look, drawn locally so the app renders offline. */
+.dm-shield {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 3px;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+}
+
+.dm-shield-label,
+.dm-shield-value {
+  padding: 4px 6px;
+}
+
+.dm-shield-label {
+  background: #555;
+  color: #fff;
+}
+
+.dm-shield-value {
+  color: #fff;
+  font-weight: 600;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.16);
+}
+
+/* Light brand colours (React cyan) need dark text to stay readable. */
+.dm-shield-value.is-dark {
+  color: #1f1f1f;
+  text-shadow: none;
+}
+
+.dm-about-rows {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 6px 8px;
+  margin: 16px 0 0;
+  font-size: 12.5px;
+}
+
+.dm-about-rows dt {
+  opacity: 0.6;
+}
+
+.dm-about-rows dd {
+  margin: 0;
+  min-width: 0;
+  word-break: break-all;
+}
+
+.dm-link-icon {
+  margin-inline-end: 5px;
+  opacity: 0.75;
+}
