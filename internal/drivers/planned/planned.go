@@ -9,21 +9,21 @@ package planned
 
 import "dbmanager/internal/models"
 
-// Infos returns the roadmap entries.
+// Infos returns the roadmap entries. Only drivers that are being worked on are
+// listed: Oracle and SQL Server are parked (see Parked) and hidden from the UI
+// until that changes, so no half-promise shows up in the connection dialog.
 func Infos() []models.DriverInfo {
+	return []models.DriverInfo{}
+}
+
+// Parked documents the engines that were advertised before and are now
+// hidden again.
+//
+// Nothing reads this at runtime; it exists so the next person does not have to
+// rediscover what has already been researched. Restoring one means moving its
+// entry back into Infos and deleting it here.
+func Parked() []models.DriverInfo {
 	return []models.DriverInfo{
-		{
-			Type:             models.DriverMongoDB,
-			DisplayName:      "MongoDB",
-			DefaultPort:      27017,
-			Implemented:      false,
-			Relational:       false,
-			SupportsDatabase: true,
-			SupportsSchema:   false,
-			DefaultDatabase:  "admin",
-			SortOrder:        40,
-			Notes:            "Document store: databases become catalogs and collections become objects. Needs a query translation layer.",
-		},
 		{
 			Type:             models.DriverOracle,
 			DisplayName:      "Oracle",
@@ -32,8 +32,8 @@ func Infos() []models.DriverInfo {
 			Relational:       true,
 			SupportsDatabase: false,
 			SupportsSchema:   true,
-			SortOrder:        50,
 			DefaultDatabase:  "ORCL",
+			SortOrder:        50,
 			Notes:            "Planned on github.com/sijms/go-ora (pure Go, no Instant Client). Dialect already supports OFFSET/FETCH.",
 		},
 		{

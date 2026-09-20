@@ -25,7 +25,8 @@ import {
 } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
-import type { DesignPlan, ForeignKeyInfo, IndexInfo, TableStructure } from '../api/types'
+import type { ColumnInfo, DesignPlan, ForeignKeyInfo, IndexInfo, TableStructure } from '../api/types'
+import { capabilitiesOf } from '../lib/capabilities'
 import { emptyColumn, emptyIndex, isDirty, primaryKeyRow } from '../lib/design'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { FieldGrid, IndexGrid } from './DesignGrid'
@@ -56,6 +57,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   const { message, modal } = AntApp.useApp()
   const appInfo = useAppStore((s) => s.appInfo)
   const session = useAppStore((s) => s.sessionOf(tab.sessionId))
+  const drivers = useAppStore((s) => s.drivers)
   const design = useAppStore((s) => s.designs[tab.id])
   const ensureDesign = useAppStore((s) => s.ensureDesign)
   const updateDesign = useAppStore((s) => s.updateDesign)
@@ -65,6 +67,10 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   const schema = tab.schema ?? ''
   const object = tab.object ?? ''
   const readOnly = Boolean(session?.readOnly)
+  // A document store has nothing to design: its fields are whatever the
+  // documents happen to contain, so the Columns slice degrades to the sampled
+  // field list the backend reports and no design is ever planned.
+  const { relational } = capabilitiesOf(drivers.find((d) => d.type === session?.driver))
 
   const [structure, setStructure] = useState<TableStructure | null>(null)
   const [loading, setLoading] = useState(true)
@@ -88,7 +94,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
       .then((value) => {
         if (cancelled) return
         setStructure(value)
-        ensureDesign(tab.id, value, rebase.current)
+        if (relational) ensureDesign(tab.id, value, rebase.current)
         rebase.current = false
       })
       .catch((err: unknown) => {
@@ -102,7 +108,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
     return () => {
       cancelled = true
     }
-  }, [attempt, database, ensureDesign, object, reloadToken, schema, tab.id, tab.sessionId])
+  }, [attempt, database, ensureDesign, object, relational, reloadToken, schema, tab.id, tab.sessionId])
 
   const draft = design?.draft
   const draftKey = draft ? JSON.stringify(draft) : ''
@@ -110,7 +116,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   // Plan the draft as it stands, debounced: every keystroke in the grid would
   // otherwise be a catalog round trip.
   useEffect(() => {
-    if (!draft || section !== 'structure') return
+    if (!relational || !draft || section !== 'structure') return
     let cancelled = false
     const timer = window.setTimeout(() => {
       api
@@ -143,16 +149,23 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   const saveDDL = useCallback(async () => {
     if (!structure) return
     try {
+      // The definition of a collection is a shell script, not SQL.
+      const extension = relational ? 'sql' : 'js'
       await api.saveTextFile({
-        defaultFilename: `${object}.sql`,
+        defaultFilename: `${object}.${extension}`,
         content: structure.ddl,
-        filters: [{ displayName: 'SQL', pattern: '*.sql' }],
+        filters: [
+          {
+            displayName: relational ? 'SQL' : 'JavaScript',
+            pattern: `*.${extension}`,
+          },
+        ],
       })
     } catch (err) {
       const text = toMessage(err)
       if (!/cancel/i.test(text)) message.error(text)
     }
-  }, [message, object, structure])
+  }, [message, object, relational, structure])
 
   const copy = useCallback(
     (text: string, what: string) => {
@@ -266,6 +279,10 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
     )
   }
 
+  if (!relational && section === 'structure') {
+    return <FieldList structure={structure} />
+  }
+
   if (section === 'foreignKeys') {
     return (
       <div className="dm-pane-body" style={{ padding: 12 }}>
@@ -291,11 +308,15 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
       <div className="dm-pane-body" style={{ padding: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Typography.Title level={5} style={{ margin: 0 }}>
-            DDL
+            {relational ? 'DDL' : 'Definition'}
           </Typography.Title>
           <span style={{ flex: 1 }} />
-          <Tooltip title="Copy DDL">
-            <Button size="small" icon={<CopyOutlined />} onClick={() => copy(structure.ddl, 'DDL')}>
+          <Tooltip title={relational ? 'Copy DDL' : 'Copy the definition script'}>
+            <Button
+              size="small"
+              icon={<CopyOutlined />}
+              onClick={() => copy(structure.ddl, relational ? 'DDL' : 'Definition')}
+            >
               Copy
             </Button>
           </Tooltip>
@@ -315,7 +336,11 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
         <pre className="dm-ddl">{structure.ddl}</pre>
         <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 12 }}>
           {appInfo ? `${appInfo.name} ${appInfo.version} · ` : ''}
-          {structure.ddl.startsWith('--') ? 'DDL reconstructed from catalog metadata.' : ''}
+          {/^(--|\/\/)/.test(structure.ddl)
+            ? relational
+              ? 'DDL reconstructed from catalog metadata.'
+              : 'Definition script reconstructed from the sampled documents and the index list.'
+            : ''}
         </Typography.Paragraph>
       </div>
     )
@@ -553,7 +578,65 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   )
 }
 
+/**
+ * The field list of a collection.
+ *
+ * MongoDB has no schema: the fields below are the ones the backend saw while
+ * sampling the collection's documents, so this view reports what is there
+ * rather than what should be there. That is why it has no editor.
+ */
+function FieldList({ structure }: { structure: TableStructure }) {
+  return (
+    <div className="dm-pane-body" style={{ padding: 12 }}>
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 12 }}
+        title="Collections have no schema"
+        description="The fields below were inferred from a sample of the documents in this collection. Any document may carry other fields, or the same field with another type, so there is nothing to design here."
+      />
+      {structure.columns.length === 0 ? (
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No documents to sample" />
+      ) : (
+        <Table
+          className="dm-grid"
+          size="small"
+          rowKey="name"
+          columns={fieldColumns}
+          dataSource={structure.columns}
+          pagination={false}
+          scroll={{ x: 'max-content' }}
+        />
+      )}
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------- column sets */
+
+const fieldColumns: TableColumnsType<ColumnInfo> = [
+  {
+    title: 'Field',
+    dataIndex: 'name',
+    render: (name: string, row) => (
+      <Space size={6}>
+        <span className="mono">{name}</span>
+        {row.primaryKey ? <Tag color="gold">key</Tag> : null}
+      </Space>
+    ),
+  },
+  {
+    title: 'Type',
+    dataIndex: 'dataType',
+    render: (value: string) => <Tag className="mono">{value}</Tag>,
+  },
+  {
+    title: 'May be missing',
+    dataIndex: 'nullable',
+    width: 140,
+    render: (value: boolean) => (value ? 'yes' : 'no'),
+  },
+]
 
 const indexColumns: TableColumnsType<IndexInfo> = [
   {

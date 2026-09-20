@@ -95,6 +95,17 @@ type Overviewer interface {
 	Overview(ctx context.Context) (*models.ServerOverview, error)
 }
 
+// Analyzer is an optional Conn capability: describe what a script would do
+// without running it.
+//
+// The DDL editor shows that dry run before anything is executed. For SQL the
+// default is a keyword heuristic in sqlutil; a driver whose statements are not
+// SQL implements this instead, so the editor keeps working on a document store
+// (where no keyword table could recognise `db.orders.drop()`).
+type Analyzer interface {
+	AnalyzeScript(script string, readOnly bool) models.ScriptAnalysis
+}
+
 // FetchRequest is the driver-level page request (no session ids).
 type FetchRequest struct {
 	Database   string

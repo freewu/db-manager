@@ -60,13 +60,21 @@ export function sqlLiteral(value: CellValue): string {
   return `'${String(value).replace(/'/g, "''")}'`
 }
 
-/** Quotes an identifier for a specific engine. */
+/**
+ * Quotes an identifier for a specific engine.
+ *
+ * MongoDB has no identifier quoting: a name is written bare, and a dot inside
+ * it is a path separator rather than a namespace separator, so wrapping it in
+ * quotes would change its meaning instead of protecting it.
+ */
 export function quoteIdent(name: string, driver: string): string {
   switch (driver) {
     case 'mysql':
       return `\`${name.replace(/`/g, '``')}\``
     case 'sqlserver':
       return `[${name.replace(/]/g, ']]')}]`
+    case 'mongodb':
+      return name
     default:
       return `"${name.replace(/"/g, '""')}"`
   }
@@ -79,6 +87,12 @@ export function qualifiedName(
   schema: string | undefined,
   object: string,
 ): string {
+  // A document store has exactly two levels, and the shell writes them as
+  // `db.collection` — no quoting, because the name may be a path.
+  if (driver === 'mongodb') {
+    return database ? `${database}.${object}` : object
+  }
+
   const parts: string[] = []
   if (driver === 'mysql' && database) parts.push(quoteIdent(database, driver))
   if (driver !== 'mysql' && driver !== 'sqlite' && schema) parts.push(quoteIdent(schema, driver))

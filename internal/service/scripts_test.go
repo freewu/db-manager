@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"dbmanager/internal/drivers"
+	"dbmanager/internal/drivers/sqlutil"
+	"dbmanager/internal/models"
 )
 
 // AnalyzeScript is the DDL editor's dry run: it must reflect the session's
@@ -39,6 +41,61 @@ func TestAnalyzeScriptCarriesSessionReadOnly(t *testing.T) {
 	}
 	if len(analysis.Warnings) == 0 || !strings.Contains(analysis.Warnings[0], "read-only") {
 		t.Fatalf("expected a read-only warning, got %v", analysis.Warnings)
+	}
+}
+
+// A document store cannot be described by SQL keywords, so it answers the dry
+// run itself (drivers.Analyzer). The manager's job is only to prefer that
+// answer over the keyword table, and to hand it the session's read-only flag.
+func TestAnalyzeScriptPrefersTheDriverAnalyzer(t *testing.T) {
+	manager, _ := testManager(t)
+
+	// `db.orders.drop()` is a method call: nothing in the keyword table can
+	// recognise it, which is exactly why a real driver implements the interface.
+	plain, err := manager.AnalyzeScript("s1", "db.orders.drop()")
+	if err != nil {
+		t.Fatalf("analyse: %v", err)
+	}
+	if plain.Statements[0].Kind != sqlutil.KindUnknown {
+		t.Fatalf("expected the SQL heuristic to give up, got %+v", plain.Statements[0])
+	}
+
+	manager.mu.Lock()
+	manager.sessions["s1"].conn = docConn{Conn: manager.sessions["s1"].conn}
+	manager.sessions["s1"].readOnly = true
+	manager.mu.Unlock()
+
+	described, err := manager.AnalyzeScript("s1", "db.orders.drop()")
+	if err != nil {
+		t.Fatalf("analyse through the driver: %v", err)
+	}
+	if !described.ReadOnly || described.Refused != 1 {
+		t.Fatalf("the driver's answer must carry the session's read-only flag: %+v", described)
+	}
+	if len(described.Statements) != 1 || described.Statements[0].Kind != sqlutil.KindDDL {
+		t.Fatalf("the manager used the keyword table instead of the driver: %+v", described.Statements)
+	}
+}
+
+// docConn answers the dry run the way a document store would, and hides every
+// other capability behind the drivers.Conn contract — the SQL fixture below it
+// would otherwise classify the script itself.
+type docConn struct {
+	drivers.Conn
+}
+
+func (docConn) AnalyzeScript(script string, readOnly bool) models.ScriptAnalysis {
+	refused := 0
+	if readOnly {
+		refused = 1
+	}
+	return models.ScriptAnalysis{
+		ReadOnly: readOnly,
+		Refused:  refused,
+		Statements: []models.ScriptStatement{
+			{Index: 0, Kind: sqlutil.KindDDL, Preview: script, Destructive: true, Reason: "drops the collection"},
+		},
+		Warnings: []string{"statement 1: drops the collection"},
 	}
 }
 

@@ -25,6 +25,7 @@ import { api, toMessage } from '../api/client'
 import type { ConnectionConfig, DriverInfo, IndexEntry, ObjectInfo, SessionInfo } from '../api/types'
 import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
+import { capabilitiesOf, findDriver } from '../lib/capabilities'
 import { quoteIdent } from '../lib/format'
 import { useAppStore, type ListScope, type TableView } from '../store/appStore'
 import { ConnectionTypeDropdown, connectionTypeItems, driverFromKey } from './ConnectionTypeMenu'
@@ -98,8 +99,17 @@ export function ConnectionSidebar() {
   const pendingRuntime = useRef<string | null>(null)
 
   const driverOfType = useCallback(
-    (type: DriverInfo['type'] | undefined) => drivers.find((d) => d.type === type),
+    (type: DriverInfo['type'] | undefined) => findDriver(drivers, type),
     [drivers],
+  )
+
+  /** The driver of a live session, for the capability checks in the tree. */
+  const driverOfSession = useCallback(
+    (sessionId: string) => {
+      const session = sessions.find((s) => s.id === sessionId)
+      return driverOfType(session?.driver)
+    },
+    [driverOfType, sessions],
   )
 
   const sessionForConnection = useCallback(
@@ -281,6 +291,9 @@ export function ConnectionSidebar() {
     (sessionId: string, database: string, schema: string): TreeDataNode[] => {
       const objects = tree.objects[objectsKey(sessionId, database, schema)]
       if (!objects) return []
+      // A document store has no CREATE TABLE / ALTER TABLE to write, so its
+      // object menus stop at the data and the sampled field list.
+      const { relational } = capabilitiesOf(driverOfSession(sessionId))
 
       const groups = new Map<string, ObjectInfo[]>()
       for (const object of objects) {
@@ -310,12 +323,16 @@ export function ConnectionSidebar() {
                   label: 'New query',
                   onClick: () => openQueryTab(sessionId, database),
                 },
-                {
-                  key: 'ddl',
-                  icon: <CodeOutlined />,
-                  label: 'New DDL script…',
-                  onClick: () => openDdlTab(sessionId, database, schema),
-                },
+                ...(relational
+                  ? [
+                      {
+                        key: 'ddl',
+                        icon: <CodeOutlined />,
+                        label: 'New DDL script…',
+                        onClick: () => openDdlTab(sessionId, database, schema),
+                      },
+                    ]
+                  : []),
                 { type: 'divider' as const },
                 {
                   key: 'refresh',
@@ -352,7 +369,7 @@ export function ConnectionSidebar() {
                   {
                     key: 'structure',
                     icon: <AppstoreOutlined />,
-                    label: 'Design object',
+                    label: relational ? 'Design object' : 'Open fields',
                     onClick: () => openObject(sessionId, database, schema, object, 'structure'),
                   },
                   {
@@ -361,12 +378,16 @@ export function ConnectionSidebar() {
                     label: 'New query',
                     onClick: () => openQueryTab(sessionId, database),
                   },
-                  {
-                    key: 'ddl',
-                    icon: <CodeOutlined />,
-                    label: 'Edit DDL…',
-                    onClick: () => openDdlTab(sessionId, database, schema, object.name),
-                  },
+                  ...(relational
+                    ? [
+                        {
+                          key: 'ddl',
+                          icon: <CodeOutlined />,
+                          label: 'Edit DDL…',
+                          onClick: () => openDdlTab(sessionId, database, schema, object.name),
+                        },
+                      ]
+                    : []),
                   { type: 'divider' as const },
                   {
                     key: 'copy',
@@ -388,7 +409,16 @@ export function ConnectionSidebar() {
       folders.push(buildIndexFolder(sessionId, database, schema))
       return folders
     },
-    [buildIndexFolder, loadObjects, openDdlTab, openList, openObject, openQueryTab, tree.objects],
+    [
+      buildIndexFolder,
+      driverOfSession,
+      loadObjects,
+      openDdlTab,
+      openList,
+      openObject,
+      openQueryTab,
+      tree.objects,
+    ],
   )
 
   const buildNamespace = useCallback(
@@ -408,6 +438,8 @@ export function ConnectionSidebar() {
     (session: SessionInfo, database: string): TreeDataNode => {
       const driver = driverOfType(session.driver)
 
+      const { relational } = capabilitiesOf(driver)
+
       if (driver?.supportsSchema) {
         const key = databaseKey(session.id, database)
         const schemas = tree.schemas[key]
@@ -423,18 +455,22 @@ export function ConnectionSidebar() {
             title: (
               <NodeMenu
                 items={[
-                  {
-                    key: 'er',
-                    icon: <PartitionOutlined />,
-                    label: 'ER diagram',
-                    onClick: () => openErTab(session.id, database, schema),
-                  },
-                  {
-                    key: 'ddl',
-                    icon: <CodeOutlined />,
-                    label: 'New DDL script…',
-                    onClick: () => openDdlTab(session.id, database, schema),
-                  },
+                  ...(relational
+                    ? [
+                        {
+                          key: 'er',
+                          icon: <PartitionOutlined />,
+                          label: 'ER diagram',
+                          onClick: () => openErTab(session.id, database, schema),
+                        },
+                        {
+                          key: 'ddl',
+                          icon: <CodeOutlined />,
+                          label: 'New DDL script…',
+                          onClick: () => openDdlTab(session.id, database, schema),
+                        },
+                      ]
+                    : []),
                   { type: 'divider' as const },
                   {
                     key: 'refresh',
@@ -469,18 +505,22 @@ export function ConnectionSidebar() {
         title: (
           <NodeMenu
             items={[
-              {
-                key: 'er',
-                icon: <PartitionOutlined />,
-                label: 'ER diagram',
-                onClick: () => openErTab(session.id, database, database),
-              },
-              {
-                key: 'ddl',
-                icon: <CodeOutlined />,
-                label: 'New DDL script…',
-                onClick: () => openDdlTab(session.id, database, database),
-              },
+              ...(relational
+                ? [
+                    {
+                      key: 'er',
+                      icon: <PartitionOutlined />,
+                      label: 'ER diagram',
+                      onClick: () => openErTab(session.id, database, database),
+                    },
+                    {
+                      key: 'ddl',
+                      icon: <CodeOutlined />,
+                      label: 'New DDL script…',
+                      onClick: () => openDdlTab(session.id, database, database),
+                    },
+                  ]
+                : []),
               { type: 'divider' as const },
               {
                 key: 'refresh',
@@ -550,7 +590,15 @@ export function ConnectionSidebar() {
           children =
             databases.length > 0
               ? databases.map((database) => buildDatabaseNode(session, database))
-              : [emptyNode(session.id, 'No databases on this server yet')]
+              : [
+                  emptyNode(
+                    session.id,
+                    'No databases on this server yet',
+                    capabilitiesOf(root.driver).creatableDatabase
+                      ? undefined
+                      : 'A database shows up here once something is written into it: insert a document with the new database selected, then reload the catalog.',
+                  ),
+                ]
         }
       }
 
@@ -981,7 +1029,7 @@ export function ConnectionSidebar() {
           key: 'newDatabase',
           icon: <DatabaseOutlined />,
           label: 'New database…',
-          disabled: !canCreateDatabase(root.driver) || session.readOnly,
+          disabled: !capabilitiesOf(root.driver).creatableDatabase || session.readOnly,
           onClick: () => setNewDatabase(session),
         },
         {
@@ -1044,14 +1092,6 @@ function indexTooltip(index: IndexEntry): string {
   else if (index.unique) parts.push('UNIQUE')
   if (index.method) parts.push(index.method)
   return parts.join(' · ')
-}
-
-/**
- * Engine that keeps several databases in one server, so `CREATE DATABASE` makes
- * sense. File-backed engines (SQLite) and schema-only engines say no.
- */
-function canCreateDatabase(driver: DriverInfo | undefined): boolean {
-  return Boolean(driver && driver.supportsDatabase && !driver.requiresFile)
 }
 
 /** Colour used when a profile has no explicit colour. */

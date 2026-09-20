@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
+import { javascript } from '@codemirror/lang-javascript'
 import {
   MSSQL,
   MySQL,
@@ -9,7 +10,7 @@ import {
   StandardSQL,
   sql,
 } from '@codemirror/lang-sql'
-import { Prec } from '@codemirror/state'
+import { Prec, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 
 import type { DriverType } from '../api/types'
@@ -28,24 +29,34 @@ interface SqlEditorProps {
   onReady?: (view: EditorView) => void
 }
 
-function dialectFor(driver: DriverType | undefined) {
+/**
+ * The highlighting for a driver's language.
+ *
+ * MongoDB is the odd one out: its shell is JavaScript built around a `db`
+ * object, so it gets the JavaScript mode — highlighting the same text as SQL
+ * would mark every call and every brace as a mistake. Everything else is SQL,
+ * with the engine's own dialect.
+ */
+function languageFor(driver: DriverType | undefined): Extension {
   switch (driver) {
+    case 'mongodb':
+      return javascript()
     case 'mysql':
-      return MySQL
+      return sql({ dialect: MySQL, upperCaseKeywords: true })
     case 'postgres':
-      return PostgreSQL
+      return sql({ dialect: PostgreSQL, upperCaseKeywords: true })
     case 'sqlite':
-      return SQLite
+      return sql({ dialect: SQLite, upperCaseKeywords: true })
     case 'sqlserver':
-      return MSSQL
+      return sql({ dialect: MSSQL, upperCaseKeywords: true })
     case 'oracle':
-      return PLSQL
+      return sql({ dialect: PLSQL, upperCaseKeywords: true })
     default:
-      return StandardSQL
+      return sql({ dialect: StandardSQL, upperCaseKeywords: true })
   }
 }
 
-/** CodeMirror 6 SQL editor with a driver-aware dialect. */
+/** CodeMirror 6 editor with a driver-aware language and run shortcuts. */
 export function SqlEditor({
   value,
   driver,
@@ -58,7 +69,7 @@ export function SqlEditor({
 }: SqlEditorProps) {
   const extensions = useMemo(
     () => [
-      sql({ dialect: dialectFor(driver), upperCaseKeywords: true }),
+      languageFor(driver),
       EditorView.lineWrapping,
       // Highest precedence so the shortcuts win over CodeMirror defaults.
       Prec.highest(

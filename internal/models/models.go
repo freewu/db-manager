@@ -444,6 +444,7 @@ type ServerOverview struct {
 	MySQL    *MySQLOverview    `json:"mysql,omitempty"`
 	Postgres *PostgresOverview `json:"postgres,omitempty"`
 	SQLite   *SQLiteOverview   `json:"sqlite,omitempty"`
+	Mongo    *MongoOverview    `json:"mongodb,omitempty"`
 }
 
 // MySQLOverview is the MySQL/MariaDB status page: global status counters
@@ -473,6 +474,17 @@ type SQLiteOverview struct {
 	// Attached lists the ATTACHed files, which is SQLite's equivalent of the
 	// other databases on a server.
 	Attached *OverviewTable `json:"attached,omitempty"`
+}
+
+// MongoOverview is the MongoDB status page: server counters (uptime,
+// connections, operations, memory, WiredTiger cache) plus the size of every
+// database on the deployment.
+//
+// MongoDB has no process list — it reports a connection count instead — so the
+// second block is a table of databases rather than of sessions.
+type MongoOverview struct {
+	Groups    []OverviewGroup `json:"groups"`
+	Databases *OverviewTable  `json:"databases,omitempty"`
 }
 
 // SortSpec is one ORDER BY entry of a data-grid request.

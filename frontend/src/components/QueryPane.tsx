@@ -60,6 +60,16 @@ export function QueryPane({ tab }: QueryPaneProps) {
 
   const database = tab.database ?? session?.database
 
+  // The only difference between the two script exports is the language, and
+  // the label and the file extension are the only places that shows.
+  const scriptExport = useMemo(
+    () =>
+      driver === 'mongodb'
+        ? { menuLabel: 'Export insertMany script', label: 'JavaScript', extension: 'js' }
+        : { menuLabel: 'Export INSERT statements', label: 'SQL', extension: 'sql' },
+    [driver],
+  )
+
   const execute = useCallback(
     async (statement: string) => {
       const text = statement.trim()
@@ -119,16 +129,26 @@ export function QueryPane({ tab }: QueryPaneProps) {
           ? resultToCSV(result)
           : format === 'json'
             ? resultToJSON(result)
-            : toInsertScript(tab.object ?? 'exported', result.columns, result.rows, driver ?? '')
-      const filename = `result-${stamp}.${format === 'sql' ? 'sql' : format}`
+            : toInsertScript(
+                {
+                  driver: driver ?? '',
+                  database,
+                  object: tab.object ?? 'exported',
+                },
+                result.columns,
+                result.rows,
+              )
+      // A document store exports shell, not SQL, so the file says so.
+      const extension = format === 'sql' ? scriptExport.extension : format
+      const filename = `result-${stamp}.${extension}`
       try {
         await api.saveTextFile({
           defaultFilename: filename,
           content,
           filters: [
             {
-              displayName: format.toUpperCase(),
-              pattern: `*.${format}`,
+              displayName: format === 'sql' ? scriptExport.label : format.toUpperCase(),
+              pattern: `*.${extension}`,
             },
           ],
         })
@@ -140,7 +160,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
         downloadText(filename, content, 'text/plain')
       }
     },
-    [driver, message, result, tab.object],
+    [database, driver, message, result, scriptExport, tab.object],
   )
 
   const copyCSV = useCallback(async () => {
@@ -177,7 +197,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
       { key: 'json', label: 'Export JSON', onClick: () => void exportResult('json') },
       {
         key: 'sql',
-        label: 'Export INSERT statements',
+        label: scriptExport.menuLabel,
         onClick: () => void exportResult('sql'),
       },
     ],

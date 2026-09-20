@@ -497,6 +497,23 @@ export function DdlPane({ tab }: DdlPaneProps) {
 
 /** Starting point for a brand-new object on each engine. */
 function templateFor(driver: DriverType | undefined, database: string, schema: string): string {
+  if (driver === 'mongodb') {
+    // A collection comes into existence with its first document, so the
+    // template creates one and indexes a field of it.
+    const collection = quoteIdent('new_collection', 'mongodb')
+    return [
+      '// New collection',
+      `db.createCollection(${JSON.stringify(collection)})`,
+      '',
+      '// Insert a first document',
+      `db.getCollection(${JSON.stringify(collection)}).insertOne({ name: "example" })`,
+      '',
+      '// Index a field',
+      `db.getCollection(${JSON.stringify(collection)}).createIndex({ name: 1 }, { name: "by_name" })`,
+      '',
+    ].join('\n')
+  }
+
   const name = qualifiedName(driver ?? '', database, schema, 'new_table')
   const id = quoteIdent('id', driver ?? '')
   switch (driver) {

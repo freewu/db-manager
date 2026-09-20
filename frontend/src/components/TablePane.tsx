@@ -44,6 +44,7 @@ import type {
   KeyValue,
   SortSpec,
 } from '../api/types'
+import { capabilitiesOf } from '../lib/capabilities'
 import { downloadText, resultToCSV, resultToJSON, toInsertScript } from '../lib/export'
 import { formatDuration, qualifiedName } from '../lib/format'
 import { useAppStore, type TableView, type WorkspaceTab } from '../store/appStore'
@@ -52,14 +53,28 @@ import { StructureView } from './StructurePane'
 
 const PAGE_SIZES = [50, 100, 200, 500, 1000]
 
-/** Navicat-style sub-views of a table window, rendered as a bottom tab strip. */
-const SUBVIEWS: { value: TableView; label: string; icon: ReactNode }[] = [
-  { value: 'data', label: 'Data', icon: <TableOutlined /> },
-  { value: 'structure', label: 'Structure', icon: <AppstoreOutlined /> },
-  { value: 'indexes', label: 'Indexes', icon: <KeyOutlined /> },
-  { value: 'foreignKeys', label: 'Foreign keys', icon: <LinkOutlined /> },
-  { value: 'ddl', label: 'DDL', icon: <FileTextOutlined /> },
-]
+/**
+ * Navicat-style sub-views of a table window, rendered as a bottom tab strip.
+ *
+ * A document store keeps the same strip minus foreign keys, which do not exist
+ * there, and with the definition slice named for what it is.
+ */
+function subviewsFor(relational: boolean): { value: TableView; label: string; icon: ReactNode }[] {
+  const views = [
+    { value: 'data' as TableView, label: 'Data', icon: <TableOutlined /> },
+    { value: 'structure' as TableView, label: 'Structure', icon: <AppstoreOutlined /> },
+    { value: 'indexes' as TableView, label: 'Indexes', icon: <KeyOutlined /> },
+  ]
+  if (relational) {
+    views.push({ value: 'foreignKeys' as TableView, label: 'Foreign keys', icon: <LinkOutlined /> })
+  }
+  views.push({
+    value: 'ddl' as TableView,
+    label: relational ? 'DDL' : 'Definition',
+    icon: <FileTextOutlined />,
+  })
+  return views
+}
 
 const OPERATORS: { value: FilterOperator; label: string; needsValue: boolean; needsSecond?: boolean }[] = [
   { value: 'eq', label: '=', needsValue: true },
@@ -109,6 +124,10 @@ export function TablePane({ tab }: TablePaneProps) {
   const schema = tab.schema ?? ''
   const object = tab.object ?? ''
   const readOnly = Boolean(session?.readOnly)
+
+  const drivers = useAppStore((s) => s.drivers)
+  const { relational } = capabilitiesOf(drivers.find((d) => d.type === session?.driver))
+  const subviews = useMemo(() => subviewsFor(relational), [relational])
 
   const setTabView = useAppStore((s) => s.setTabView)
   const view: TableView = tab.view ?? 'data'
@@ -180,6 +199,25 @@ export function TablePane({ tab }: TablePaneProps) {
     countTotal,
     reloadKey,
   ])
+
+  // A document store exports shell, a SQL engine exports INSERT statements.
+  const scriptExport = useMemo(
+    () =>
+      session?.driver === 'mongodb'
+        ? {
+            menuLabel: 'Export insertMany script',
+            copyLabel: 'Copy as insertMany script',
+            label: 'JavaScript',
+            extension: 'js',
+          }
+        : {
+            menuLabel: 'Export INSERT statements',
+            copyLabel: 'Copy as INSERT',
+            label: 'SQL',
+            extension: 'sql',
+          },
+    [session?.driver],
+  )
 
   const primaryKey = useMemo(
     () => (data?.columns ?? []).filter((column) => column.isPrimaryKey).map((column) => column.name),
@@ -280,17 +318,22 @@ export function TablePane({ tab }: TablePaneProps) {
           : format === 'json'
             ? resultToJSON(data)
             : toInsertScript(
-                qualifiedName(session?.driver ?? '', database, schema, object),
+                { driver: session?.driver ?? '', database, schema, object },
                 data.columns,
                 data.rows,
-                session?.driver ?? '',
               )
-      const filename = `${object}-${stamp}.${format}`
+      const extension = format === 'sql' ? scriptExport.extension : format
+      const filename = `${object}-${stamp}.${extension}`
       try {
         await api.saveTextFile({
           defaultFilename: filename,
           content,
-          filters: [{ displayName: format.toUpperCase(), pattern: `*.${format}` }],
+          filters: [
+            {
+              displayName: format === 'sql' ? scriptExport.label : format.toUpperCase(),
+              pattern: `*.${extension}`,
+            },
+          ],
         })
       } catch (err) {
         const text = toMessage(err)
@@ -298,7 +341,7 @@ export function TablePane({ tab }: TablePaneProps) {
         downloadText(filename, content, 'text/plain')
       }
     },
-    [data, database, message, object, schema, session?.driver],
+    [data, database, message, object, schema, scriptExport],
   )
 
   if (!object) {
@@ -311,7 +354,7 @@ export function TablePane({ tab }: TablePaneProps) {
     items: [
       { key: 'csv', label: 'Export CSV', onClick: () => void exportData('csv') },
       { key: 'json', label: 'Export JSON', onClick: () => void exportData('json') },
-      { key: 'sql', label: 'Export INSERT statements', onClick: () => void exportData('sql') },
+      { key: 'sql', label: scriptExport.menuLabel, onClick: () => void exportData('sql') },
     ],
   }
 
@@ -498,7 +541,7 @@ export function TablePane({ tab }: TablePaneProps) {
       )}
 
       <nav className="dm-subtabs" role="tablist" aria-label="Table views">
-        {SUBVIEWS.map((entry) => (
+        {subviews.map((entry) => (
           <button
             key={entry.value}
             type="button"
@@ -538,17 +581,16 @@ export function TablePane({ tab }: TablePaneProps) {
                 }}
               />
             </Tooltip>
-            <Tooltip title="Copy as INSERT">
+            <Tooltip title={scriptExport.copyLabel}>
               <Button
                 size="small"
                 icon={<DownloadOutlined />}
                 onClick={() => {
                   if (!data || !detailRow || detailKey === null) return
                   const script = toInsertScript(
-                    qualifiedName(session?.driver ?? '', database, schema, object),
+                    { driver: session?.driver ?? '', database, schema, object },
                     data.columns,
                     [detailRow],
-                    session?.driver ?? '',
                   )
                   void navigator.clipboard
                     .writeText(script)

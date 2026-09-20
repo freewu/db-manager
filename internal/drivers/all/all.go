@@ -7,12 +7,12 @@
 package all
 
 import (
-	// SQL drivers (phase 1).
+	// SQL drivers.
 	_ "dbmanager/internal/drivers/mysql"
 	_ "dbmanager/internal/drivers/postgres"
 	_ "dbmanager/internal/drivers/sqlite"
-	// Phase 2 drivers are added here:
-	//   _ "dbmanager/internal/drivers/mongodb"
-	//   _ "dbmanager/internal/drivers/oracle"
-	//   _ "dbmanager/internal/drivers/sqlserver"
+	// Document store: it shares the Conn contract but not sqlbase, so
+	// everything below the interface is its own code (see the package docs).
+	_ "dbmanager/internal/drivers/mongodb"
+	// Still to come, listed in internal/drivers/planned: Oracle, SQL Server.
 )

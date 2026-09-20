@@ -480,6 +480,13 @@ export interface SQLiteOverview {
   attached?: OverviewTable
 }
 
+/** MongoDB-specific half of a runtime status page. */
+export interface MongoOverview {
+  groups: OverviewGroup[]
+  /** dbStats for every database the user can see. */
+  databases?: OverviewTable
+}
+
 /**
  * The runtime status of one live session. Exactly one engine field is set,
  * chosen by `driver`; the header fields are filled in by the backend service,
@@ -502,6 +509,7 @@ export interface ServerOverview {
   mysql?: MySQLOverview
   postgres?: PostgresOverview
   sqlite?: SQLiteOverview
+  mongodb?: MongoOverview
 }
 
 /** Shape of the generated Wails bridge on `window.go.main.App`. */

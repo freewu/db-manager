@@ -478,6 +478,7 @@ func (m *Manager) Overview(sessionID string) (*models.ServerOverview, error) {
 			page.MySQL = collected.MySQL
 			page.Postgres = collected.Postgres
 			page.SQLite = collected.SQLite
+			page.Mongo = collected.Mongo
 			page.Supported = collected.Supported
 			if collected.ServerVersion != "" {
 				page.ServerVersion = collected.ServerVersion
@@ -676,7 +677,13 @@ func (m *Manager) AnalyzeScript(sessionID, sql string) (*models.ScriptAnalysis, 
 		return nil, apperr.New(apperr.CodeInvalidConfig, "there is nothing to analyse yet")
 	}
 
-	analysis := sqlutil.Analyze(sql, s.readOnly)
+	// A driver that cannot be described by SQL keywords describes itself.
+	var analysis models.ScriptAnalysis
+	if analyzer, ok := s.conn.(drivers.Analyzer); ok {
+		analysis = analyzer.AnalyzeScript(sql, s.readOnly)
+	} else {
+		analysis = sqlutil.Analyze(sql, s.readOnly)
+	}
 	return &analysis, nil
 }
 

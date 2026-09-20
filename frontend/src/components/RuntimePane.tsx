@@ -5,6 +5,7 @@ import { ReloadOutlined } from '@ant-design/icons'
 import { api, toMessage } from '../api/client'
 import type { ServerOverview } from '../api/types'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
+import { MongoOverview } from './overview/MongoOverview'
 import { MysqlOverview } from './overview/MysqlOverview'
 import { PostgresOverview } from './overview/PostgresOverview'
 import { SqliteOverview } from './overview/SqliteOverview'
@@ -182,6 +183,8 @@ export function RuntimePane({ tab }: RuntimePaneProps) {
           <PostgresOverview overview={overview} />
         ) : overview.driver === 'sqlite' && overview.sqlite ? (
           <SqliteOverview overview={overview} />
+        ) : overview.driver === 'mongodb' && overview.mongodb ? (
+          <MongoOverview overview={overview} />
         ) : (
           <UnsupportedOverview overview={overview} />
         )}
