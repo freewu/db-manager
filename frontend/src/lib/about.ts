@@ -8,8 +8,12 @@
  */
 import pkg from '../../package.json'
 
+/** Owner and name of the repository; every link below is derived from them. */
+export const REPO_OWNER = 'freewu'
+export const REPO_NAME = 'db-manager'
+
 /** Where the source lives; also the base of every link the UI shows. */
-export const PROJECT_URL = 'https://github.com/freewu/db-manager'
+export const PROJECT_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`
 
 export const REPO_ISSUES_URL = `${PROJECT_URL}/issues`
 export const REPO_RELEASES_URL = `${PROJECT_URL}/releases`
@@ -17,6 +21,14 @@ export const REPO_RELEASES_URL = `${PROJECT_URL}/releases`
 export const DEVELOPER = {
   name: 'bluefrog',
   email: 'bluefrog.wu@gmail.com',
+  /** GitHub account the project lives under — the one the avatar comes from. */
+  github: REPO_OWNER,
+  url: `https://github.com/${REPO_OWNER}`,
+  /**
+   * GitHub serves any account's avatar as `<user>.png`. It is the one thing here
+   * that needs the network; offline the `Avatar` falls back to the initial.
+   */
+  avatarUrl: `https://github.com/${REPO_OWNER}.png?size=64`,
 }
 
 export const LICENSE = 'MIT'

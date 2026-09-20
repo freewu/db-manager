@@ -1169,6 +1169,23 @@ body {
   margin-bottom: 10px;
 }
 
+/* The heading is the app name; the version rides along, quieter than the name
+   so the eye lands on the product first. Sized explicitly because the app runs
+   Ant Design on a 12px base, which makes every Title level smaller than usual. */
+/* `.dm-about-project` in front of the class on purpose: Ant Design injects its
+   own stylesheet at runtime, so an equally specific rule of ours would lose. */
+.dm-about-project .dm-about-title {
+  margin-bottom: 14px;
+  font-size: 20px;
+  line-height: 1.35;
+}
+
+.dm-about-version {
+  font-size: 0.68em;
+  font-weight: 500;
+  opacity: 0.55;
+}
+
 .dm-about-lead {
   font-size: 12.5px;
   max-width: 620px;
@@ -1244,6 +1261,21 @@ body {
   margin: 0;
   min-width: 0;
   word-break: break-all;
+}
+
+/* The developer row: GitHub avatar + handle, one link to the profile. */
+.dm-about-dev {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dm-about-avatar {
+  flex: none;
+  /* Also the fallback's colours: when the avatar cannot be fetched the initial
+     is what a reader sees, so it has to be legible on its own. */
+  background: #555;
+  color: #fff;
 }
 
 .dm-link-icon {

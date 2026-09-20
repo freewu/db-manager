@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Space, Tooltip, Typography } from 'antd'
+import { Avatar, Space, Tooltip, Typography } from 'antd'
 import { GithubOutlined, MailOutlined } from '@ant-design/icons'
 
 import { useAppStore } from '../store/appStore'
@@ -18,8 +18,8 @@ import {
 } from '../lib/about'
 
 /**
- * "About this project": what the app is built with, where it lives, and who
- * wrote it.
+ * The project's own page: the app name and version as the heading, then what it
+ * is built with, where it lives, and who wrote it.
  *
  * Shown on the welcome pane — the right-hand side when nothing is open, which
  * is where a reader who has not connected a database yet is looking. The badges
@@ -29,18 +29,26 @@ import {
 export function AboutProject() {
   const appInfo = useAppStore((s) => s.appInfo)
 
+  // The version is in the heading, so it is deliberately not repeated here.
   const top: Shield[] = [
     { label: 'license', value: LICENSE, color: '#97CA00' },
     // The build tool has no brand colour we ship artwork for, so it borrows the
     // neutral grey the other "tooling" badges use.
     { label: 'build', value: `just ${JUST_VERSION}`, color: '#4B5563' },
-    { label: 'version', value: appInfo?.version ?? 'dev', color: '#007EC6' },
     { label: 'platform', value: appInfo?.platform ?? '—', color: '#007EC6' },
   ]
 
   return (
     <section className="dm-about-project">
-      <Typography.Title level={5}>About this project</Typography.Title>
+      <Typography.Title level={4} className="dm-about-title">
+        {appInfo?.name ?? 'DB Manager'}
+        {appInfo?.version ? (
+          <>
+            {' '}
+            <span className="dm-about-version">v{appInfo.version}</span>
+          </>
+        ) : null}
+      </Typography.Title>
 
       <div className="dm-shield-row">
         {top.map((shield) => (
@@ -83,8 +91,22 @@ export function AboutProject() {
 
         <dt>Developer</dt>
         <dd>
-          <Space size={6} wrap>
-            <span>{DEVELOPER.name}</span>
+          <Space size={10} wrap>
+            <Tooltip title={DEVELOPER.url}>
+              <ExternalLink url={DEVELOPER.url}>
+                <span className="dm-about-dev">
+                  <Avatar
+                    size={22}
+                    className="dm-about-avatar"
+                    src={DEVELOPER.avatarUrl}
+                    alt={DEVELOPER.github}
+                  >
+                    {DEVELOPER.name.slice(0, 1).toUpperCase()}
+                  </Avatar>
+                  {DEVELOPER.name}
+                </span>
+              </ExternalLink>
+            </Tooltip>
             <ExternalLink
               url={`mailto:${DEVELOPER.email}`}
               icon={<MailOutlined />}
@@ -131,10 +153,13 @@ function ExternalLink({
   url,
   label,
   icon,
+  children,
 }: {
   url: string
-  label: string
+  /** Plain text to show; use `children` instead for richer content. */
+  label?: string
   icon?: ReactNode
+  children?: ReactNode
 }) {
   return (
     <a
@@ -145,7 +170,7 @@ function ExternalLink({
       }}
     >
       {icon ? <span className="dm-link-icon">{icon}</span> : null}
-      {label}
+      {children ?? label}
     </a>
   )
 }
