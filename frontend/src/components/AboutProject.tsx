@@ -4,7 +4,10 @@ import { GithubOutlined, MailOutlined } from '@ant-design/icons'
 
 import { useAppStore } from '../store/appStore'
 import {
+  BUILD_RECIPES,
   DEVELOPER,
+  JUSTFILE_URL,
+  JUST_VERSION,
   LICENSE,
   PROJECT_URL,
   REPO_ISSUES_URL,
@@ -28,6 +31,9 @@ export function AboutProject() {
 
   const top: Shield[] = [
     { label: 'license', value: LICENSE, color: '#97CA00' },
+    // The build tool has no brand colour we ship artwork for, so it borrows the
+    // neutral grey the other "tooling" badges use.
+    { label: 'build', value: `just ${JUST_VERSION}`, color: '#4B5563' },
     { label: 'version', value: appInfo?.version ?? 'dev', color: '#007EC6' },
     { label: 'platform', value: appInfo?.platform ?? '—', color: '#007EC6' },
   ]
@@ -87,8 +93,17 @@ export function AboutProject() {
           </Space>
         </dd>
 
-        <dt>License</dt>
-        <dd>{LICENSE}</dd>
+        <dt>Build</dt>
+        <dd>
+          <Space size={6} wrap split="·">
+            <ExternalLink url={JUSTFILE_URL} label="Justfile" />
+            {BUILD_RECIPES.map((recipe) => (
+              <span className="mono" key={recipe}>
+                {recipe}
+              </span>
+            ))}
+          </Space>
+        </dd>
       </dl>
     </section>
   )
