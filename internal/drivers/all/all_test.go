@@ -30,6 +30,8 @@ func TestRegistryListsImplementedDriversInMenuOrder(t *testing.T) {
 		models.DriverPostgres,
 		models.DriverSQLite,
 		models.DriverMongoDB,
+		models.DriverTiDB,
+		models.DriverDoris,
 	}
 	if len(order) != len(want) {
 		t.Fatalf("drivers = %v, want %v", order, want)
@@ -48,6 +50,29 @@ func TestRegistryListsImplementedDriversInMenuOrder(t *testing.T) {
 	}
 	if !mongo.SupportsDatabase || mongo.DefaultDatabase == "" {
 		t.Errorf("mongodb must offer its databases: %+v", mongo)
+	}
+
+	// The designer is offered per engine, not per protocol: Doris speaks MySQL
+	// but cannot be planned by the MySQL designer, so the flag has to travel
+	// with the driver info.
+	designable := map[models.DriverType]bool{}
+	for _, info := range infos {
+		designable[info.Type] = info.SupportsDesign
+		if info.SupportsDesign && !info.Relational {
+			t.Errorf("%s offers a table designer without being relational", info.Type)
+		}
+	}
+	for _, engine := range []models.DriverType{
+		models.DriverMySQL, models.DriverPostgres, models.DriverSQLite, models.DriverTiDB,
+	} {
+		if !designable[engine] {
+			t.Errorf("%s should offer the table designer", engine)
+		}
+	}
+	for _, no := range []models.DriverType{models.DriverMongoDB, models.DriverDoris} {
+		if designable[no] {
+			t.Errorf("%s should not offer the table designer", no)
+		}
 	}
 }
 

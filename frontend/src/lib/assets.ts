@@ -1,8 +1,10 @@
 import developerAvatarImage from '@asserts/developer.png'
+import dorisIcon from '@asserts/icon/doris.png'
 import mongoIcon from '@asserts/icon/mongoDB.png'
 import mysqlIcon from '@asserts/icon/MYSQL.png'
 import postgresIcon from '@asserts/icon/postgresql.png'
 import sqliteIcon from '@asserts/icon/SQLite.png'
+import tidbIcon from '@asserts/icon/TiDB.png'
 import logo from '@asserts/logo.png'
 
 import type { DriverType } from '../api/types'
@@ -28,6 +30,8 @@ const DRIVER_ICONS: Partial<Record<DriverType, string>> = {
   postgres: postgresIcon,
   sqlite: sqliteIcon,
   mongodb: mongoIcon,
+  tidb: tidbIcon,
+  doris: dorisIcon,
 }
 
 /** Vendor logo for a driver, or `undefined` when we ship no artwork for it. */

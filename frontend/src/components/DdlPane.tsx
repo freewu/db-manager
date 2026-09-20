@@ -25,6 +25,7 @@ import {
 import { api, toMessage } from '../api/client'
 import type { DriverType, QueryResult, ScriptAnalysis } from '../api/types'
 import { formatDuration, qualifiedName, quoteIdent } from '../lib/format'
+import { isMySQLFamily } from '../lib/sqlFlavor'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { DataGrid } from './DataGrid'
 import { SqlEditor } from './SqlEditor'
@@ -516,16 +517,20 @@ function templateFor(driver: DriverType | undefined, database: string, schema: s
 
   const name = qualifiedName(driver ?? '', database, schema, 'new_table')
   const id = quoteIdent('id', driver ?? '')
+  if (isMySQLFamily(driver)) {
+    // Doris and TiDB both take the MySQL form; a Doris table additionally
+    // needs a data model and a distribution clause, which the note on its
+    // pages points at.
+    return [
+      '-- New table',
+      `CREATE TABLE ${name} (`,
+      `  ${id} BIGINT NOT NULL AUTO_INCREMENT,`,
+      `  PRIMARY KEY (${id})`,
+      ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;',
+      '',
+    ].join('\n')
+  }
   switch (driver) {
-    case 'mysql':
-      return [
-        '-- New table',
-        `CREATE TABLE ${name} (`,
-        `  ${id} BIGINT NOT NULL AUTO_INCREMENT,`,
-        `  PRIMARY KEY (${id})`,
-        ') ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;',
-        '',
-      ].join('\n')
     case 'postgres':
       return ['-- New table', `CREATE TABLE ${name} (`, `  ${id} bigserial PRIMARY KEY`, ');', ''].join(
         '\n',

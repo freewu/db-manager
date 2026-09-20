@@ -1,6 +1,7 @@
 /** Presentation helpers shared across panes. */
 
 import type { CellValue, ColumnMeta } from '../api/types'
+import { isMySQLFamily } from './sqlFlavor'
 
 /** Formats a byte count using binary units. */
 export function formatBytes(bytes: number | null | undefined): string {
@@ -68,9 +69,8 @@ export function sqlLiteral(value: CellValue): string {
  * quotes would change its meaning instead of protecting it.
  */
 export function quoteIdent(name: string, driver: string): string {
+  if (isMySQLFamily(driver)) return `\`${name.replace(/`/g, '``')}\``
   switch (driver) {
-    case 'mysql':
-      return `\`${name.replace(/`/g, '``')}\``
     case 'sqlserver':
       return `[${name.replace(/]/g, ']]')}]`
     case 'mongodb':
@@ -94,8 +94,8 @@ export function qualifiedName(
   }
 
   const parts: string[] = []
-  if (driver === 'mysql' && database) parts.push(quoteIdent(database, driver))
-  if (driver !== 'mysql' && driver !== 'sqlite' && schema) parts.push(quoteIdent(schema, driver))
+  if (isMySQLFamily(driver) && database) parts.push(quoteIdent(database, driver))
+  if (!isMySQLFamily(driver) && driver !== 'sqlite' && schema) parts.push(quoteIdent(schema, driver))
   if (driver === 'sqlite' && database && database !== 'main') {
     parts.push(quoteIdent(database, driver))
   }

@@ -4,6 +4,7 @@ import { ReloadOutlined } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
 import type { ServerOverview } from '../api/types'
+import { isMySQLFamily } from '../lib/sqlFlavor'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { MongoOverview } from './overview/MongoOverview'
 import { MysqlOverview } from './overview/MysqlOverview'
@@ -176,8 +177,10 @@ export function RuntimePane({ tab }: RuntimePaneProps) {
           />
         ) : null}
 
-        {/* One view per engine: the payload decides, not a flag on this page. */}
-        {overview.driver === 'mysql' && overview.mysql ? (
+        {/* One view per engine: the payload decides, not a flag on this page.
+            TiDB and Doris report through the MySQL payload, so the MySQL page
+            renders them too — its sections are the ones they fill. */}
+        {isMySQLFamily(overview.driver) && overview.mysql ? (
           <MysqlOverview overview={overview} />
         ) : overview.driver === 'postgres' && overview.postgres ? (
           <PostgresOverview overview={overview} />

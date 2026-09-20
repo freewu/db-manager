@@ -1,10 +1,11 @@
-// Package mysql implements the MySQL / MariaDB driver.
+// Package tidb implements the TiDB driver.
 //
-// It is the reference engine of the MySQL family: the catalog queries, the DSN
-// builder and the SHOW-based helpers live in mysqlcompat, and this package adds
-// what belongs to MySQL itself — the registry entry, the defaults (port 3306,
-// user root) and the status page built from SHOW GLOBAL STATUS.
-package mysql
+// TiDB speaks the MySQL wire protocol and reads its own catalog through
+// MySQL's information_schema, so browsing, editing and the table designer all
+// come from mysqlcompat and sqlbase. What is TiDB-specific — the port, the
+// system schemas it ships with, and the cluster topology behind
+// information_schema.CLUSTER_INFO — lives here.
+package tidb
 
 import (
 	"context"
@@ -16,7 +17,17 @@ import (
 	"dbmanager/internal/models"
 )
 
-const defaultPort = 3306
+const defaultPort = 4000
+
+// systemSchemas are the databases a TiDB cluster creates for itself. `test` is
+// deliberately not in the list: it is where users put their first table.
+var systemSchemas = map[string]bool{
+	"information_schema": true,
+	"performance_schema": true,
+	"mysql":              true,
+	"metrics_schema":     true,
+	"sys":                true,
+}
 
 // Driver is the registered entry point.
 type Driver struct{}
@@ -26,17 +37,17 @@ func init() { drivers.Register(Driver{}) }
 // Info implements drivers.Driver.
 func (Driver) Info() models.DriverInfo {
 	return models.DriverInfo{
-		Type:             models.DriverMySQL,
-		DisplayName:      "MySQL / MariaDB",
+		Type:             models.DriverTiDB,
+		DisplayName:      "TiDB",
 		DefaultPort:      defaultPort,
 		Implemented:      true,
 		Relational:       true,
 		SupportsDatabase: true,
 		SupportsSchema:   false,
 		SupportsDesign:   true,
-		SortOrder:        10,
+		SortOrder:        45,
 		DefaultDatabase:  "",
-		Notes:            "MySQL treats schemas as databases; the explorer shows a single level.",
+		Notes:            "MySQL-compatible distributed SQL: the explorer reads the MySQL catalog, the status page adds the cluster topology.",
 	}
 }
 
@@ -77,12 +88,12 @@ func spec() sqlbase.Spec {
 	return sqlbase.Spec{
 		Info:         Driver{}.Info(),
 		SQLDriver:    "mysql",
-		Dialect:      sqlbase.MySQLDialect{},
-		Introspector: mysqlcompat.Introspector{},
+		Dialect:      sqlbase.MySQLDialect{Driver: models.DriverTiDB},
+		Introspector: mysqlcompat.Introspector{SystemSchemas: systemSchemas},
 		DSN:          mysqlcompat.DSN,
 		BootstrapDatabase: func(models.ConnectionConfig) string {
-			// Connecting without a default schema is valid and lets the user
-			// browse every database they can access.
+			// TiDB accepts a session without a default schema, which is what
+			// lets the explorer list every database at once.
 			return ""
 		},
 		NativeDDL: mysqlcompat.NativeDDL,

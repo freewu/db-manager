@@ -1,8 +1,10 @@
 import type { DriverType } from '../api/types'
+import { DorisConnect } from './DorisConnect'
 import { MongodbConnect } from './MongodbConnect'
 import { MysqlConnect } from './MysqlConnect'
 import { PostgresConnect } from './PostgresConnect'
 import { SqliteConnect } from './SqliteConnect'
+import { TidbConnect } from './TidbConnect'
 import type { DriverForm } from './shared'
 
 /**
@@ -20,6 +22,8 @@ const DRIVER_FORMS: Partial<Record<DriverType, DriverForm>> = {
   postgres: PostgresConnect,
   sqlite: SqliteConnect,
   mongodb: MongodbConnect,
+  tidb: TidbConnect,
+  doris: DorisConnect,
 }
 
 /** The page for a driver, or `undefined` when we ship no form for it yet. */

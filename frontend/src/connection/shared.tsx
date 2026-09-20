@@ -314,7 +314,7 @@ function RememberPasswordField() {
       label="Remember password"
       className="dm-form-row-switch"
       valuePropName="checked"
-      extra="Stored in plain text in your user profile directory."
+      extra="Encrypted in your user profile directory."
     >
       <Switch />
     </Form.Item>

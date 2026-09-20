@@ -14,6 +14,7 @@ import { Prec, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 
 import type { DriverType } from '../api/types'
+import { isMySQLFamily } from '../lib/sqlFlavor'
 
 interface SqlEditorProps {
   value: string
@@ -38,11 +39,10 @@ interface SqlEditorProps {
  * with the engine's own dialect.
  */
 function languageFor(driver: DriverType | undefined): Extension {
+  if (isMySQLFamily(driver)) return sql({ dialect: MySQL, upperCaseKeywords: true })
   switch (driver) {
     case 'mongodb':
       return javascript()
-    case 'mysql':
-      return sql({ dialect: MySQL, upperCaseKeywords: true })
     case 'postgres':
       return sql({ dialect: PostgreSQL, upperCaseKeywords: true })
     case 'sqlite':

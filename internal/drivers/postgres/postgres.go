@@ -35,6 +35,7 @@ func (Driver) Info() models.DriverInfo {
 		Relational:       true,
 		SupportsDatabase: true,
 		SupportsSchema:   true,
+		SupportsDesign:   true,
 		SortOrder:        20,
 		DefaultDatabase:  "postgres",
 		Notes:            "PostgreSQL cannot query across databases; the app opens a separate pool per database.",

@@ -20,6 +20,11 @@ export interface Capabilities {
   creatableDatabase: boolean
   /** Objects live directly under the database (no schema level in between). */
   flatNamespace: boolean
+  /**
+   * The table designer can edit this engine's tables. False for engines whose
+   * DDL needs more than the designer models, which then stays read-only.
+   */
+  designable: boolean
 }
 
 /**
@@ -34,6 +39,9 @@ export function capabilitiesOf(driver: DriverInfo | undefined): Capabilities {
       ? driver.supportsDatabase && !driver.requiresFile && driver.relational
       : true,
     flatNamespace: !(driver?.supportsSchema ?? false),
+    // A driver we ship no record for is treated as a plain SQL engine, which is
+    // what every build so far has been.
+    designable: driver ? driver.supportsDesign : true,
   }
 }
 

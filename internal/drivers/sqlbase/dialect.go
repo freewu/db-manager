@@ -13,10 +13,21 @@ import (
 // MySQLDialect implements drivers.Dialect for MySQL and MariaDB.
 //
 // In MySQL a "schema" *is* a database, so schema segments are ignored and
-// cross database references work by qualifying with the database name.
-type MySQLDialect struct{}
+// cross database references work by qualifying with the database name. The
+// engines that speak the same wire protocol and the same identifier rules
+// (TiDB, Doris) reuse this dialect and only change the name it reports, which
+// is what tells the generated DDL where it is going.
+type MySQLDialect struct {
+	// Driver is the engine the statements are for; empty means MySQL.
+	Driver models.DriverType
+}
 
-func (MySQLDialect) Name() models.DriverType   { return models.DriverMySQL }
+func (d MySQLDialect) Name() models.DriverType {
+	if d.Driver == "" {
+		return models.DriverMySQL
+	}
+	return d.Driver
+}
 func (MySQLDialect) Quote(ident string) string { return sqlutil.QuoteBacktick(ident) }
 func (MySQLDialect) Qualify(database, schema, object string) string {
 	return sqlutil.Qualify(sqlutil.QuoteBacktick, database, object)

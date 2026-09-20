@@ -46,7 +46,9 @@ func PlanAlter(d drivers.Dialect, current *models.TableStructure, want models.Ta
 
 	diff := newAlterDiff(d, current, want)
 	switch d.Name() {
-	case models.DriverMySQL:
+	case models.DriverMySQL, models.DriverTiDB:
+		// TiDB is MySQL-compatible down to the ALTER TABLE forms below, so
+		// the two share one plan; only the dialect's name differs.
 		return diff.mysqlPlan()
 	case models.DriverPostgres:
 		return diff.postgresPlan()
@@ -561,6 +563,13 @@ func (a *alterDiff) primaryKeyChanged() bool {
 	return !sameColumns(a.pkBefore, a.pkAfter)
 }
 
+// mysqlFamily reports whether a dialect writes MySQL-flavoured DDL. TiDB speaks
+// the MySQL wire protocol and the same identifier and index syntax, so it is
+// planned by the MySQL code paths instead of growing a copy of them.
+func mysqlFamily(t models.DriverType) bool {
+	return t == models.DriverMySQL || t == models.DriverTiDB
+}
+
 // indexRenamedInPlace reports whether an index only changes its name, which
 // MySQL and PostgreSQL can do in place. SQLite cannot, so it drops and
 // recreates the index instead.
@@ -588,7 +597,7 @@ func (a *alterDiff) createIndexStatement(ix models.DesignIndex) string {
 		kind = "UNIQUE INDEX"
 	}
 	columns := strings.Join(a.quoteAll(ix.Columns), ", ")
-	if a.d.Name() == models.DriverMySQL {
+	if mysqlFamily(a.d.Name()) {
 		return "ALTER TABLE " + a.table + " ADD " + kind + " " + a.quote(strings.TrimSpace(ix.Name)) + " (" + columns + ")"
 	}
 	return "CREATE " + kind + " " + a.qualifiedIndex(strings.TrimSpace(ix.Name)) + " ON " + a.table + " (" + columns + ")"

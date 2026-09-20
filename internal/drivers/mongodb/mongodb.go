@@ -62,9 +62,12 @@ func (Driver) Info() models.DriverInfo {
 		Relational:       false,
 		SupportsDatabase: true,
 		SupportsSchema:   false,
-		DefaultDatabase:  defaultDatabase,
-		SortOrder:        40,
-		Notes:            "Document store: databases hold collections, collections hold documents. Fields are inferred from a document sample.",
+		// There is no schema to design: a collection's fields are whatever the
+		// sampled documents happen to contain.
+		SupportsDesign:  false,
+		DefaultDatabase: defaultDatabase,
+		SortOrder:       40,
+		Notes:           "Document store: databases hold collections, collections hold documents. Fields are inferred from a document sample.",
 	}
 }
 

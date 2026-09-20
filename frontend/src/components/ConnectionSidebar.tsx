@@ -293,7 +293,7 @@ export function ConnectionSidebar() {
       if (!objects) return []
       // A document store has no CREATE TABLE / ALTER TABLE to write, so its
       // object menus stop at the data and the sampled field list.
-      const { relational } = capabilitiesOf(driverOfSession(sessionId))
+      const { relational, designable } = capabilitiesOf(driverOfSession(sessionId))
 
       const groups = new Map<string, ObjectInfo[]>()
       for (const object of objects) {
@@ -369,7 +369,7 @@ export function ConnectionSidebar() {
                   {
                     key: 'structure',
                     icon: <AppstoreOutlined />,
-                    label: relational ? 'Design object' : 'Open fields',
+                    label: designable ? 'Design object' : 'Open fields',
                     onClick: () => openObject(sessionId, database, schema, object, 'structure'),
                   },
                   {
@@ -1105,6 +1105,10 @@ function driverColor(type: DriverInfo['type'] | undefined): string {
       return '#0f80cc'
     case 'mongodb':
       return '#13aa52'
+    case 'tidb':
+      return '#d8391b'
+    case 'doris':
+      return '#3d6ce0'
     case 'oracle':
       return '#c74634'
     case 'sqlserver':

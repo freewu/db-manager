@@ -38,6 +38,7 @@ func (Driver) Info() models.DriverInfo {
 		SupportsDatabase: false,
 		SupportsSchema:   false,
 		RequiresFile:     true,
+		SupportsDesign:   true,
 		DefaultDatabase:  "main",
 		SortOrder:        30,
 		Notes:            "SQLite is a single file; attach additional files to browse them side by side.",

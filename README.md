@@ -2,7 +2,7 @@
 
 使用 **Wails v2 + React + Vite + Justfile** 开发的关系型数据库管理工具，打包为 Windows 桌面应用。
 
-支持 **MySQL / PostgreSQL / SQLite / MongoDB**；驱动层不假设关系模型，文档型引擎走的是同一套 `Driver / Conn / Dialect` 契约，service 与 UI 只问能力、不问引擎名。Oracle / SQL Server 的占位仍在（见 `internal/drivers/planned`），但暂不上菜单。
+支持 **MySQL / TiDB / Apache Doris / PostgreSQL / SQLite / MongoDB**；驱动层不假设关系模型，文档型引擎走的是同一套 `Driver / Conn / Dialect` 契约，service 与 UI 只问能力、不问引擎名。Oracle / SQL Server 的占位仍在（见 `internal/drivers/planned`），但暂不上菜单。
 
 > 在本仓库写代码前先读 [`AGENTS.md`](AGENTS.md)：每次开发完成必须 commit + push，本地打包用 `just release`，发版走 `just publish <x.y.z>` 触发 GitHub Actions 打出三平台免安装可执行文件。
 
@@ -11,19 +11,20 @@
 - **连接管理**：连接配置的增删改查、连通性测试、SQLite 文件选择、TLS（CA / 证书 / 私钥）、自定义 DSN 参数、只读标记、颜色标签、密码可选保存。新建连接先点出**驱动菜单**（命令条 `Connection`、连接树的 `+`、`File ▸ New Connection`、面板空白处右键，四处挂的是同一份列表，就展开在你刚点的那个东西下面），再落到**这个引擎自己的那一页** —— 走网络的要地址、端口、账号与 TLS，SQLite 只要一个文件加一个附加库别名，两边不会互相看到无关字段（保存下来的配置也照着这一页来，文件型连接不会混进 host / port / ssl）；编辑已有连接同样按它的驱动打开对应那页。
 - **对象浏览器**：会话 → 数据库 → Schema → 表 / 视图 / 索引 的懒加载树，右键菜单支持打开数据、新建查询、复制名称；文档型引擎这里是 database → Collections / Indexes，没有 schema 层，SQL 专属的入口（新建 DDL 脚本、ER 图、设计对象）自动不出现。
 - **MongoDB**：连接（含副本集多主机、`mongodb+srv`、TLS、认证库）、集合浏览（文档数 / 体积 / 索引）、数据网格的过滤排序与分页、双击改标量字段、批量删文档、索引列表与定义脚本、运行情况页（serverStatus + 每库 dbStats）。查询窗口跑的是 **mongosh 风格的 shell**（`db.orders.find({...}).sort({ts: -1}).limit(20)`），不是 SQL。
+- **TiDB / Apache Doris**：两个引擎对客户端都讲 MySQL 线协议，但脾气各不相同。TiDB 默认端口 4000，有 TLS 页（`Security`），表单里的 `Database` 只是新标签页的默认库 —— 一个 TiDB 集群就是一份逻辑数据库，树里一次列全所有库，所以这一栏是可选的；运行情况是 MySQL 那一页再加一张 `information_schema.CLUSTER_INFO` 的集群成员表（tidb / tikv / tiflash / ticdc / pd）。Doris 默认端口 9030，前端（FE）与后端（BE）都在集群网内、MySQL 端也不做那套握手，于是**没有 TLS 页**；它是分析型引擎，本工具里**只读浏览** —— 表结构与索引照样能看（字段列表说的是引擎自己的类型拼写，如 `varchar(120)` / `decimal(10,2)`），但没有表设计器，改动走 DDL 编辑器。两者的连接、库表浏览、数据网格、SQL 查询与导出都复用 MySQL 那条代码路径。
 - **对象列表**：点击树里的表 / 视图 / 索引文件夹，在右侧开出 Navicat 风格的对象网格（名称 / 类型 / 行数 / 大小 / 引擎 / 注释，索引列还有所属表 / 列 / 唯一性 / 主键 / 方法），支持列排序、列筛选、底部关键字过滤，单击打开对象、双击进入设计视图。
 - **数据网格**：分页、服务端排序、服务端过滤（14 种操作符）、列宽自适应、长文本悬浮预览、多选、行详情抽屉（JSON / INSERT 预览）。
 - **行编辑**：双击单元格内联编辑、批量删除选中行；所有写操作都以主键为条件并**全部使用参数绑定**。
 - **SQL 编辑器**：基于 CodeMirror 6，按驱动切换语言（MongoDB 用 JavaScript，其余用各自方言）、语法高亮与补全、多语句执行、执行历史、`Ctrl/Cmd+Enter` 执行全部、`Ctrl/Cmd+Shift+Enter` 执行选中。
 - **结构查看器**：列、索引、外键、原始 DDL（优先使用引擎原生 DDL），DDL 可复制或导出；文档型引擎的「结构」页是**抽样得到的字段表**（字段名 / 类型 / 是否可能缺失），并说明集合本身没有 schema。
-- **表设计器**：表格窗口的「结构」页就是编辑器 —— 直接改字段名 / 类型 / NULL / 默认值 / 主键 / 自增 / 注释，增删索引，右侧实时渲染将要执行的 SQL 与引擎限制警告；保存前无需联网猜测，保存时逐条执行并如实报告「第几条失败」（MySQL / PostgreSQL / SQLite 各自的限制都写在警告里）。
+- **表设计器**：表格窗口的「结构」页就是编辑器 —— 直接改字段名 / 类型 / NULL / 默认值 / 主键 / 自增 / 注释，增删索引，右侧实时渲染将要执行的 SQL 与引擎限制警告；保存前无需联网猜测，保存时逐条执行并如实报告「第几条失败」（MySQL / PostgreSQL / SQLite 各自的限制都写在警告里）。引擎给不出设计器的（MongoDB、Doris）这一页退化成**只读字段列表**并直说「这个引擎没有表设计器」，不摆一个按下去会失败的按钮。
 - **查询收藏**：查询窗口工具条上的「Favourites」可以把当前 SQL 命名保存（默认用第一行非注释文本作名），下拉里一键载入、重命名或删除；收藏存在 `queries.json` 里，与连接配置互不影响，换窗口、换连接都能用。
 - **ER 图**：在 schema（没有 schema 层的引擎就是 database）节点右键即可打开该命名空间的关系图 —— 一张 `GetSchemaGraph` 就把对象、字段与它们之间的外键取回来，节点按外键方向分层，主键高亮，箭头悬停显示「哪一列引用哪一列」；支持拖动平移、滚轮缩放、按名搜索、隐藏/显示字段、网格开关，点节点直接打开该表，还能把当前这张图导出成自包含的 SVG。跨命名空间的外键画成虚线 stub，读不到字段的对象仍在图里但会列出警告，超过 300 个对象时明确提示只画了前 300 个。
 - **DDL 编辑器**：把对象的定义开成可编辑的脚本窗口（MongoDB 下就是集合的定义脚本与 shell 查询） —— 工具条、对象树右键「Edit DDL…」或结构页的「Edit in DDL editor」都能进；编辑器下方是**后端算出来的干跑结果**（逐条语句标出 query / DDL / DML、标红 DROP、TRUNCATE、无 WHERE 的 DELETE/UPDATE，MongoDB 下则是 `drop()` / `dropDatabase()` / 无 filter 的 `deleteMany`，并说明只读连接会拒掉几条），真正点「Run script」时只对破坏性脚本弹二次确认；执行完顺手刷新目录树与索引缓存。
 - **窗口即应用**：右键不再弹出 WebView 自带的那套菜单（后退 / 刷新 / 另存为 / 打印 / 检查），
   右键要么什么都不做，要么就是应用自己的菜单（连接树等）；文本框与 SQL 编辑器是例外 —— 那里保留系统菜单，
   右键粘贴照旧可用，其它地方用 `Ctrl+C` / `Ctrl+V`。
-- **运行情况**：双击连接节点即可打开该连接的「运行情况」页（未连接会先连上，密码框填完再自动打开）；页面上半部分是会话事实与快照时间，下面按引擎各画各的 —— MySQL 给进程列表、连接数、InnoDB 缓冲池与命中率，PostgreSQL 给后端/活动会话/数据库体积与提交率、缓存命中率，SQLite 则是「这是一个文件」的视角（路径、落盘大小、pragma、对象清单与 ATTACH 进来的库）。读不到的项一律显示 `—` 并附一条警告（缺权限、缺统计视图），不会拿 0 冒充；工具条的刷新按钮重新取一次快照。
+- **运行情况**：双击连接节点即可打开该连接的「运行情况」页（未连接会先连上，密码框填完再自动打开）；页面上半部分是会话事实与快照时间，下面按引擎各画各的 —— MySQL 给进程列表、连接数、InnoDB 缓冲池与命中率（TiDB 走同一页，外加集群成员表；Doris 也尽力取这一套，取不到的项挂进警告里），PostgreSQL 给后端/活动会话/数据库体积与提交率、缓存命中率，SQLite 则是「这是一个文件」的视角（路径、落盘大小、pragma、对象清单与 ATTACH 进来的库）。读不到的项一律显示 `—` 并附一条警告（缺权限、缺统计视图），不会拿 0 冒充；工具条的刷新按钮重新取一次快照。
 - **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（只画一个 GitHub 头像，悬停显示昵称、点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection / Open，以及连接树的右键菜单。
 - **导出**：CSV / JSON / INSERT 脚本（MongoDB 下是 `insertMany` 脚本，按列的 BSON 类型还原 `$oid` / `$date` / 文档字面量），可写入文件或复制到剪贴板。
 - **外观**：Navicat 式窗口骨架（菜单栏 + icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏。
@@ -107,7 +108,10 @@ wails build
 │   │   ├── format/           # 指标格式化（字节 / 计数 / 时长 / 百分比），两个 overview 实现共用
 │   │   ├── sqlutil/          # 标识符引用、WHERE / ORDER BY 构造（纯字符串+参数位）、脚本干跑
 │   │   ├── sqlbase/          # 通用 database/sql 实现：连接池、分页、脚本执行、DDL、行变更、运行情况外壳
+│   │   ├── mysqlcompat/      # MySQL 家族共用件：DSN / TLS、目录查询、原生 DDL、SHOW 解析、overview 外壳
 │   │   ├── mysql/ postgres/ sqlite/   # 只提供 DSN、Dialect、目录查询与各自的 overview 收集器
+│   │   ├── tidb/ doris/      # 同样讲 MySQL 线协议的两个引擎：各报端口、系统 schema 与 overview 差异
+│   │   ├── sqltest/          # 假 database/sql/driver：给「照 SHOW / information_schema 结果拼结构」写单测
 │   │   ├── mongodb/          # 官方 v2 驱动：文档 ↔ 表格映射、shell 解析与执行、索引、运行情况
 │   │   ├── planned/          # Oracle / SQL Server 占位（`Infos()` 暂不返回，`Parked()` 留着路线图）
 │   │   └── all/              # 汇总导入，保证 init 注册
@@ -118,7 +122,7 @@ wails build
         ├── components/       # AppShell / Sidebar / Workspace / TablePane / QueryPane / DataGrid …
         │   ├── AboutProject.tsx  # 项目信息（技术栈徽章 / 项目地址 / 开发者），空态页与 Help → About 共用
         │   └── overview/     # 运行情况：每个引擎一个视图 + 共用的指标卡片与数据表
-        ├── connection/       # 每种驱动一页连接表单（Mysql / Postgres / Sqlite / Mongodb）+ 注册表
+        ├── connection/       # 每种驱动一页连接表单（Mysql / Postgres / Sqlite / Mongodb / Tidb / Doris）+ 注册表
         ├── hooks/useConnect  # 先试后问的连接流程
         ├── lib/              # tree key 编解码、格式化、导出、驱动能力（capabilities.ts）、项目信息（about.ts）、品牌素材（assets.ts，@asserts 别名）
         ├── store/            # zustand 全局状态（连接 / 会话 / 标签页 / 浏览器缓存）
@@ -139,7 +143,9 @@ DDL 编辑器要的 `drivers.Analyzer`（脚本干跑）同理 —— SQL 引擎
 MongoDB 用自己的解析器回答，因为 `db.orders.drop()` 认不出任何 SQL 关键字。
 
 **「引擎能不能做这件事」由后端说，前端只读结果**：`DriverInfo.relational` / `supportsDatabase` /
-`supportsSchema` 决定界面上出现什么（`frontend/src/lib/capabilities.ts`），前端不按引擎名写 if ——
+`supportsSchema` 决定界面上出现什么，`supportsDesign` 说明这个引擎有没有表设计器（MongoDB、Doris 为
+`false`）——「结构」页据此换成只读字段列表：有列不等于这个引擎能被这个设计器编辑，如实说「没有设计器」
+比给一个点了会失败的按钮好。前端读的是同一份结果（`frontend/src/lib/capabilities.ts`），不按引擎名写 if ——
 `driver !== 'mongodb'` 这种判断只对一次，再加一个文档型引擎就全是洞。
 
 ### `sqlbase` 用一个包实现全部 SQL 引擎
@@ -148,6 +154,16 @@ MySQL / PostgreSQL / SQLite 仅声明一份 `Spec`（`DSN` 构造函数、`Diale
 即可获得：连接池（每库一个池）、分页、`COUNT(*)`、多语句脚本执行、值类型归一化
 （`[]byte` → UTF-8 或 `0x…`、`time.Time` → RFC3339Nano）以及 DDL 渲染。
 `SQLServerDialect` / `OracleDialect` 已预置。
+
+### 讲同一种线协议的引擎共用一个包
+
+TiDB 与 Doris 对客户端而言都是 MySQL，于是 `internal/drivers/mysqlcompat` 收下了这一族的全部共用件：
+DSN（含 TLS 白名单与 `interpolateParams`）、一份 `sqlbase.Introspector` 实现（照 `information_schema`
+与 `SHOW` 拼目录）、原生 DDL、`SHOW` 输出解析，以及 overview 的公共外壳。引擎自己的包只回答差异：
+默认端口、要藏掉哪些系统库、有没有设计器，以及 overview 多给哪几张表 —— Doris 的 introspector 用
+`newIntrospector()` 构造，免得零值悄悄退回 MySQL 的默认系统库清单。`sqlbase.MySQLDialect` 带一个
+`Driver` 字段，`mysqlFamily()` 是「是不是这一族」的唯一判断；前端对应的是 `lib/sqlFlavor.ts` 的
+`isMySQLFamily()`，标识符引用、DDL 模板与编辑器方言都问它。
 
 ### 前端不消费生成的绑定
 
@@ -284,9 +300,14 @@ MongoDB 不从 `sqlbase` 继承任何东西（那个包是 `database/sql` 专用
 
 | 右键处 | 菜单 |
 | --- | --- |
-| 面板空白处 | 引擎列表（MySQL / PostgreSQL / SQLite / MongoDB） |
+| 面板空白处 | 引擎列表（MySQL / MariaDB、PostgreSQL、SQLite、MongoDB、TiDB、Apache Doris） |
 | 未连接的连接 | Open connection / Edit connection… |
 | 已连接的连接 | New query / Refresh / New database… / Edit connection… / Disconnect |
+
+菜单的浮层是 portal，但 React 的事件依旧顺着**组件树**冒泡，而这个浮层就挂在树节点下面 ——
+不拦一下的话，点菜单项会顺手触发这一行的 `onSelect`，刚选的动作当场被「打开这个对象」盖掉
+（「Open fields」会落到数据页，文件夹上的「New query」会多加一个对象列表）。`NodeMenu` 在
+`menu.onClick` 里 `stopPropagation()`，菜单的点击就只是菜单的点击。
 
 **双击连接节点**是「看它的运行情况」：没连上就先连（服务端要密码时先弹框，填完再自动打开），
 已经有会话就直接切到那一页。一次点击（展开）保持原来的行为 —— 只连接、不开页面，
@@ -353,6 +374,18 @@ DMB_TEST_MONGODB_HOST=127.0.0.1 go test ./internal/drivers/mongodb/ -run Integra
 `createIndex`、只读拒绝）、运行情况页的每个分组。没设 `DMB_TEST_MONGODB_HOST` 时全部 skip，
 所以 CI 不需要装 mongod。
 
+`internal/drivers/mysqlcompat` 用自写的假 SQL driver（`internal/drivers/sqltest`，不引第三方 mock）
+盯住「照 `SHOW` / `information_schema` 的结果拼出结构」这类纯映射：列类型与长度、可空、索引列、
+系统库过滤、DSN 参数白名单与 `interpolateParams`、overview 取数。TiDB / Doris 各自的包还有表驱动
+单测（端口、系统 schema、集群成员标签），真实实例同样要显式给地址才跑：
+
+```sh
+DMB_TEST_TIDB_HOST=127.0.0.1 go test ./internal/drivers/tidb/ -run Integration -v
+DMB_TEST_DORIS_HOST=127.0.0.1 go test ./internal/drivers/doris/ -run Integration -v
+```
+
+两者默认 skip，CI 不需要备 TiDB / Doris。
+
 ## 发布
 
 本地打包和对外发版是两件事。
@@ -409,8 +442,9 @@ just publish 0.2.0 "新增 Navicat 风格连接树；索引成为一等资源"
   - [x] ER 图：命名空间的关系图，可搜索 / 缩放 / 导出 SVG，点节点开表
   - [x] 运行情况：双击连接看服务端现状，每个引擎一个视图
 - [x] Phase 2：MongoDB（连接、集合浏览、shell 查询、增删改、索引、运行情况）
-- [ ] Phase 2.5：Oracle / SQL Server（占位与 dialect 已在，缺 DSN 与目录查询，`planned.Parked()`）
-- [ ] Phase 3：SSH 隧道、导入向导、数据对比、插件式扩展
+- [x] Phase 2.5：TiDB / Apache Doris（同一种线协议共用 `mysqlcompat`：TiDB 带 TLS 与集群成员概览，Doris 只读浏览 + DDL 编辑）
+- [ ] Phase 3：Oracle / SQL Server（占位与 dialect 已在，缺 DSN 与目录查询，`planned.Parked()`）
+- [ ] Phase 4：SSH 隧道、导入向导、数据对比、插件式扩展
 
 ## 许可证
 

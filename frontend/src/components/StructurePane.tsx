@@ -25,7 +25,14 @@ import {
 } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
-import type { ColumnInfo, DesignPlan, ForeignKeyInfo, IndexInfo, TableStructure } from '../api/types'
+import type {
+  ColumnInfo,
+  DesignPlan,
+  DriverType,
+  ForeignKeyInfo,
+  IndexInfo,
+  TableStructure,
+} from '../api/types'
 import { capabilitiesOf } from '../lib/capabilities'
 import { emptyColumn, emptyIndex, isDirty, primaryKeyRow } from '../lib/design'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
@@ -69,8 +76,13 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   const readOnly = Boolean(session?.readOnly)
   // A document store has nothing to design: its fields are whatever the
   // documents happen to contain, so the Columns slice degrades to the sampled
-  // field list the backend reports and no design is ever planned.
-  const { relational } = capabilitiesOf(drivers.find((d) => d.type === session?.driver))
+  // field list the backend reports and no design is ever planned. `designable`
+  // is the narrower question — an engine can have columns and still not be
+  // editable by this designer (Doris needs a data model and a distribution
+  // clause), and then the same read-only field list is the honest answer.
+  const { relational, designable } = capabilitiesOf(
+    drivers.find((d) => d.type === session?.driver),
+  )
 
   const [structure, setStructure] = useState<TableStructure | null>(null)
   const [loading, setLoading] = useState(true)
@@ -94,7 +106,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
       .then((value) => {
         if (cancelled) return
         setStructure(value)
-        if (relational) ensureDesign(tab.id, value, rebase.current)
+        if (designable) ensureDesign(tab.id, value, rebase.current)
         rebase.current = false
       })
       .catch((err: unknown) => {
@@ -108,7 +120,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
     return () => {
       cancelled = true
     }
-  }, [attempt, database, ensureDesign, object, relational, reloadToken, schema, tab.id, tab.sessionId])
+  }, [attempt, database, designable, ensureDesign, object, reloadToken, schema, tab.id, tab.sessionId])
 
   const draft = design?.draft
   const draftKey = draft ? JSON.stringify(draft) : ''
@@ -116,7 +128,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   // Plan the draft as it stands, debounced: every keystroke in the grid would
   // otherwise be a catalog round trip.
   useEffect(() => {
-    if (!relational || !draft || section !== 'structure') return
+    if (!designable || !draft || section !== 'structure') return
     let cancelled = false
     const timer = window.setTimeout(() => {
       api
@@ -279,8 +291,8 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
     )
   }
 
-  if (!relational && section === 'structure') {
-    return <FieldList structure={structure} />
+  if (!designable && section === 'structure') {
+    return <FieldList structure={structure} driver={session?.driver} />
   }
 
   if (section === 'foreignKeys') {
@@ -579,24 +591,40 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
 }
 
 /**
- * The field list of a collection.
+ * The read-only field list of an object this build cannot design.
  *
- * MongoDB has no schema: the fields below are the ones the backend saw while
- * sampling the collection's documents, so this view reports what is there
- * rather than what should be there. That is why it has no editor.
+ * Two engines land here for different reasons, so the note says which one it
+ * is: a collection has no schema to design, while a Doris table has one that
+ * this designer does not model (its DDL needs a data model and a
+ * `DISTRIBUTED BY` clause). Either way the fields come from the catalog and
+ * are reported as they are.
  */
-function FieldList({ structure }: { structure: TableStructure }) {
+function FieldList({
+  structure,
+  driver,
+}: {
+  structure: TableStructure
+  driver: DriverType | undefined
+}) {
+  const mongo = driver === 'mongodb'
   return (
     <div className="dm-pane-body" style={{ padding: 12 }}>
       <Alert
         type="info"
         showIcon
         style={{ marginBottom: 12 }}
-        title="Collections have no schema"
-        description="The fields below were inferred from a sample of the documents in this collection. Any document may carry other fields, or the same field with another type, so there is nothing to design here."
+        title={mongo ? 'Collections have no schema' : 'This engine has no table designer'}
+        description={
+          mongo
+            ? 'The fields below were inferred from a sample of the documents in this collection. Any document may carry other fields, or the same field with another type, so there is nothing to design here.'
+            : 'The fields below come from the catalog and are read-only. Doris DDL needs a data model and a distribution clause, so changes go through the DDL editor, where the engine\u2019s own statement is edited and run.'
+        }
       />
       {structure.columns.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No documents to sample" />
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={mongo ? 'No documents to sample' : 'No fields'}
+        />
       ) : (
         <Table
           className="dm-grid"
@@ -628,7 +656,10 @@ const fieldColumns: TableColumnsType<ColumnInfo> = [
   {
     title: 'Type',
     dataIndex: 'dataType',
-    render: (value: string) => <Tag className="mono">{value}</Tag>,
+    // `columnType` is the engine's own spelling (including length and
+    // precision) and is what a SQL engine reports; the sampled document fields
+    // of a collection only have the inferred `dataType`.
+    render: (value: string, row) => <Tag className="mono">{row.columnType || value}</Tag>,
   },
   {
     title: 'May be missing',

@@ -14,6 +14,8 @@ export type DriverType =
   | 'postgres'
   | 'sqlite'
   | 'mongodb'
+  | 'tidb'
+  | 'doris'
   | 'oracle'
   | 'sqlserver'
 
@@ -59,6 +61,13 @@ export interface DriverInfo {
   defaultDatabase?: string
   sortOrder: number
   notes?: string
+  /**
+   * Whether the table designer is offered for this engine. Weaker than
+   * `relational`: Doris has tables and columns but its DDL needs a data model
+   * and a distribution clause, so it is browsable and editable but not
+   * designable.
+   */
+  supportsDesign: boolean
 }
 
 export interface SessionInfo {

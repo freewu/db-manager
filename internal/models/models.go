@@ -16,6 +16,8 @@ const (
 	DriverPostgres  DriverType = "postgres"
 	DriverSQLite    DriverType = "sqlite"
 	DriverMongoDB   DriverType = "mongodb"
+	DriverTiDB      DriverType = "tidb"
+	DriverDoris     DriverType = "doris"
 	DriverOracle    DriverType = "oracle"
 	DriverSQLServer DriverType = "sqlserver"
 )
@@ -89,6 +91,13 @@ type DriverInfo struct {
 	DefaultDatabase  string     `json:"defaultDatabase,omitempty"`
 	SortOrder        int        `json:"sortOrder"`
 	Notes            string     `json:"notes,omitempty"`
+
+	// SupportsDesign says the table designer can turn a draft of this engine's
+	// table into an ALTER script. It is narrower than Relational: an engine
+	// whose DDL needs clauses the designer does not model (Doris) still browses
+	// tables and edits them through the DDL editor, but gets a read-only field
+	// list in place of the designer.
+	SupportsDesign bool `json:"supportsDesign"`
 }
 
 // SessionInfo describes a live (or recently live) connection held by the

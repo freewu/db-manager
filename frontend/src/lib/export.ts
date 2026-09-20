@@ -5,6 +5,8 @@
  * across the bridge; the backend only writes the finished string to disk.
  */
 import type { CellValue, ColumnMeta, QueryResult } from '../api/types'
+import { qualifiedName, quoteIdent } from './format'
+import { isMySQLFamily } from './sqlFlavor'
 
 function csvCell(value: CellValue): string {
   if (value === null || value === undefined) return ''
@@ -58,8 +60,10 @@ export function toInsertScript(
     return toInsertScriptMongo(target, columns, rows)
   }
 
-  const { driver } = target
-  const table = qualify(target)
+  const { driver, database, schema, object } = target
+  // Every level of the name is quoted on its own; wrapping a qualified name in
+  // one pair of quotes would ask for a table literally called "demo.orders".
+  const table = qualifiedName(driver, database, schema, object)
   const names = columns.map((c) => c.name)
   const literal = (value: CellValue): string => {
     if (value === null || value === undefined) return 'NULL'
@@ -67,14 +71,10 @@ export function toInsertScript(
     if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE'
     return `'${String(value).replace(/'/g, "''")}'`
   }
-  const quotedTable = driver === 'mysql' ? `\`${table}\`` : `"${table}"`
-  const columnList = names
-    .map((n) => (driver === 'mysql' ? `\`${n}\`` : `"${n}"`))
-    .join(', ')
+  const columnList = names.map((n) => quoteIdent(n, driver)).join(', ')
   return rows
     .map(
-      (row) =>
-        `INSERT INTO ${quotedTable} (${columnList}) VALUES (${row.map(literal).join(', ')});`,
+      (row) => `INSERT INTO ${table} (${columnList}) VALUES (${row.map(literal).join(', ')});`,
     )
     .join('\n')
 }
@@ -83,8 +83,8 @@ export function toInsertScript(
 function qualify(target: ExportTarget): string {
   const { driver, database, schema, object } = target
   const parts: string[] = []
-  if (driver === 'mysql' && database) parts.push(database)
-  if (driver !== 'mysql' && driver !== 'sqlite' && schema) parts.push(schema)
+  if (isMySQLFamily(driver) && database) parts.push(database)
+  if (!isMySQLFamily(driver) && driver !== 'sqlite' && schema) parts.push(schema)
   if (driver === 'sqlite' && database && database !== 'main') parts.push(database)
   parts.push(object)
   return parts.join('.')

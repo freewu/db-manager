@@ -82,6 +82,29 @@ func TestPlanAlterMySQL(t *testing.T) {
 	})
 }
 
+// TiDB speaks the MySQL protocol and the same ALTER TABLE forms, so the
+// designer plans it with the MySQL code path while the dialect keeps naming the
+// engine the user connected to.
+func TestPlanAlterTiDBSharesTheMySQLPlan(t *testing.T) {
+	want := models.TableDesign{
+		Object: "orders",
+		Columns: []models.DesignColumn{
+			{Name: "id", OriginalName: "id", DataType: "int", PrimaryKey: true},
+			{Name: "user_id", OriginalName: "user_id", DataType: "int", Nullable: true},
+			{Name: "placed_at", OriginalName: "placed_at", DataType: "timestamp", Nullable: true},
+		},
+		Indexes: []models.DesignIndex{
+			{Name: "idx_orders_user", OriginalName: "idx_orders_user", Columns: []string{"user_id"}},
+			{Name: "idx_orders_placed", OriginalName: "idx_orders_placed", Columns: []string{"placed_at"}},
+			{Name: "idx_orders_user_placed", Columns: []string{"user_id", "placed_at"}},
+		},
+	}
+
+	assertStatements(t, numbers(t, MySQLDialect{Driver: models.DriverTiDB}, want), []string{
+		"ALTER TABLE `shop`.`orders` ADD INDEX `idx_orders_user_placed` (`user_id`, `placed_at`)",
+	})
+}
+
 func TestPlanAlterMySQLPrimaryKeySwapAndRenameIndex(t *testing.T) {
 	want := models.TableDesign{
 		Object: "orders",
