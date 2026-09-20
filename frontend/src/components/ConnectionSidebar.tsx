@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { App as AntApp, Button, Dropdown, Empty, Input, Modal, Space, Tooltip, Tree, Typography } from 'antd'
+import { App as AntApp, Button, Dropdown, Empty, Input, Menu, Modal, Tooltip, Tree, Typography } from 'antd'
 import type { MenuProps, TreeDataNode, TreeProps } from 'antd'
 import {
   AppstoreOutlined,
@@ -21,9 +21,11 @@ import {
   UnorderedListOutlined,
 } from '@ant-design/icons'
 
+import { api, toMessage } from '../api/client'
 import type { ConnectionConfig, DriverInfo, IndexEntry, ObjectInfo, SessionInfo } from '../api/types'
 import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
+import { quoteIdent } from '../lib/format'
 import { useAppStore, type ListScope, type TableView } from '../store/appStore'
 import { objectIcon } from './objectIcon'
 import {
@@ -81,6 +83,11 @@ export function ConnectionSidebar() {
   const [loadedKeys, setLoadedKeys] = useState<React.Key[]>([])
   const [filter, setFilter] = useState('')
   const [manageOpen, setManageOpen] = useState(false)
+  /** Where the user asked for the empty-area context menu, if anywhere. */
+  const [blankMenu, setBlankMenu] = useState<{ x: number; y: number } | null>(null)
+  const blankMenuRef = useRef<HTMLDivElement | null>(null)
+  /** Session that the "New database" dialog is creating a database on. */
+  const [newDatabase, setNewDatabase] = useState<SessionInfo | null>(null)
 
   const driverOfType = useCallback(
     (type: DriverInfo['type'] | undefined) => drivers.find((d) => d.type === type),
@@ -739,32 +746,48 @@ export function ConnectionSidebar() {
 
   /* ---------------------------------------------------------------- menus */
 
-  const savedProfiles = useMemo(
-    () => connections.filter((c) => !sessions.some((s) => s.connectionId === c.id)),
-    [connections, sessions],
-  )
+  /**
+   * Right-click on the empty part of the pane. Rows bring their own menus, and
+   * typing surfaces keep the browser menu, so both are left alone.
+   */
+  const openBlankMenu = useCallback((event: React.MouseEvent) => {
+    const target = event.target as HTMLElement
+    if (target.closest('.ant-tree-treenode, input, textarea, .ant-btn, a')) return
+    event.preventDefault()
+    setBlankMenu({ x: event.clientX, y: event.clientY })
+  }, [])
 
-  const connectMenu: MenuProps = {
-    items:
-      savedProfiles.length === 0
-        ? [{ key: 'none', label: 'Every saved connection is open', disabled: true }]
-        : savedProfiles.map((profile) => ({
-            key: profile.id,
-            label: profile.name,
-            icon: (
-              <img
-                src={driverIconOrLogo(profile.driver)}
-                alt=""
-                className="dm-menu-icon"
-                draggable={false}
-              />
-            ),
-            onClick: () => void connect(profile),
-          })),
-  }
+  // A hand-positioned menu needs its own dismissal rules: antd only manages the
+  // ones it anchors itself.
+  useEffect(() => {
+    if (!blankMenu) return undefined
+    const dismiss = (event: Event) => {
+      if (event.target instanceof Node && blankMenuRef.current?.contains(event.target)) return
+      setBlankMenu(null)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setBlankMenu(null)
+    }
+    document.addEventListener('mousedown', dismiss)
+    document.addEventListener('keydown', onKey)
+    // The menu is pinned to a viewport point, so anything that scrolls moves the
+    // tree out from under it.
+    window.addEventListener('scroll', dismiss, true)
+    window.addEventListener('resize', dismiss)
+    return () => {
+      document.removeEventListener('mousedown', dismiss)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', dismiss, true)
+      window.removeEventListener('resize', dismiss)
+    }
+  }, [blankMenu])
+
+  const blankMenuItems: MenuProps['items'] = [
+    { key: 'new', icon: <PlusOutlined />, label: 'New connection' },
+  ]
 
   return (
-    <div className="dm-sidebar">
+    <div className="dm-sidebar" onContextMenu={openBlankMenu}>
       <div className="dm-sidebar-header">
         <span className="dm-sidebar-title">Connections</span>
         <Tooltip title="New connection">
@@ -828,22 +851,6 @@ export function ConnectionSidebar() {
         )}
       </div>
 
-      <div className="dm-sidebar-footer">
-        <Space.Compact style={{ width: '100%' }}>
-          <Button
-            type="primary"
-            icon={<PlusOutlined />}
-            style={{ flex: 1 }}
-            onClick={() => openEditor()}
-          >
-            New
-          </Button>
-          <Dropdown menu={connectMenu} trigger={['click']} placement="topRight">
-            <Button icon={<ThunderboltOutlined />}>Connect</Button>
-          </Dropdown>
-        </Space.Compact>
-      </div>
-
       <ManageConnectionsModal
         open={manageOpen}
         onClose={() => setManageOpen(false)}
@@ -852,6 +859,25 @@ export function ConnectionSidebar() {
           openEditor(profile)
         }}
       />
+
+      <NewDatabaseModal session={newDatabase} onClose={() => setNewDatabase(null)} />
+
+      {blankMenu ? (
+        <div
+          ref={blankMenuRef}
+          className="dm-blank-menu"
+          style={{ left: blankMenu.x, top: blankMenu.y }}
+        >
+          <Menu
+            items={blankMenuItems}
+            selectable={false}
+            onClick={() => {
+              setBlankMenu(null)
+              openEditor()
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   )
 
@@ -885,6 +911,7 @@ export function ConnectionSidebar() {
 
   function connectionMenuItems(root: RootEntry, session: SessionInfo | undefined): MenuProps['items'] {
     const items: MenuProps['items'] = []
+    const profile = root.profile
     if (session) {
       items.push(
         {
@@ -898,6 +925,21 @@ export function ConnectionSidebar() {
           icon: <ReloadOutlined />,
           label: 'Refresh',
           onClick: () => refreshSession(session.id),
+        },
+        { type: 'divider' as const },
+        {
+          key: 'newDatabase',
+          icon: <DatabaseOutlined />,
+          label: 'New database…',
+          disabled: !canCreateDatabase(root.driver) || session.readOnly,
+          onClick: () => setNewDatabase(session),
+        },
+        {
+          key: 'edit',
+          icon: <EditOutlined />,
+          label: 'Edit connection…',
+          disabled: !profile,
+          onClick: () => profile && openEditor(profile),
         },
         { type: 'divider' as const },
         {
@@ -915,8 +957,7 @@ export function ConnectionSidebar() {
             }),
         },
       )
-    } else if (root.profile) {
-      const profile = root.profile
+    } else if (profile) {
       items.push(
         {
           key: 'connect',
@@ -927,7 +968,7 @@ export function ConnectionSidebar() {
         {
           key: 'edit',
           icon: <EditOutlined />,
-          label: 'Edit connection',
+          label: 'Edit connection…',
           onClick: () => openEditor(profile),
         },
       )
@@ -953,6 +994,14 @@ function indexTooltip(index: IndexEntry): string {
   else if (index.unique) parts.push('UNIQUE')
   if (index.method) parts.push(index.method)
   return parts.join(' · ')
+}
+
+/**
+ * Engine that keeps several databases in one server, so `CREATE DATABASE` makes
+ * sense. File-backed engines (SQLite) and schema-only engines say no.
+ */
+function canCreateDatabase(driver: DriverInfo | undefined): boolean {
+  return Boolean(driver && driver.supportsDatabase && !driver.requiresFile)
 }
 
 /** Colour used when a profile has no explicit colour. */
@@ -1046,6 +1095,88 @@ async function copyText(text: string): Promise<void> {
 }
 
 /* ------------------------------------------------- manage connections modal */
+
+/**
+ * Creates a database on a live session.
+ *
+ * The name is the only input: the statement is rendered from it with the
+ * session driver's quoting rules and shown verbatim before it runs, so there is
+ * no hidden SQL and no hand-typed statement to get wrong.
+ */
+function NewDatabaseModal({
+  session,
+  onClose,
+}: {
+  session: SessionInfo | null
+  onClose: () => void
+}) {
+  const loadDatabases = useAppStore((s) => s.loadDatabases)
+  const { message } = AntApp.useApp()
+  const [name, setName] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  const sql = session && name.trim() ? `CREATE DATABASE ${quoteIdent(name.trim(), session.driver)}` : ''
+
+  // Every way out clears the dialog, so it never reopens on a stale name.
+  const close = () => {
+    setName('')
+    setError(null)
+    setBusy(false)
+    onClose()
+  }
+
+  const submit = async () => {
+    const database = name.trim()
+    if (!session || !database || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api.executeSql({ sessionId: session.id, sql, timeoutMs: 60000 })
+      message.success(`Database ${database} created`)
+      // A new namespace invalidates nothing but the database list itself.
+      void loadDatabases(session.id)
+      close()
+    } catch (err) {
+      setError(toMessage(err))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal
+      open={session !== null}
+      title={session ? `New database on ${session.name}` : 'New database'}
+      okText="Create"
+      confirmLoading={busy}
+      okButtonProps={{ disabled: !sql }}
+      onOk={() => void submit()}
+      onCancel={close}
+      destroyOnHidden
+    >
+      <label className="dm-field-label" htmlFor="dm-new-database-name">
+        Database name
+      </label>
+      <Input
+        id="dm-new-database-name"
+        autoFocus
+        value={name}
+        placeholder="analytics"
+        onChange={(event) => setName(event.target.value)}
+        onPressEnter={() => void submit()}
+      />
+      {error ? (
+        <Typography.Paragraph type="danger" style={{ marginTop: 10, marginBottom: 0 }}>
+          {error}
+        </Typography.Paragraph>
+      ) : (
+        <Typography.Paragraph type="secondary" style={{ marginTop: 10, marginBottom: 0 }}>
+          {sql ? <code>{sql}</code> : 'Name it and the statement appears here.'}
+        </Typography.Paragraph>
+      )}
+    </Modal>
+  )
+}
 
 function ManageConnectionsModal({
   open,

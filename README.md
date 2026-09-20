@@ -146,6 +146,17 @@ MySQL / PostgreSQL / SQLite 仅声明一份 `Spec`（`DSN` 构造函数、`Diale
 过滤掉一个 key 就等于让这棵树在每次渲染时重新加载，即死循环），「有没有数据」的判断
 只在展开事件里用一次。加载失败的分支都带一个 Retry 按钮。
 
+右键菜单就是全部入口（底部没有 New / Connect 按钮）：
+
+| 右键处 | 菜单 |
+| --- | --- |
+| 面板空白处 | New connection |
+| 未连接的连接 | Open connection / Edit connection… |
+| 已连接的连接 | New query / Refresh / New database… / Edit connection… / Disconnect |
+
+「New database…」只要一个库名，语句由 `quoteIdent` 按当前引擎拼好并**先展示再执行**
+（`CREATE DATABASE …`，同样走 `ExecuteSQL`），SQLite 这类文件型引擎与只读会话直接禁用。
+
 ## 测试
 
 ```sh
