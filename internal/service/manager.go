@@ -6,6 +6,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -414,6 +415,70 @@ func (m *Manager) Structure(sessionID, database, schema, object string) (*models
 	ctx, cancel := m.ctx(60 * time.Second)
 	defer cancel()
 	return s.conn.Structure(ctx, database, schema, object)
+}
+
+// --- runtime overview ------------------------------------------------------
+
+// Overview reports how the server behind a live session is doing right now.
+//
+// The engine-specific part comes from the driver (drivers.Overviewer). Three
+// situations are worth answering with a page instead of an error, because the
+// session itself is perfectly healthy:
+//
+//   - an engine that cannot report runtime state at all,
+//   - a user without the privileges a status page needs,
+//
+// so those arrive as Warnings on an otherwise empty page, while a hard failure
+// (a dropped connection) still returns an error.
+func (m *Manager) Overview(sessionID string) (*models.ServerOverview, error) {
+	s, err := m.session(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := m.ctx(60 * time.Second)
+	defer cancel()
+
+	info := s.info()
+	page := &models.ServerOverview{
+		SessionID:     info.ID,
+		Name:          info.Name,
+		Driver:        string(info.Driver),
+		ServerVersion: info.ServerVersion,
+		Database:      info.Database,
+		ReadOnly:      info.ReadOnly,
+		ConnectedAt:   info.ConnectedAt,
+		CollectedAt:   time.Now().UnixMilli(),
+		Warnings:      []string{},
+	}
+
+	started := time.Now()
+	reporter, ok := s.conn.(drivers.Overviewer)
+	switch {
+	case !ok:
+		page.Warnings = append(page.Warnings, fmt.Sprintf(
+			"%s does not report runtime state yet.", s.driver.Info().DisplayName))
+	default:
+		collected, err := reporter.Overview(ctx)
+		switch {
+		case err == nil:
+			// The driver only fills in its engine field and server-side values;
+			// the session fields above stay authoritative.
+			page.MySQL = collected.MySQL
+			page.Postgres = collected.Postgres
+			page.SQLite = collected.SQLite
+			page.Supported = collected.Supported
+			if collected.ServerVersion != "" {
+				page.ServerVersion = collected.ServerVersion
+			}
+			page.Warnings = append(page.Warnings, collected.Warnings...)
+		case apperr.Is(err, apperr.CodeUnsupported):
+			page.Warnings = append(page.Warnings, err.Error())
+		default:
+			return nil, err
+		}
+	}
+	page.ElapsedMS = time.Since(started).Milliseconds()
+	return page, nil
 }
 
 // Graph describes a whole namespace for the ER diagram: objects, columns and

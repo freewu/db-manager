@@ -91,6 +91,7 @@ func spec() sqlbase.Spec {
 			return "postgres"
 		},
 		// PostgreSQL has no SHOW CREATE TABLE; the generic renderer is used.
+		Overview: overview,
 	}
 }
 

@@ -72,11 +72,12 @@ export function ConnectionSidebar() {
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const openDdlTab = useAppStore((s) => s.openDdlTab)
   const openErTab = useAppStore((s) => s.openErTab)
+  const openRuntimeTab = useAppStore((s) => s.openRuntimeTab)
   const closeSession = useAppStore((s) => s.closeSession)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
 
   const { connect, pending } = useConnect()
-  const { modal } = AntApp.useApp()
+  const { message, modal } = AntApp.useApp()
 
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
@@ -88,6 +89,12 @@ export function ConnectionSidebar() {
   const blankMenuRef = useRef<HTMLDivElement | null>(null)
   /** Session that the "New database" dialog is creating a database on. */
   const [newDatabase, setNewDatabase] = useState<SessionInfo | null>(null)
+  /**
+   * Connection whose runtime page a double-click asked for. A profile without a
+   * stored password connects through a prompt that finishes later, so the page
+   * is opened by the effect that watches the session list, not by the click.
+   */
+  const pendingRuntime = useRef<string | null>(null)
 
   const driverOfType = useCallback(
     (type: DriverInfo['type'] | undefined) => drivers.find((d) => d.type === type),
@@ -551,7 +558,10 @@ export function ConnectionSidebar() {
         key: connectionKey,
         title: (
           <NodeMenu items={connectionMenuItems(root, session)}>
-            <span className="dm-connection-node">
+            <span
+              className="dm-connection-node"
+              onDoubleClick={() => openRuntime(root, session)}
+            >
               <span
                 className="dm-connection-dot"
                 style={{ background: root.profile?.color ?? driverColor(root.driver?.type) }}
@@ -706,6 +716,17 @@ export function ConnectionSidebar() {
     },
     [expandedKeys, hasData],
   )
+
+  // A double-click that had to open the connection first: wait for the session
+  // to show up, then reveal its runtime page.
+  useEffect(() => {
+    const wanted = pendingRuntime.current
+    if (!wanted) return
+    const session = sessionForConnection(wanted)
+    if (!session) return
+    pendingRuntime.current = null
+    openRuntimeTab(session.id)
+  }, [openRuntimeTab, sessionForConnection, sessions])
 
   const handleLoad = useCallback<NonNullable<TreeProps['onLoad']>>((keys) => {
     setLoadedKeys(keys as React.Key[])
@@ -907,6 +928,27 @@ export function ConnectionSidebar() {
         onClick: () => void copyText(index.name),
       },
     ]
+  }
+
+  /**
+   * A double-click on a connection asks for its runtime status.
+   *
+   * When the session is up this is a plain tab switch. When it is not, the
+   * connection is opened first and the page follows once it exists — the click
+   * cannot wait for that itself, because a profile without a stored password
+   * opens through a password prompt that finishes much later.
+   */
+  function openRuntime(root: RootEntry, session: SessionInfo | undefined) {
+    if (session) {
+      openRuntimeTab(session.id)
+      return
+    }
+    if (!root.profile) {
+      message.info(`${root.name} has no saved connection to open.`)
+      return
+    }
+    pendingRuntime.current = root.id
+    void connect(root.profile)
   }
 
   function connectionMenuItems(root: RootEntry, session: SessionInfo | undefined): MenuProps['items'] {

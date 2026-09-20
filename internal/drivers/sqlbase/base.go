@@ -78,6 +78,11 @@ type Spec struct {
 
 	// NativeDDL optionally returns the engine's own CREATE statement.
 	NativeDDL func(ctx context.Context, q Querier, database, schema, object string) (string, error)
+
+	// Overview optionally collects the engine's runtime snapshot. Nil for
+	// engines that have nothing to report; Conn.Overview then says so instead
+	// of the UI inventing one.
+	Overview func(ctx context.Context, q Querier, cfg models.ConnectionConfig) (*models.ServerOverview, error)
 }
 
 // Conn is the shared drivers.Conn implementation.

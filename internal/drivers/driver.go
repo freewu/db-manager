@@ -83,6 +83,18 @@ type Grapher interface {
 	Graph(ctx context.Context, database, schema string) (*models.SchemaGraph, error)
 }
 
+// Overviewer is an optional Conn capability: report how the server is doing
+// right now (uptime, connections, cache hit rates, running queries).
+//
+// Every engine answers a different question, so the return value is the union
+// models.ServerOverview: the driver fills in its own field and nothing else.
+// Drivers without runtime reporting leave Spec.Overview nil; Overview then
+// returns apperr.CodeUnsupported and the service turns that into a page that
+// says so.
+type Overviewer interface {
+	Overview(ctx context.Context) (*models.ServerOverview, error)
+}
+
 // FetchRequest is the driver-level page request (no session ids).
 type FetchRequest struct {
 	Database   string

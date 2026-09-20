@@ -24,6 +24,7 @@ import type {
   SavedQuery,
   SchemaGraph,
   ScriptAnalysis,
+  ServerOverview,
   SessionInfo,
   TableDesign,
   TableStructure,
@@ -134,6 +135,9 @@ export const api = {
   /** Dry run for the DDL editor: statement kinds + destructive warnings. */
   analyzeSql: (sessionId: string, sql: string) =>
     invoke<ScriptAnalysis>('AnalyzeSQL', sessionId, sql),
+  /** Live state of one connection: uptime, sessions, cache, running queries. */
+  getServerOverview: (sessionId: string) =>
+    invoke<ServerOverview>('GetServerOverview', sessionId),
   updateCell: (req: CellUpdate) => invoke<number>('UpdateCell', req),
   deleteRow: (req: RowDelete) => invoke<number>('DeleteRow', req),
 

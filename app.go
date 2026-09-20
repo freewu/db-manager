@@ -149,6 +149,15 @@ func (a *App) GetSchemaGraph(sessionID, database, schema string) (*models.Schema
 	return a.manager.Graph(sessionID, database, schema)
 }
 
+// --- runtime overview ------------------------------------------------------
+
+// GetServerOverview reports the live state of one connection (uptime,
+// connections, cache hit rates, running queries). The payload is engine
+// specific: see models.ServerOverview.
+func (a *App) GetServerOverview(sessionID string) (*models.ServerOverview, error) {
+	return a.manager.Overview(sessionID)
+}
+
 // --- scripts (DDL editor) --------------------------------------------------
 
 // AnalyzeSQL inspects a script without running it (statement kinds + warnings).

@@ -103,6 +103,7 @@ func spec() sqlbase.Spec {
 			return ""
 		},
 		NativeDDL: nativeDDL,
+		Overview:  overview,
 	}
 }
 

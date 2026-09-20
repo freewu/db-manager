@@ -426,5 +426,83 @@ export interface SavedQuery {
   updatedAt: number
 }
 
+/** One labelled number on a runtime status page. */
+export interface OverviewMetric {
+  label: string
+  value: string
+  /** What produced the number, shown as a tooltip. */
+  hint?: string
+  /** 'ok' (or absent) and 'warn' are the only states in use. */
+  state?: string
+}
+
+/** A titled block of metrics on a runtime status page. */
+export interface OverviewGroup {
+  title: string
+  note?: string
+  metrics: OverviewMetric[]
+}
+
+/** A small table on a runtime status page (process list, databases, objects). */
+export interface OverviewTable {
+  title: string
+  columns: string[]
+  rows: string[][]
+  note?: string
+}
+
+/** MySQL-specific half of a runtime status page. */
+export interface MySQLOverview {
+  groups: OverviewGroup[]
+  /** SHOW FULL PROCESSLIST, capped; absent when PROCESS is not granted. */
+  processes?: OverviewTable
+}
+
+/** PostgreSQL-specific half of a runtime status page. */
+export interface PostgresOverview {
+  groups: OverviewGroup[]
+  /** pg_database, with size and commit count. */
+  databases?: OverviewTable
+  /** pg_stat_activity rows that are not idle. */
+  activity?: OverviewTable
+}
+
+/** SQLite-specific half of a runtime status page. */
+export interface SQLiteOverview {
+  /** The database file, or ':memory:'. */
+  path: string
+  /** Size on disk in bytes, or -1 when there is no file. */
+  fileSize: number
+  groups: OverviewGroup[]
+  /** Tables, views, indexes and triggers of the main schema. */
+  objects?: OverviewTable
+  /** Files attached to this connection. */
+  attached?: OverviewTable
+}
+
+/**
+ * The runtime status of one live session. Exactly one engine field is set,
+ * chosen by `driver`; the header fields are filled in by the backend service,
+ * so a page with `supported: false` still describes who it is about.
+ */
+export interface ServerOverview {
+  sessionId: string
+  name: string
+  driver: DriverType
+  serverVersion: string
+  database?: string
+  readOnly: boolean
+  connectedAt: number
+  collectedAt: number
+  /** How long the snapshot took to collect. */
+  elapsedMs: number
+  /** False when the engine has no runtime reporting at all. */
+  supported: boolean
+  warnings: string[]
+  mysql?: MySQLOverview
+  postgres?: PostgresOverview
+  sqlite?: SQLiteOverview
+}
+
 /** Shape of the generated Wails bridge on `window.go.main.App`. */
 export type BackendBridge = Record<string, (...args: unknown[]) => Promise<unknown>>

@@ -19,6 +19,7 @@
 - **查询收藏**：查询窗口工具条上的「Favourites」可以把当前 SQL 命名保存（默认用第一行非注释文本作名），下拉里一键载入、重命名或删除；收藏存在 `queries.json` 里，与连接配置互不影响，换窗口、换连接都能用。
 - **ER 图**：在 schema（没有 schema 层的引擎就是 database）节点右键即可打开该命名空间的关系图 —— 一张 `GetSchemaGraph` 就把对象、字段与它们之间的外键取回来，节点按外键方向分层，主键高亮，箭头悬停显示「哪一列引用哪一列」；支持拖动平移、滚轮缩放、按名搜索、隐藏/显示字段、网格开关，点节点直接打开该表，还能把当前这张图导出成自包含的 SVG。跨命名空间的外键画成虚线 stub，读不到字段的对象仍在图里但会列出警告，超过 300 个对象时明确提示只画了前 300 个。
 - **DDL 编辑器**：把对象的定义开成可编辑的脚本窗口 —— 工具条、对象树右键「Edit DDL…」或结构页的「Edit in DDL editor」都能进；编辑器下方是**后端算出来的干跑结果**（逐条语句标出 query / DDL / DML、标红 DROP、TRUNCATE、无 WHERE 的 DELETE/UPDATE，并说明只读连接会拒掉几条），真正点「Run script」时只对破坏性脚本弹二次确认；执行完顺手刷新目录树与索引缓存。
+- **运行情况**：双击连接节点即可打开该连接的「运行情况」页（未连接会先连上，密码框填完再自动打开）；页面上半部分是会话事实与快照时间，下面按引擎各画各的 —— MySQL 给进程列表、连接数、InnoDB 缓冲池与命中率，PostgreSQL 给后端/活动会话/数据库体积与提交率、缓存命中率，SQLite 则是「这是一个文件」的视角（路径、落盘大小、pragma、对象清单与 ATTACH 进来的库）。读不到的项一律显示 `—` 并附一条警告（缺权限、缺统计视图），不会拿 0 冒充；工具条的刷新按钮重新取一次快照。
 - **导出**：CSV / JSON / INSERT 脚本，可写入文件或复制到剪贴板。
 - **外观**：Navicat 式窗口骨架（菜单栏 + icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏。
 
@@ -78,10 +79,10 @@ wails build
 │   ├── config/store.go       # %APPDATA%/db-manager/{connections,queries,state}.json（0600）
 │   ├── models/               # 跨层 DTO，时间统一为 int64 unix ms
 │   ├── drivers/
-│   │   ├── driver.go         # Driver / Conn / Dialect / Grapher 契约 + 注册表（init 注册）
+│   │   ├── driver.go         # Driver / Conn / Dialect / Grapher / Overviewer 契约 + 注册表（init 注册）
 │   │   ├── sqlutil/          # 标识符引用、WHERE / ORDER BY 构造（纯字符串+参数位）
-│   │   ├── sqlbase/          # 通用 database/sql 实现：连接池、分页、脚本执行、DDL、行变更
-│   │   ├── mysql/ postgres/ sqlite/   # 只提供 DSN、Dialect 与目录查询
+│   │   ├── sqlbase/          # 通用 database/sql 实现：连接池、分页、脚本执行、DDL、行变更、运行情况外壳
+│   │   ├── mysql/ postgres/ sqlite/   # 只提供 DSN、Dialect、目录查询与各自的 overview 收集器
 │   │   ├── planned/          # MongoDB / Oracle / SQL Server 占位（implemented=false）
 │   │   └── all/              # 汇总导入，保证 init 注册
 │   └── service/manager.go    # 会话管理、超时、只读校验、审计入口
@@ -89,6 +90,7 @@ wails build
     └── src/
         ├── api/              # 手写类型 + 手写 window.go.main.App 桥接（不依赖生成代码）
         ├── components/       # AppShell / Sidebar / Workspace / TablePane / QueryPane / DataGrid …
+        │   └── overview/     # 运行情况：每个引擎一个视图 + 共用的指标卡片与数据表
         ├── hooks/useConnect  # 连接 + 密码提示流程
         ├── lib/              # tree key 编解码、格式化、导出、品牌素材（assets.ts，@asserts 别名）
         ├── store/            # zustand 全局状态（连接 / 会话 / 标签页 / 浏览器缓存）
@@ -154,8 +156,22 @@ MySQL / PostgreSQL / SQLite 仅声明一份 `Spec`（`DSN` 构造函数、`Diale
 | 未连接的连接 | Open connection / Edit connection… |
 | 已连接的连接 | New query / Refresh / New database… / Edit connection… / Disconnect |
 
+**双击连接节点**是「看它的运行情况」：没连上就先连（该弹密码框就弹，填完再自动打开），
+已经有会话就直接切到那一页。一次点击（展开）保持原来的行为 —— 只连接、不开页面，
+所以「连上了」和「去看看它现在在干什么」是两件事，不会互相打扰。
+
 「New database…」只要一个库名，语句由 `quoteIdent` 按当前引擎拼好并**先展示再执行**
 （`CREATE DATABASE …`，同样走 `ExecuteSQL`），SQLite 这类文件型引擎与只读会话直接禁用。
+
+### 运行情况从哪来
+
+`drivers.Overviewer` 是可选接口，`sqlbase` 提供唯一一份实现，把会话事实（名字、驱动、
+版本、只读、连接时刻）与耗时交给 service 填，各引擎只往 `Spec.Overview` 里挂一个收集器。
+「引擎回答不了这个页面」不是错误，而是一条警告（页面照常渲染会话信息），只有真正取不到
+数据（连接断了）才报错 —— 所以 `CodeUnsupported` 在 service 里被降级成 warning。
+读不到的指标一律是 `-1` / `—`，绝不用 0 冒充；每一条子查询（pg_stat_activity、
+`pg_database_size`、`SHOW FULL PROCESSLIST` …）失败都只降级成自己的那条警告，
+一个权限不足不会让整页白掉。
 
 ## 测试
 
@@ -226,6 +242,7 @@ just publish 0.2.0 "新增 Navicat 风格连接树；索引成为一等资源"
   - [x] 查询收藏：命名 SQL 片段，查询窗口里可载入 / 改名 / 删除
   - [x] DDL 编辑器：对象定义开成可编辑脚本，附逐条语句的干跑预警
   - [x] ER 图：命名空间的关系图，可搜索 / 缩放 / 导出 SVG，点节点开表
+  - [x] 运行情况：双击连接看服务端现状，三个引擎各自一个视图
 - [ ] Phase 2：MongoDB（文档编辑 + 查询语言）、Oracle、SQL Server
 - [ ] Phase 3：SSH 隧道、导入向导、数据对比、插件式扩展
 

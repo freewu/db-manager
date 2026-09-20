@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"dbmanager/internal/drivers"
 )
@@ -91,4 +92,55 @@ func TestGraphFallsBackToStructure(t *testing.T) {
 // plainConn hides everything except the drivers.Conn contract.
 type plainConn struct {
 	drivers.Conn
+}
+
+// The runtime overview is engine specific, but the session-level frame around it
+// (who, which version, how long the snapshot took) is the service's job — that
+// frame is what the UI shows even when the engine has nothing to add.
+func TestOverviewFrameComesFromTheSession(t *testing.T) {
+	manager, _ := testManager(t)
+
+	// The fixture builds its session by hand, so give it the two facts a real
+	// connect records: the version the server reported and when it did so.
+	manager.mu.Lock()
+	manager.sessions["s1"].version = "3.50.0"
+	manager.sessions["s1"].connectedAt = time.Now().UnixMilli()
+	manager.mu.Unlock()
+
+	page, err := manager.Overview("s1")
+	if err != nil {
+		t.Fatalf("overview: %v", err)
+	}
+	if page.SessionID != "s1" || page.Name == "" || page.Driver == "" {
+		t.Fatalf("the page must identify its session: %+v", page)
+	}
+	if page.ServerVersion != "3.50.0" || page.ConnectedAt == 0 || page.CollectedAt == 0 {
+		t.Fatalf("the page must carry the session's own facts: %+v", page)
+	}
+	if !page.Supported || page.SQLite == nil {
+		t.Fatalf("the fixture is SQLite, so its section must be filled in: %+v", page)
+	}
+	if page.ElapsedMS < 0 {
+		t.Fatalf("elapsed time cannot be negative: %d", page.ElapsedMS)
+	}
+
+	// An engine without runtime reporting keeps the same frame and says so
+	// instead of failing: the session is alive, it just has nothing to report.
+	manager.mu.Lock()
+	manager.sessions["s1"].conn = plainConn{manager.sessions["s1"].conn}
+	manager.mu.Unlock()
+
+	quiet, err := manager.Overview("s1")
+	if err != nil {
+		t.Fatalf("overview without a reporter: %v", err)
+	}
+	if quiet.Supported || quiet.SQLite != nil {
+		t.Fatalf("an engine without a reporter must not invent numbers: %+v", quiet)
+	}
+	if len(quiet.Warnings) == 0 {
+		t.Fatal("the page must explain why it is empty")
+	}
+	if _, err := manager.Overview("nope"); err == nil {
+		t.Fatal("expected an error for an unknown session")
+	}
 }

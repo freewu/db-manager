@@ -27,7 +27,7 @@ import type {
 import { databaseKey, FOLDER_LABEL, indexesKey, namespaceKey, objectsKey } from '../lib/tree'
 import { designFrom } from '../lib/design'
 
-export type TabKind = 'query' | 'table' | 'objects' | 'ddl' | 'er'
+export type TabKind = 'query' | 'table' | 'objects' | 'ddl' | 'er' | 'runtime'
 
 /** Sub-views of a table/view window (Navicat-style bottom tab strip). */
 export type TableView = 'data' | 'structure' | 'indexes' | 'foreignKeys' | 'ddl'
@@ -150,6 +150,8 @@ interface AppState {
   /** Opens the ER diagram of one namespace (schema, or database when there is
    * no schema layer). */
   openErTab: (sessionId: string, database: string, schema: string) => void
+  /** Opens the live status page of a connection (one per session). */
+  openRuntimeTab: (sessionId: string) => void
   setTabView: (tabId: string, view: TableView) => void
 
   /**
@@ -542,6 +544,24 @@ export const useAppStore = create<AppState>((set, get) => ({
       title: schema ? `ER · ${schema}` : 'ER diagram',
       database,
       schema,
+    }
+    set((state) => ({
+      tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
+      activeTabId: id,
+      activeSessionId: sessionId,
+    }))
+  },
+
+  openRuntimeTab(sessionId) {
+    // One page per connection: its whole point is to be the place you look at
+    // when you double-click the connection, so a second tab would only be a
+    // stale copy of the same numbers.
+    const id = `runtime:${sessionId}`
+    const tab: WorkspaceTab = {
+      id,
+      kind: 'runtime',
+      sessionId,
+      title: 'Runtime',
     }
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],

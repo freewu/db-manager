@@ -382,6 +382,99 @@ type GraphEdge struct {
 	OnUpdate string   `json:"onUpdate,omitempty"`
 }
 
+// --- server runtime overview ------------------------------------------------+-
+
+// OverviewMetric is one labelled number on a status page.
+//
+// Values are pre-formatted by the driver: the engine knows that "1.5 GiB" and
+// "43%" are the readable forms of its own counters, and the UI must not have to
+// learn each engine's units.
+type OverviewMetric struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+	// Hint explains where the number comes from (the variable or view it was
+	// read from), shown as a tooltip.
+	Hint string `json:"hint,omitempty"`
+	// State is "", "good", "warn" or "bad" and only drives colour.
+	State string `json:"state,omitempty"`
+}
+
+// OverviewGroup is a titled block of metrics.
+type OverviewGroup struct {
+	Title   string           `json:"title"`
+	Note    string           `json:"note,omitempty"`
+	Metrics []OverviewMetric `json:"metrics"`
+}
+
+// OverviewTable is a small titled table (process list, database sizes, objects).
+type OverviewTable struct {
+	Title   string     `json:"title"`
+	Columns []string   `json:"columns"`
+	Rows    [][]string `json:"rows"`
+	Note    string     `json:"note,omitempty"`
+}
+
+// ServerOverview is the runtime snapshot of one live session.
+//
+// Exactly one of the engine fields is set, and it always matches Driver. Each
+// engine reports different things — MySQL has a process list, PostgreSQL has
+// per-database statistics, SQLite has a file on disk — so the payload is a union
+// rather than one shape every engine has to fill in. The UI picks the matching
+// view instead of branching per field.
+type ServerOverview struct {
+	SessionID string `json:"sessionId"`
+	Name      string `json:"name"`
+	Driver    string `json:"driver"`
+	// ServerVersion is the same string the tree shows.
+	ServerVersion string `json:"serverVersion"`
+	Database      string `json:"database,omitempty"`
+	ReadOnly      bool   `json:"readOnly"`
+	ConnectedAt   int64  `json:"connectedAt"`
+	CollectedAt   int64  `json:"collectedAt"`
+	// ElapsedMS is how long the snapshot took; a slow status page is itself a
+	// symptom worth showing.
+	ElapsedMS int64 `json:"elapsedMs"`
+	// Supported is false when the engine has no runtime reporting at all; the UI
+	// then shows only the session header and Warnings.
+	Supported bool `json:"supported"`
+	// Warnings lists sections that could not be read (missing privileges, an
+	// older server version). The rest of the page still renders.
+	Warnings []string `json:"warnings"`
+
+	MySQL    *MySQLOverview    `json:"mysql,omitempty"`
+	Postgres *PostgresOverview `json:"postgres,omitempty"`
+	SQLite   *SQLiteOverview   `json:"sqlite,omitempty"`
+}
+
+// MySQLOverview is the MySQL/MariaDB status page: global status counters
+// grouped by theme, plus the live process list.
+type MySQLOverview struct {
+	Groups    []OverviewGroup `json:"groups"`
+	Processes *OverviewTable  `json:"processes,omitempty"`
+}
+
+// PostgresOverview is the PostgreSQL status page: server settings and activity
+// counters, the size of every database, and the queries currently running.
+type PostgresOverview struct {
+	Groups    []OverviewGroup `json:"groups"`
+	Databases *OverviewTable  `json:"databases,omitempty"`
+	Activity  *OverviewTable  `json:"activity,omitempty"`
+}
+
+// SQLiteOverview is the SQLite status page: the file itself, the pragmas that
+// describe the database format, and what is stored in it.
+type SQLiteOverview struct {
+	// Path is the database file, or ":memory:" for a transient database.
+	Path string `json:"path"`
+	// FileSize is the size on disk in bytes, or -1 when there is no file.
+	FileSize int64           `json:"fileSize"`
+	Groups   []OverviewGroup `json:"groups"`
+	Objects  *OverviewTable  `json:"objects,omitempty"`
+	// Attached lists the ATTACHed files, which is SQLite's equivalent of the
+	// other databases on a server.
+	Attached *OverviewTable `json:"attached,omitempty"`
+}
+
 // SortSpec is one ORDER BY entry of a data-grid request.
 type SortSpec struct {
 	Column string `json:"column"`

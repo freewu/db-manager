@@ -93,6 +93,7 @@ func spec() sqlbase.Spec {
 		DSN:               buildDSN,
 		BootstrapDatabase: func(models.ConnectionConfig) string { return "main" },
 		NativeDDL:         nativeDDL,
+		Overview:          overview,
 	}
 }
 
