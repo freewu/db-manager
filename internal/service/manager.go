@@ -237,6 +237,18 @@ func (m *Manager) Open(req models.OpenRequest) (models.SessionInfo, error) {
 		return models.SessionInfo{}, err
 	}
 
+	// A secret typed into the connect prompt is written back when the profile
+	// opted into "remember password", so the next connect does not have to ask
+	// again (the dialog promises exactly that). The store keeps the password only
+	// when SavePassword is set, so this is a no-op for every other profile — and
+	// it is best effort: the session is already up, failing the connect because
+	// the file could not be rewritten would be worse than asking once more.
+	if req.Password != "" && cfg.SavePassword && cfg.ID != "" {
+		if stored, err := m.store.Upsert(cfg); err == nil {
+			cfg.Password = stored.Password
+		}
+	}
+
 	s := &session{
 		id:          uuid.NewString(),
 		cfg:         cfg,

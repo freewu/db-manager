@@ -31,12 +31,17 @@ export function useConnect(): ConnectContextValue {
 /**
  * Owns the "open a session" flow.
  *
- * Passwords only ever live in this component's local state for the duration of
- * the prompt; the backend decides whether to persist one based on the profile's
- * `savePassword` flag.
+ * Connecting is optimistic: the profile is tried with whatever it already has —
+ * a stored password, or nothing at all — because plenty of servers (a local
+ * `root`, a freshly created PostgreSQL role) want no password, and a prompt for
+ * them is pure friction. The dialog only shows up once the server has refused
+ * an attempt without a secret; a password typed there goes to the backend, which
+ * stores it when the profile opted into "remember password", so the same profile
+ * is never asked twice.
  */
 export function ConnectProvider({ children }: { children: ReactNode }) {
   const openConnection = useAppStore((s) => s.openConnection)
+  const refreshConnections = useAppStore((s) => s.refreshConnections)
   const { message } = AntApp.useApp()
 
   const [pendingId, setPendingId] = useState<string | null>(null)
@@ -51,6 +56,10 @@ export function ConnectProvider({ children }: { children: ReactNode }) {
   // that is already on screen (the explorer can ask again while the dialog is
   // up) must not wipe what the user has typed into it.
   const prompted = useRef<string | null>(null)
+  // Profiles the server has already turned away once when we asked without a
+  // password. Remembered so the next attempt opens the dialog straight away
+  // instead of paying for another failed round trip.
+  const needPassword = useRef<Set<string>>(new Set())
 
   const showPrompt = useCallback((config: ConnectionConfig) => {
     if (prompted.current !== config.id) setPassword('')
@@ -58,7 +67,12 @@ export function ConnectProvider({ children }: { children: ReactNode }) {
     setPrompt(config)
   }, [])
 
-  const open = useCallback(
+  /**
+   * One attempt at opening a session. Nothing is asked of the user here: the
+   * caller decides whether the failure deserves a prompt. Returns the error
+   * message, or `null` when the session is up.
+   */
+  const attempt = useCallback(
     async (config: ConnectionConfig, secret?: string) => {
       setPendingId(config.id)
       try {
@@ -68,34 +82,47 @@ export function ConnectProvider({ children }: { children: ReactNode }) {
           readOnly: config.readOnly,
         })
         message.success(`Connected to ${session.name}`)
-        return true
+        needPassword.current.delete(config.id)
+        // A secret typed into the prompt may have just been written to the
+        // profile; re-reading the list is what flips `hasPassword`, so the next
+        // click already knows there is nothing to ask for.
+        if (secret) await refreshConnections()
+        return null
       } catch (error) {
-        const text = toMessage(error)
-        if (config.driver === 'sqlite') {
-          message.error(text)
-        } else {
-          // Offer the credential prompt so the user can retry or fix the secret.
-          showPrompt(config)
-          setPromptError(text)
-        }
-        return false
+        return toMessage(error)
       } finally {
         setPendingId(null)
       }
     },
-    [message, openConnection, showPrompt],
+    [message, openConnection, refreshConnections],
   )
 
   const connect = useCallback(
     async (config: ConnectionConfig) => {
+      // A file needs no credentials, and a profile that already holds a password
+      // has everything the server can ask for: go straight at it and report what
+      // the server says — asking again would be asking the user to retype a
+      // secret the app already has.
       if (config.driver === 'sqlite' || config.hasPassword) {
-        await open(config)
+        const failure = await attempt(config)
+        if (failure) message.error(failure)
         return
       }
+
+      // No stored secret. If this profile already refused an anonymous attempt,
+      // ask right away; otherwise try it first and only ask once it says no.
+      if (needPassword.current.has(config.id)) {
+        setPromptError(null)
+        showPrompt(config)
+        return
+      }
+      const failure = await attempt(config)
+      if (!failure) return
+      needPassword.current.add(config.id)
       showPrompt(config)
-      setPromptError(null)
+      setPromptError(failure)
     },
-    [open, showPrompt],
+    [attempt, message, showPrompt],
   )
 
   const closePrompt = useCallback(() => {
@@ -110,13 +137,14 @@ export function ConnectProvider({ children }: { children: ReactNode }) {
     busy.current = true
     setSubmitting(true)
     try {
-      const ok = await open(prompt, password)
-      if (ok) closePrompt()
+      const failure = await attempt(prompt, password)
+      if (!failure) closePrompt()
+      else setPromptError(failure)
     } finally {
       busy.current = false
       setSubmitting(false)
     }
-  }, [closePrompt, open, password, prompt])
+  }, [attempt, closePrompt, password, prompt])
 
   const value = useMemo<ConnectContextValue>(
     () => ({ connect, pending: pendingId }),
