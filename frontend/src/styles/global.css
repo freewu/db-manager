@@ -1468,6 +1468,9 @@ body {
   width: 380px;
   max-width: 72vw;
   z-index: 20;
+  /* The footer is right aligned for its buttons, and the answer inherits it:
+     a server version and an error message read from the left. */
+  text-align: left;
 }
 
 /* Floating, so it reads as something on top of the form and not as a section
