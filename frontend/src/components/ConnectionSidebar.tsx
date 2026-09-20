@@ -79,11 +79,21 @@ export function ConnectionSidebar() {
   const setActiveSession = useAppStore((s) => s.setActiveSession)
 
   const { connect, pending } = useConnect()
-  const { message, modal } = AntApp.useApp()
+  const { message } = AntApp.useApp()
 
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
   const [loadedKeys, setLoadedKeys] = useState<React.Key[]>([])
+
+  /**
+   * Nodes the user opened by expanding them.
+   *
+   * `loadData` also runs for a node that is merely *still* expanded when the
+   * session behind it goes away — that is why Disconnect used to open a fresh
+   * session a moment later and the node kept looking connected. Only an expand
+   * asks for a connection; the entry is consumed by the first load that sees it.
+   */
+  const openedByUser = useRef(new Set<string>())
   const [filter, setFilter] = useState('')
   const [manageOpen, setManageOpen] = useState(false)
   /** Where the user asked for the empty-area context menu, if anywhere. */
@@ -644,7 +654,6 @@ export function ConnectionSidebar() {
     connections,
     driverOfType,
     loadDatabases,
-    modal,
     openQueryTab,
     pending,
     refreshSession,
@@ -669,10 +678,15 @@ export function ConnectionSidebar() {
             await loadDatabases(session.id)
             return
           }
+          // A node whose session is gone still gets loaded while it is expanded
+          // (rc-tree re-runs `loadData` until the load reports back), and
+          // reconnecting there silently undoes the Disconnect.
+          if (!openedByUser.current.delete(String(node.key))) break
           const profile = connections.find((c) => c.id === ref.connectionId)
           if (profile) await connect(profile)
           break
-        }        case 'db': {
+        }
+        case 'db': {
           const session = sessions.find((s) => s.id === ref.sessionId)
           if (session && driverOfType(session.driver)?.supportsSchema) {
             await loadSchemas(ref.sessionId, ref.database)
@@ -757,6 +771,7 @@ export function ConnectionSidebar() {
       // another try. Drop those keys from `loadedKeys` once, so rc-tree runs a
       // single fresh load instead of retrying on every render.
       if (fresh.length === 0) return
+      for (const key of fresh) openedByUser.current.add(String(key))
       const retry = new Set(fresh.map(String))
       setLoadedKeys((current) => {
         const kept = current.filter((key) => !retry.has(String(key)) || hasData(String(key)))
@@ -1045,14 +1060,9 @@ export function ConnectionSidebar() {
           icon: <DisconnectOutlined />,
           label: 'Disconnect',
           danger: true,
-          onClick: () =>
-            modal.confirm({
-              title: `Disconnect from ${session.name}?`,
-              content: 'Tabs belonging to this connection will be closed.',
-              okText: 'Disconnect',
-              okButtonProps: { danger: true },
-              onOk: () => closeSession(session.id),
-            }),
+          // No confirmation: the profile is stored, so connecting again is one
+          // click away, and only the tabs of this connection are closed.
+          onClick: () => void closeSession(session.id),
         },
       )
     } else if (profile) {
