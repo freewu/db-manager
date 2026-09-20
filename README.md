@@ -2,29 +2,30 @@
 
 使用 **Wails v2 + React + Vite + Justfile** 开发的关系型数据库管理工具，打包为 Windows 桌面应用。
 
-第一阶段支持 **MySQL / PostgreSQL / SQLite**；驱动层已为非关系型引擎预留抽象，第二阶段可直接接入 **MongoDB / Oracle / SQL Server**，无需改动 service 与 UI 层。
+支持 **MySQL / PostgreSQL / SQLite / MongoDB**；驱动层不假设关系模型，文档型引擎走的是同一套 `Driver / Conn / Dialect` 契约，service 与 UI 只问能力、不问引擎名。Oracle / SQL Server 的占位仍在（见 `internal/drivers/planned`），但暂不上菜单。
 
 > 在本仓库写代码前先读 [`AGENTS.md`](AGENTS.md)：每次开发完成必须 commit + push，本地打包用 `just release`，发版走 `just publish <x.y.z>` 触发 GitHub Actions 打出三平台免安装可执行文件。
 
 ## 功能
 
 - **连接管理**：连接配置的增删改查、连通性测试、SQLite 文件选择、TLS（CA / 证书 / 私钥）、自定义 DSN 参数、只读标记、颜色标签、密码可选保存。新建连接先点出**驱动菜单**（命令条 `Connection`、连接树的 `+`、`File ▸ New Connection`、面板空白处右键，四处挂的是同一份列表，就展开在你刚点的那个东西下面），再落到**这个引擎自己的那一页** —— 走网络的要地址、端口、账号与 TLS，SQLite 只要一个文件加一个附加库别名，两边不会互相看到无关字段（保存下来的配置也照着这一页来，文件型连接不会混进 host / port / ssl）；编辑已有连接同样按它的驱动打开对应那页。
-- **对象浏览器**：会话 → 数据库 → Schema → 表 / 视图 / 索引 的懒加载树，右键菜单支持打开数据、新建查询、复制名称。
+- **对象浏览器**：会话 → 数据库 → Schema → 表 / 视图 / 索引 的懒加载树，右键菜单支持打开数据、新建查询、复制名称；文档型引擎这里是 database → Collections / Indexes，没有 schema 层，SQL 专属的入口（新建 DDL 脚本、ER 图、设计对象）自动不出现。
+- **MongoDB**：连接（含副本集多主机、`mongodb+srv`、TLS、认证库）、集合浏览（文档数 / 体积 / 索引）、数据网格的过滤排序与分页、双击改标量字段、批量删文档、索引列表与定义脚本、运行情况页（serverStatus + 每库 dbStats）。查询窗口跑的是 **mongosh 风格的 shell**（`db.orders.find({...}).sort({ts: -1}).limit(20)`），不是 SQL。
 - **对象列表**：点击树里的表 / 视图 / 索引文件夹，在右侧开出 Navicat 风格的对象网格（名称 / 类型 / 行数 / 大小 / 引擎 / 注释，索引列还有所属表 / 列 / 唯一性 / 主键 / 方法），支持列排序、列筛选、底部关键字过滤，单击打开对象、双击进入设计视图。
 - **数据网格**：分页、服务端排序、服务端过滤（14 种操作符）、列宽自适应、长文本悬浮预览、多选、行详情抽屉（JSON / INSERT 预览）。
 - **行编辑**：双击单元格内联编辑、批量删除选中行；所有写操作都以主键为条件并**全部使用参数绑定**。
-- **SQL 编辑器**：基于 CodeMirror 6，按驱动切换方言、SQL 语法高亮与补全、多语句执行、执行历史、`Ctrl/Cmd+Enter` 执行全部、`Ctrl/Cmd+Shift+Enter` 执行选中。
-- **结构查看器**：列、索引、外键、原始 DDL（优先使用引擎原生 DDL），DDL 可复制或导出。
+- **SQL 编辑器**：基于 CodeMirror 6，按驱动切换语言（MongoDB 用 JavaScript，其余用各自方言）、语法高亮与补全、多语句执行、执行历史、`Ctrl/Cmd+Enter` 执行全部、`Ctrl/Cmd+Shift+Enter` 执行选中。
+- **结构查看器**：列、索引、外键、原始 DDL（优先使用引擎原生 DDL），DDL 可复制或导出；文档型引擎的「结构」页是**抽样得到的字段表**（字段名 / 类型 / 是否可能缺失），并说明集合本身没有 schema。
 - **表设计器**：表格窗口的「结构」页就是编辑器 —— 直接改字段名 / 类型 / NULL / 默认值 / 主键 / 自增 / 注释，增删索引，右侧实时渲染将要执行的 SQL 与引擎限制警告；保存前无需联网猜测，保存时逐条执行并如实报告「第几条失败」（MySQL / PostgreSQL / SQLite 各自的限制都写在警告里）。
 - **查询收藏**：查询窗口工具条上的「Favourites」可以把当前 SQL 命名保存（默认用第一行非注释文本作名），下拉里一键载入、重命名或删除；收藏存在 `queries.json` 里，与连接配置互不影响，换窗口、换连接都能用。
 - **ER 图**：在 schema（没有 schema 层的引擎就是 database）节点右键即可打开该命名空间的关系图 —— 一张 `GetSchemaGraph` 就把对象、字段与它们之间的外键取回来，节点按外键方向分层，主键高亮，箭头悬停显示「哪一列引用哪一列」；支持拖动平移、滚轮缩放、按名搜索、隐藏/显示字段、网格开关，点节点直接打开该表，还能把当前这张图导出成自包含的 SVG。跨命名空间的外键画成虚线 stub，读不到字段的对象仍在图里但会列出警告，超过 300 个对象时明确提示只画了前 300 个。
-- **DDL 编辑器**：把对象的定义开成可编辑的脚本窗口 —— 工具条、对象树右键「Edit DDL…」或结构页的「Edit in DDL editor」都能进；编辑器下方是**后端算出来的干跑结果**（逐条语句标出 query / DDL / DML、标红 DROP、TRUNCATE、无 WHERE 的 DELETE/UPDATE，并说明只读连接会拒掉几条），真正点「Run script」时只对破坏性脚本弹二次确认；执行完顺手刷新目录树与索引缓存。
+- **DDL 编辑器**：把对象的定义开成可编辑的脚本窗口（MongoDB 下就是集合的定义脚本与 shell 查询） —— 工具条、对象树右键「Edit DDL…」或结构页的「Edit in DDL editor」都能进；编辑器下方是**后端算出来的干跑结果**（逐条语句标出 query / DDL / DML、标红 DROP、TRUNCATE、无 WHERE 的 DELETE/UPDATE，MongoDB 下则是 `drop()` / `dropDatabase()` / 无 filter 的 `deleteMany`，并说明只读连接会拒掉几条），真正点「Run script」时只对破坏性脚本弹二次确认；执行完顺手刷新目录树与索引缓存。
 - **窗口即应用**：右键不再弹出 WebView 自带的那套菜单（后退 / 刷新 / 另存为 / 打印 / 检查），
   右键要么什么都不做，要么就是应用自己的菜单（连接树等）；文本框与 SQL 编辑器是例外 —— 那里保留系统菜单，
   右键粘贴照旧可用，其它地方用 `Ctrl+C` / `Ctrl+V`。
 - **运行情况**：双击连接节点即可打开该连接的「运行情况」页（未连接会先连上，密码框填完再自动打开）；页面上半部分是会话事实与快照时间，下面按引擎各画各的 —— MySQL 给进程列表、连接数、InnoDB 缓冲池与命中率，PostgreSQL 给后端/活动会话/数据库体积与提交率、缓存命中率，SQLite 则是「这是一个文件」的视角（路径、落盘大小、pragma、对象清单与 ATTACH 进来的库）。读不到的项一律显示 `—` 并附一条警告（缺权限、缺统计视图），不会拿 0 冒充；工具条的刷新按钮重新取一次快照。
 - **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（只画一个 GitHub 头像，悬停显示昵称、点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection / Open，以及连接树的右键菜单。
-- **导出**：CSV / JSON / INSERT 脚本，可写入文件或复制到剪贴板。
+- **导出**：CSV / JSON / INSERT 脚本（MongoDB 下是 `insertMany` 脚本，按列的 BSON 类型还原 `$oid` / `$date` / 文档字面量），可写入文件或复制到剪贴板。
 - **外观**：Navicat 式窗口骨架（菜单栏 + icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏。
 
 ## 环境要求
@@ -101,11 +102,13 @@ wails build
 │   ├── config/store.go       # %APPDATA%/db-manager/{connections,queries,state}.json（0600）
 │   ├── models/               # 跨层 DTO，时间统一为 int64 unix ms
 │   ├── drivers/
-│   │   ├── driver.go         # Driver / Conn / Dialect / Grapher / Overviewer 契约 + 注册表（init 注册）
-│   │   ├── sqlutil/          # 标识符引用、WHERE / ORDER BY 构造（纯字符串+参数位）
+│   │   ├── driver.go         # Driver / Conn / Dialect / Grapher / Overviewer / Analyzer 契约 + 注册表（init 注册）
+│   │   ├── format/           # 指标格式化（字节 / 计数 / 时长 / 百分比），两个 overview 实现共用
+│   │   ├── sqlutil/          # 标识符引用、WHERE / ORDER BY 构造（纯字符串+参数位）、脚本干跑
 │   │   ├── sqlbase/          # 通用 database/sql 实现：连接池、分页、脚本执行、DDL、行变更、运行情况外壳
 │   │   ├── mysql/ postgres/ sqlite/   # 只提供 DSN、Dialect、目录查询与各自的 overview 收集器
-│   │   ├── planned/          # MongoDB / Oracle / SQL Server 占位（implemented=false）
+│   │   ├── mongodb/          # 官方 v2 驱动：文档 ↔ 表格映射、shell 解析与执行、索引、运行情况
+│   │   ├── planned/          # Oracle / SQL Server 占位（`Infos()` 暂不返回，`Parked()` 留着路线图）
 │   │   └── all/              # 汇总导入，保证 init 注册
 │   └── service/manager.go    # 会话管理、超时、只读校验、审计入口
 └── frontend/
@@ -114,9 +117,9 @@ wails build
         ├── components/       # AppShell / Sidebar / Workspace / TablePane / QueryPane / DataGrid …
         │   ├── AboutProject.tsx  # 项目信息（技术栈徽章 / 项目地址 / 开发者），空态页与 Help → About 共用
         │   └── overview/     # 运行情况：每个引擎一个视图 + 共用的指标卡片与数据表
-        ├── connection/       # 每种驱动一页连接表单（MysqlConnect / PostgresConnect / SqliteConnect）+ 注册表
+        ├── connection/       # 每种驱动一页连接表单（Mysql / Postgres / Sqlite / Mongodb）+ 注册表
         ├── hooks/useConnect  # 先试后问的连接流程
-        ├── lib/              # tree key 编解码、格式化、导出、项目信息（about.ts）、品牌素材（assets.ts，@asserts 别名）
+        ├── lib/              # tree key 编解码、格式化、导出、驱动能力（capabilities.ts）、项目信息（about.ts）、品牌素材（assets.ts，@asserts 别名）
         ├── store/            # zustand 全局状态（连接 / 会话 / 标签页 / 浏览器缓存）
         └── styles/global.css
 ```
@@ -130,7 +133,13 @@ wails build
 「database → collection → field」映射实现，`Execute` 则翻译为自己的查询语言。
 新增引擎只需实现 `Driver` 并在 `init()` 中 `drivers.Register`。
 少数能力是**可选**的：比如 ER 图需要的 `drivers.Grapher`（一次取回整个命名空间），
-`sqlbase` 已经实现，没实现的驱动由 service 退化成逐个对象的 `Structure`，图照样能画。
+`sqlbase` 已经实现，没实现的驱动由 service 退化成逐个对象的 `Structure`，图照样能画；
+DDL 编辑器要的 `drivers.Analyzer`（脚本干跑）同理 —— SQL 引擎用 `sqlutil` 的关键字启发式，
+MongoDB 用自己的解析器回答，因为 `db.orders.drop()` 认不出任何 SQL 关键字。
+
+**「引擎能不能做这件事」由后端说，前端只读结果**：`DriverInfo.relational` / `supportsDatabase` /
+`supportsSchema` 决定界面上出现什么（`frontend/src/lib/capabilities.ts`），前端不按引擎名写 if ——
+`driver !== 'mongodb'` 这种判断只对一次，再加一个文档型引擎就全是洞。
 
 ### `sqlbase` 用一个包实现全部 SQL 引擎
 
@@ -190,7 +199,8 @@ URI userinfo 打码。`HasPassword` 为真的连接要是连不上，只报错�
    菜单项的 key 带前缀（`file.new.mysql`），`driverFromKey()` 只取最后一段。
 
 页面在 `frontend/src/connection/`：`shared.tsx` 放各页共用的字段零件（`HostPortFields`、`CredentialsFields`、
-`TlsFields`、`FilePathField`…），`MysqlConnect.tsx` / `PostgresConnect.tsx` / `SqliteConnect.tsx` 各导出一个
+`TlsFields`、`FilePathField`…），`MysqlConnect.tsx` / `PostgresConnect.tsx` / `SqliteConnect.tsx` /
+`MongodbConnect.tsx` 各导出一个
 `DriverForm = { Basic, Security?, Advanced?, summary }`，`index.ts` 的 `DRIVER_FORMS` 是唯一注册点 ——
 加引擎就是加一个文件加一行注册。
 `Basic` / `Security` / `Advanced` 就是弹窗里那三条分割线 tab（默认 `Basic`），驱动没填的 tab 不出现
@@ -200,6 +210,48 @@ URI userinfo 打码。`HasPassword` 为真的连接要是连不上，只报错�
 
 三个 tab 的字段**一起挂载**（非当前 tab 只是 `hidden`），所以按保存时 `validateFields()` 一次校验全部；
 某个必填项出错就跳回它所在的 tab（`FIELD_TAB` 那张表），否则红字停在看不见的地方。
+
+### 文档型引擎怎么接进来
+
+MongoDB 不从 `sqlbase` 继承任何东西（那个包是 `database/sql` 专用），`internal/drivers/mongodb`
+是官方 `go.mongodb.org/mongo-driver/v2` 之上的一层映射：
+
+| 关系型 | MongoDB | 说明 |
+| --- | --- | --- |
+| database | database | 同名，`Databases()` 隐藏 `config` / `local`，`admin` 留着 |
+| schema | — | `SupportsSchema=false`，集合直接挂在库下 |
+| table | collection | `Objects()` 返回 `KindCollection`，行数 / 体积来自 `$collStats`（有界并发，超上限就跳过） |
+| column | field | 没有 schema：`Structure()` 抽样最多 100 条文档推断字段与类型并集（`int32 \| string` 照实写） |
+| index | index | `listIndexes`，`_id_` 排最前，文本 / 地理索引各有类型标注 |
+| DDL | 定义脚本 | 可重放的 `db.createCollection(...)` + `createIndex(...)`，集合名不是普通标识符时用 `db.getCollection("…")` |
+| SQL | shell | `db.<coll>.<cmd>(...)`、`db.getCollection("…")`、`db.<cmd>(...)`、`show dbs\|collections` |
+
+几条必须记住的取舍：
+
+- **数据网格里的值都是文本**，因为 Wails 桥只能递 JSON：`ObjectID` 走 24 位 hex、时间走 ISO 文本、
+  文档与数组走扩展 JSON。`UpdateCell` / `DeleteRow` 时再把 hex 还原成真正的 `ObjectID`，
+  非标量字段（文档、数组）在网格里**只读** —— 用一个字符串覆盖一个文档不是编辑，是删数据。
+- **filter 值只有是合法 JSON 才保类型**，其余按裸字符串；`_id` 列上的 24 位 hex 自动升级为 `ObjectID`
+  （这里踩过坑：`json.Decoder` 只读第一个值，`"507f1f77bcf86cd799439011"` 会被解析成数字 `507`，
+  过滤器于是静默匹配不到任何东西 —— 现在用 `json.Unmarshal`，尾随垃圾直接报错）。
+- **扩展 JSON 的 `$` 外壳会被还原成真正的 BSON 类型**（`unwrapExtJSON`）：驱动把 `{"$oid": "…"}` 解成
+  单键文档而不是 `ObjectID`，原样发到服务端就变成「拿子文档去匹配 ObjectID」—— 又是静默零命中。
+  现在 `{"$oid": …}` / `{"$date": …}` / `$numberLong` / `$numberInt` / `$numberDecimal` / `$timestamp` /
+  `$binary` / `$regularExpression` / `$minKey` / `$maxKey` 都会重建，但**同时是查询操作符的键不碰**
+  （`{"$regex": "…"}` 仍旧是操作符，它的类型写法是 `$regularExpression`）。外壳里的值不合法时直接报错
+  （网格里退化成「这是字面文本」），不会静默当子文档用。
+- **shell 认 mongosh 的字面量**：`ObjectId(...)` / `ISODate(...)` / `new Date(...)` / `NumberLong` / `NumberInt` /
+  `NumberDecimal` / `Timestamp` / `RegExp` / `UUID` / `BinData` / `MinKey` / `MaxKey`，以及 JS 裸键对象
+  `{sku: "a"}`。字面量层只做「拼写重写」，值的解析与重建交给 `bson` 的扩展 JSON 解析加上
+  `unwrapExtJSON`（外壳里的值合不合法由后者说了算）；`true` / `false` / `null` 与写错的裸标识符不会被
+  顺手变成字符串。零参数的非确定写法（`ObjectId()`、`ISODate()`）报错而不是就地生成 —— 每次执行结果
+  都不一样不是好事。
+- **`createIndex` 不写名字时按 shell 规则补名**（`{"sku": 1}` → `sku_1`，`{a: 1, b: -1}` → `a_1_b_-1`）：
+  `createIndexes` 命令要求 `name`，而 shell 是自动推出来的。
+- **`Execute` 的库来自请求**，整段脚本共用一个库（shell 里没有 `use`），语句按顶层 `;` 与换行切分，
+  多条语句都进 `Messages`，返回的表格是最后一条产生结果集的语句。
+- **只读会话**由驱动自己拦：写命令表（`insert*` / `update*` / `delete*` / `drop*` / `createIndex*` …）命中即拒，
+  干跑面板也会提前说「这几条会被拒」。
 
 ### 连接树
 
@@ -213,7 +265,7 @@ URI userinfo 打码。`HasPassword` 为真的连接要是连不上，只报错�
 
 | 右键处 | 菜单 |
 | --- | --- |
-| 面板空白处 | 引擎列表（MySQL / PostgreSQL / SQLite，未实现的置灰） |
+| 面板空白处 | 引擎列表（MySQL / PostgreSQL / SQLite / MongoDB） |
 | 未连接的连接 | Open connection / Edit connection… |
 | 已连接的连接 | New query / Refresh / New database… / Edit connection… / Disconnect |
 
@@ -267,6 +319,20 @@ just test
 无 `WHERE` 的 `DELETE` 要算），不依赖任何数据库；ER 图在 SQLite 上端到端跑一遍
 （外键方向、主键/可空标记、跨命名空间的目标名），service 层再用一个只实现 `Conn`
 的包装验证「没有 `Grapher` 时退化成逐对象 `Structure`」这条路。
+
+`internal/drivers/mongodb` 是纯单元测试加一组**默认跳过**的集成测试：连接串拼装、TLS 三档、
+索引信息、shell 的词法 / 参数解析（`SplitStatements` / `ParseStatement` / 各种 JSON 值）、
+BSON 值到单元格文本的映射、filter / sort 构造、定义脚本的往返、干跑分类都在不连库的情况下跑。
+要在真实实例上跑那组集成测试时：
+
+```sh
+DMB_TEST_MONGODB_HOST=127.0.0.1 go test ./internal/drivers/mongodb/ -run Integration -v
+```
+
+它会建一个 `dmb_test_<纳秒>` 库、塞几条订单文档，跑完自己 `dropDatabase`，
+覆盖连接与版本、集合与结构、分页与过滤、单元格更新与删行、脚本执行（多语句、`show`、
+`createIndex`、只读拒绝）、运行情况页的每个分组。没设 `DMB_TEST_MONGODB_HOST` 时全部 skip，
+所以 CI 不需要装 mongod。
 
 ## 发布
 
@@ -322,8 +388,9 @@ just publish 0.2.0 "新增 Navicat 风格连接树；索引成为一等资源"
   - [x] 查询收藏：命名 SQL 片段，查询窗口里可载入 / 改名 / 删除
   - [x] DDL 编辑器：对象定义开成可编辑脚本，附逐条语句的干跑预警
   - [x] ER 图：命名空间的关系图，可搜索 / 缩放 / 导出 SVG，点节点开表
-  - [x] 运行情况：双击连接看服务端现状，三个引擎各自一个视图
-- [ ] Phase 2：MongoDB（文档编辑 + 查询语言）、Oracle、SQL Server
+  - [x] 运行情况：双击连接看服务端现状，每个引擎一个视图
+- [x] Phase 2：MongoDB（连接、集合浏览、shell 查询、增删改、索引、运行情况）
+- [ ] Phase 2.5：Oracle / SQL Server（占位与 dialect 已在，缺 DSN 与目录查询，`planned.Parked()`）
 - [ ] Phase 3：SSH 隧道、导入向导、数据对比、插件式扩展
 
 ## 许可证
