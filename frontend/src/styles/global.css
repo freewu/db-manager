@@ -1316,6 +1316,12 @@ body {
   flex: 1 1 50%;
 }
 
+/* The "remember password" switch beside the database field: wide enough for its
+   label, narrow enough to leave the catalogue name the room it needs. */
+.dm-form-row-switch {
+  flex: 0 0 190px;
+}
+
 .dm-param-list {
   display: flex;
   flex-direction: column;

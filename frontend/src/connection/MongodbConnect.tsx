@@ -1,9 +1,8 @@
 import {
   CredentialsFields,
-  DatabaseField,
+  DatabaseFields,
   ExtraParamsField,
   HostPortFields,
-  RememberPasswordField,
   TlsFields,
   type DriverForm,
   type DriverFormProps,
@@ -27,12 +26,11 @@ function Basic({ draft }: DriverFormProps) {
     <>
       <HostPortFields hostPlaceholder="127.0.0.1, or a:27017,b:27018 for a replica set" />
       <CredentialsFields storedPassword={draft?.hasPassword} />
-      <DatabaseField
+      <DatabaseFields
         label="Database"
         placeholder="admin"
         extra="Used as the authentication source and as the default database for new tabs. Leave empty to authenticate against admin."
       />
-      <RememberPasswordField />
     </>
   )
 }

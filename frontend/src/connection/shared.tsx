@@ -195,21 +195,45 @@ export function DatabaseField({
   extra,
   placeholder,
   required,
+  className,
 }: {
+  label?: string
+  extra?: string
+  placeholder?: string
+  required?: boolean
+  className?: string
+}) {
+  return (
+    <Form.Item
+      name="database"
+      label={label}
+      className={className}
+      extra={extra}
+      rules={required ? [{ required: true, message: `${label} is required` }] : undefined}
+    >
+      <Input placeholder={placeholder || 'optional'} />
+    </Form.Item>
+  )
+}
+
+/**
+ * The default catalogue with the "remember password" switch beside it.
+ *
+ * The two share a row because neither needs the full width on its own: the
+ * catalogue is one name, and the switch is a boolean with a note. Drivers that
+ * have no password (SQLite) use `DatabaseField` on its own instead.
+ */
+export function DatabaseFields(props: {
   label?: string
   extra?: string
   placeholder?: string
   required?: boolean
 }) {
   return (
-    <Form.Item
-      name="database"
-      label={label}
-      extra={extra}
-      rules={required ? [{ required: true, message: `${label} is required` }] : undefined}
-    >
-      <Input placeholder={placeholder || 'optional'} />
-    </Form.Item>
+    <div className="dm-form-row">
+      <DatabaseField {...props} className="dm-form-row-main" />
+      <RememberPasswordField />
+    </div>
   )
 }
 
@@ -277,13 +301,15 @@ export function ExtraParamsField({ hint }: { hint?: string }) {
  * Whether a typed password is written to the profile file.
  *
  * Only meaningful for drivers that have a password at all, which is why it
- * lives on the driver page rather than in the shell's shared options.
+ * lives on the driver page (in the database row) rather than in the shell's
+ * shared options.
  */
-export function RememberPasswordField() {
+function RememberPasswordField() {
   return (
     <Form.Item
       name="savePassword"
       label="Remember password"
+      className="dm-form-row-switch"
       valuePropName="checked"
       extra="Stored in plain text in your user profile directory."
     >

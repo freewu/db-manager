@@ -1,9 +1,8 @@
 import {
   CredentialsFields,
-  DatabaseField,
+  DatabaseFields,
   ExtraParamsField,
   HostPortFields,
-  RememberPasswordField,
   TlsFields,
   type DriverForm,
   type DriverFormProps,
@@ -20,12 +19,11 @@ function Basic({ draft }: DriverFormProps) {
     <>
       <HostPortFields />
       <CredentialsFields storedPassword={draft?.hasPassword} />
-      <DatabaseField
+      <DatabaseFields
         label="Database"
         placeholder="optional"
         extra="Optional. Used as the default schema for new tabs; the explorer always lists every database."
       />
-      <RememberPasswordField />
     </>
   )
 }

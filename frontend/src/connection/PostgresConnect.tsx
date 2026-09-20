@@ -1,9 +1,8 @@
 import {
   CredentialsFields,
-  DatabaseField,
+  DatabaseFields,
   ExtraParamsField,
   HostPortFields,
-  RememberPasswordField,
   TlsFields,
   type DriverForm,
   type DriverFormProps,
@@ -21,12 +20,11 @@ function Basic({ driver, draft }: DriverFormProps) {
     <>
       <HostPortFields />
       <CredentialsFields storedPassword={draft?.hasPassword} />
-      <DatabaseField
+      <DatabaseFields
         label="Database"
         placeholder={driver.defaultDatabase || 'postgres'}
         extra={`PostgreSQL cannot query across databases, so this is the one new tabs open on. Empty connects to “${driver.defaultDatabase || 'postgres'}”.`}
       />
-      <RememberPasswordField />
     </>
   )
 }
