@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, App as AntApp, Button, Divider, Form, Modal, Space, Switch } from 'antd'
-import {
-  CheckCircleOutlined,
-  ThunderboltOutlined,
-} from '@ant-design/icons'
+import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
 import type {
@@ -16,12 +13,38 @@ import type {
 import { driverForm } from '../connection'
 import {
   COLOR_SWATCHES,
+  CONNECTION_TABS,
   DisplayNameField,
   LabelColourField,
+  connectionTabSlot,
+  type ConnectionTab,
   type ConnectionValues,
 } from '../connection/shared'
 import { driverIcon } from '../lib/assets'
 import { useAppStore } from '../store/appStore'
+
+/**
+ * Which tab owns a field, so a failed validation can jump to the one it is on.
+ * The dialog mounts every tab (hidden), which is what lets one Save press
+ * check all of them at once.
+ */
+const FIELD_TAB: Record<string, ConnectionTab> = {
+  name: 'basic',
+  host: 'basic',
+  port: 'basic',
+  username: 'basic',
+  password: 'basic',
+  database: 'basic',
+  filePath: 'basic',
+  readOnly: 'basic',
+  savePassword: 'basic',
+  color: 'basic',
+  params: 'advanced',
+  sslMode: 'security',
+  sslCAFile: 'security',
+  sslCertFile: 'security',
+  sslKeyFile: 'security',
+}
 
 /**
  * The shell around a driver's page.
@@ -33,7 +56,8 @@ import { useAppStore } from '../store/appStore'
  *
  * The driver itself is not editable here: it was picked from the "new
  * connection" menu, which is the only thing that decides it. Switching engines
- * means picking a different entry there.
+ * means picking a different entry there — the dialog only says which engine it
+ * is, with the vendor logo next to the title.
  */
 export function ConnectionDialog() {
   const open = useAppStore((s) => s.editorOpen)
@@ -44,6 +68,7 @@ export function ConnectionDialog() {
 
   const { message } = AntApp.useApp()
   const [form] = Form.useForm<ConnectionValues>()
+  const [tab, setTab] = useState<ConnectionTab>('basic')
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [testResult, setTestResult] = useState<TestResult | null>(null)
@@ -57,12 +82,19 @@ export function ConnectionDialog() {
   const showNetwork = !isFile
   const showCredentials = !isFile
 
+  // One tab per page the driver fills; a driver with nothing to put in the
+  // other tabs (SQLite) gets no tab strip at all.
+  const tabs = CONNECTION_TABS.filter(
+    (entry) => entry.key === 'basic' || Boolean(page?.[connectionTabSlot(entry.key)]),
+  )
+
   // Reset the form whenever the dialog opens with a different profile. A draft
   // coming from the menu carries only a driver, so everything else falls back
   // to that driver's defaults.
   useEffect(() => {
     if (!open) return
     setTestResult(null)
+    setTab('basic')
     const driver = driverFor(drivers, draft?.driver) ?? drivers.find((d) => d.implemented)
     const values = blankValues(driver)
     if (draft) {
@@ -127,13 +159,29 @@ export function ConnectionDialog() {
     [draft, isFile, showCredentials, showNetwork],
   )
 
-  const handleTest = useCallback(async () => {
-    let values: ConnectionValues
+  /**
+   * Validate every tab at once.
+   *
+   * All panes stay mounted (the inactive ones are hidden), so a rule on a tab
+   * you are not looking at is still enforced; when something is wrong we switch
+   * to the tab holding the first offending field, otherwise its red text would
+   * be off screen.
+   */
+  const validateAll = useCallback(async (): Promise<ConnectionValues | undefined> => {
     try {
-      values = await form.validateFields()
-    } catch {
-      return
+      return await form.validateFields()
+    } catch (error) {
+      const [first] = (error as { errorFields?: { name: unknown[] }[] }).errorFields ?? []
+      const field = typeof first?.name?.[0] === 'string' ? (first.name[0] as string) : undefined
+      const owner = field ? FIELD_TAB[field] : undefined
+      if (owner) setTab(owner)
+      return undefined
     }
+  }, [form])
+
+  const handleTest = useCallback(async () => {
+    const values = await validateAll()
+    if (!values) return
     setTesting(true)
     setTestResult(null)
     try {
@@ -144,15 +192,11 @@ export function ConnectionDialog() {
     } finally {
       setTesting(false)
     }
-  }, [collect, form])
+  }, [collect, validateAll])
 
   const handleSave = useCallback(async () => {
-    let values: ConnectionValues
-    try {
-      values = await form.validateFields()
-    } catch {
-      return
-    }
+    const values = await validateAll()
+    if (!values) return
     setSaving(true)
     try {
       const saved = await saveConnection(collect(values))
@@ -163,9 +207,9 @@ export function ConnectionDialog() {
     } finally {
       setSaving(false)
     }
-  }, [closeEditor, collect, form, message, saveConnection])
+  }, [closeEditor, collect, message, saveConnection, validateAll])
 
-  const Fields = page?.Fields
+  const icon = driverIcon(driverInfo?.type)
   const title = draft?.id
     ? `Edit ${draft.name}`
     : driverInfo
@@ -175,7 +219,14 @@ export function ConnectionDialog() {
   return (
     <Modal
       open={open}
-      title={title}
+      title={
+        <span className="dm-dialog-title">
+          {icon ? (
+            <img src={icon} alt="" draggable={false} className="dm-driver-icon is-large" />
+          ) : null}
+          {title}
+        </span>
+      }
       width={620}
       onCancel={closeEditor}
       destroyOnHidden
@@ -197,25 +248,6 @@ export function ConnectionDialog() {
         initialValues={blankValues(driverInfo)}
         onValuesChange={() => setTestResult(null)}
       >
-        {/* Which engine this page belongs to: a label, not a choice — the type
-            was already picked from the new-connection menu. */}
-        {driverInfo ? (
-          <div className="dm-driver-head">
-            {driverIcon(driverInfo.type) ? (
-              <img
-                src={driverIcon(driverInfo.type)}
-                alt=""
-                draggable={false}
-                className="dm-driver-icon"
-              />
-            ) : null}
-            <div className="dm-driver-head-text">
-              <div className="dm-driver-head-name">{driverInfo.displayName}</div>
-              <div className="dm-driver-head-summary">{page?.summary ?? driverInfo.notes}</div>
-            </div>
-          </div>
-        ) : null}
-
         {driverInfo && !page ? (
           <Alert
             type="info"
@@ -226,19 +258,50 @@ export function ConnectionDialog() {
           />
         ) : null}
 
-        <DisplayNameField />
+        {/* Which engine this is was decided by the menu, so the dialog only
+            states it: tabs, not a driver picker. */}
+        {tabs.length > 1 ? (
+          <nav className="dm-form-tabs" role="tablist" aria-label="Connection settings">
+            {tabs.map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === entry.key}
+                className={`dm-form-tab${tab === entry.key ? ' is-active' : ''}`}
+                onClick={() => setTab(entry.key)}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </nav>
+        ) : null}
 
-        {/* Everything below is the driver's own page: MySQL/PostgreSQL ask for
-            an address and credentials, SQLite asks for a file. */}
-        {Fields && driverInfo ? <Fields form={form} driver={driverInfo} draft={draft} /> : null}
-
-        <Divider style={{ margin: '4px 0 16px' }}>Options</Divider>
-        <div className="dm-form-row">
-          <Form.Item name="readOnly" label="Read only" valuePropName="checked">
-            <Switch />
-          </Form.Item>
-          <LabelColourField />
-        </div>
+        {/* The driver's own pages, one pane each. Inactive panes stay mounted
+            but hidden: their rules still run on save, and their values stay in
+            the form store, so switching tabs never loses what was typed. */}
+        {tabs.map((entry) => {
+          const Fields = page?.[connectionTabSlot(entry.key)]
+          return (
+            <div key={entry.key} hidden={tab !== entry.key}>
+              {entry.key === 'basic' ? <DisplayNameField /> : null}
+              {Fields && driverInfo ? (
+                <Fields form={form} driver={driverInfo} draft={draft} />
+              ) : null}
+              {entry.key === 'basic' ? (
+                <>
+                  <Divider style={{ margin: '4px 0 16px' }}>Options</Divider>
+                  <div className="dm-form-row">
+                    <Form.Item name="readOnly" label="Read only" valuePropName="checked">
+                      <Switch />
+                    </Form.Item>
+                    <LabelColourField />
+                  </div>
+                </>
+              ) : null}
+            </div>
+          )
+        })}
 
         {testResult ? (
           <Alert

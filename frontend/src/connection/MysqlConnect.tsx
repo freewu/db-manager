@@ -15,7 +15,7 @@ import {
  * A network server: address, credentials, an optional default schema and the
  * TLS material. MariaDB speaks the same protocol, so it shares the page.
  */
-function Fields({ draft }: DriverFormProps) {
+function Basic({ draft }: DriverFormProps) {
   return (
     <>
       <HostPortFields />
@@ -25,14 +25,24 @@ function Fields({ draft }: DriverFormProps) {
         placeholder="optional"
         extra="Optional. Used as the default schema for new tabs; the explorer always lists every database."
       />
-      <TlsFields />
-      <ExtraParamsField hint="Passed to the driver verbatim, for example charset=utf8mb4." />
       <RememberPasswordField />
     </>
   )
 }
 
+/** TLS: off by default, which is why it is its own tab rather than more fields. */
+function Security() {
+  return <TlsFields />
+}
+
+/** Whatever the server needs beyond the DSN — charset, timeouts, … */
+function Advanced() {
+  return <ExtraParamsField hint="Passed to the driver verbatim, for example charset=utf8mb4." />
+}
+
 export const MysqlConnect: DriverForm = {
-  Fields,
+  Basic,
+  Security,
+  Advanced,
   summary: 'Host, port, user, password, TLS — schemas are databases here',
 }

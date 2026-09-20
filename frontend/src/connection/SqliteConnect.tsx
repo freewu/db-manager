@@ -12,9 +12,11 @@ import {
  * SQLite.
  *
  * No host, no credentials: the profile is a path on this machine, which is why
- * this page shares nothing with the network drivers but the shared shell.
+ * this page shares nothing with the network drivers but the shared shell. There
+ * is nothing to put in the Security or Advanced tabs either, so the dialog
+ * shows no tab strip at all for this driver.
  */
-function Fields({ form, driver }: DriverFormProps) {
+function Basic({ form, driver }: DriverFormProps) {
   const browse = useFilePicker(form)
   return (
     <>
@@ -35,6 +37,6 @@ function Fields({ form, driver }: DriverFormProps) {
 }
 
 export const SqliteConnect: DriverForm = {
-  Fields,
+  Basic,
   summary: 'A local .db file — no server, no credentials, works offline',
 }

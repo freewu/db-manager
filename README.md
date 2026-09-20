@@ -186,14 +186,20 @@ URI userinfo 打码。`HasPassword` 为真的连接要是连不上，只报错�
 2. 选中后 `openConnectionEditor({ driver })` 只带一个**草稿**（`ConnectionDraft = Partial<ConnectionConfig> &
    Pick<ConnectionConfig, 'driver'>`），`ConnectionDialog` 拿到草稿后按 `driverForm(type)` 查出该驱动的页面
    渲染，其余（显示名、只读、颜色标签、连通性测试、保存）留在外壳里。
-   **驱动不再在弹窗里选**：草稿里已经定了，弹窗顶部用一行只读的引擎名 + 一句说明告诉你在配什么，
-   换引擎就回菜单里点另一个。菜单项的 key 带前缀（`file.new.mysql`），`driverFromKey()` 只取最后一段。
+   **驱动不再在弹窗里选**：草稿里已经定了，弹窗只在标题左边摆一个该引擎的图标，换引擎就回菜单里点另一个。
+   菜单项的 key 带前缀（`file.new.mysql`），`driverFromKey()` 只取最后一段。
 
 页面在 `frontend/src/connection/`：`shared.tsx` 放各页共用的字段零件（`HostPortFields`、`CredentialsFields`、
 `TlsFields`、`FilePathField`…），`MysqlConnect.tsx` / `PostgresConnect.tsx` / `SqliteConnect.tsx` 各导出一个
-`DriverForm = { Fields, summary }`，`index.ts` 的 `DRIVER_FORMS` 是唯一注册点 —— 加引擎就是加一个文件加一行注册。
+`DriverForm = { Basic, Security?, Advanced?, summary }`，`index.ts` 的 `DRIVER_FORMS` 是唯一注册点 ——
+加引擎就是加一个文件加一行注册。
+`Basic` / `Security` / `Advanced` 就是弹窗里那三条分割线 tab（默认 `Basic`），驱动没填的 tab 不出现
+（SQLite 是本地文件，既没有 TLS 也没有驱动参数，于是一个 tab 都不显示，弹窗直接就是那张表单）。
 外壳不按驱动名写 if：`requiresFile` 决定 `collect()` 往配置里放 filePath 还是 host/port/username/ssl，
 页面决定这些字段长什么样。
+
+三个 tab 的字段**一起挂载**（非当前 tab 只是 `hidden`），所以按保存时 `validateFields()` 一次校验全部；
+某个必填项出错就跳回它所在的 tab（`FIELD_TAB` 那张表），否则红字停在看不见的地方。
 
 ### 连接树
 

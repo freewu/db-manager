@@ -1375,40 +1375,58 @@ body {
   font-size: 10px;
 }
 
-/* ---- connection form: which engine --------------------------------------- */
+/* ---- connection form: title and tabs -------------------------------------- */
 
-/* The driver is picked before the dialog opens, so the form states it instead
-   of offering it: a label, not a control. */
-.dm-driver-head {
-  display: flex;
-  gap: 8px;
+/* The engine is picked before the dialog opens, so the header states it instead
+   of offering it: the vendor logo in front of the title, and nothing else — the
+   tab strip below is what the pages of the form are. */
+.dm-dialog-title {
+  display: inline-flex;
   align-items: center;
-  margin-bottom: 14px;
-  padding: 8px 10px;
-  border: 1px solid var(--dm-border);
-  border-radius: 4px;
-  background: var(--dm-surface);
-}
-
-.dm-driver-head .dm-driver-icon {
-  width: 20px;
-  height: 20px;
-}
-
-.dm-driver-head-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+  gap: 8px;
   min-width: 0;
 }
 
-.dm-driver-head-name {
-  font-size: 12.5px;
-  font-weight: 600;
+.dm-dialog-title .dm-driver-icon {
+  width: 22px;
+  height: 22px;
 }
 
-.dm-driver-head-summary {
-  font-size: 11.5px;
-  line-height: 1.4;
-  opacity: 0.65;
+/* Divider-line tabs: plain labels separated by hairlines, the active one
+   underlined in the accent colour, the whole strip closed by a rule. */
+.dm-form-tabs {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--dm-border);
+}
+
+.dm-form-tab {
+  padding: 5px 16px;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-inline-start: 1px solid var(--dm-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.dm-form-tab:first-child {
+  padding-inline-start: 0;
+  border-inline-start: 0;
+}
+
+.dm-form-tab:hover {
+  opacity: 1;
+}
+
+.dm-form-tab.is-active {
+  opacity: 1;
+  font-weight: 600;
+  color: var(--dm-accent-text);
+  border-bottom-color: var(--dm-accent);
 }

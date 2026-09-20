@@ -2,7 +2,6 @@ import { useCallback, type ComponentType } from 'react'
 import {
   App as AntApp,
   Button,
-  Divider,
   Form,
   Input,
   InputNumber,
@@ -61,16 +60,47 @@ export interface DriverFormProps {
 }
 
 /**
- * One driver's page.
+ * One driver's page, told apart by the tabs the dialog shows.
  *
- * `Fields` is rendered inside the shell's `<Form>`, so it draws only the
+ * Only `Basic` is mandatory — it is what a connection needs to exist at all.
+ * `Security` and `Advanced` are filled by the drivers that have something to
+ * put there, and a tab the driver leaves empty never appears: SQLite, a local
+ * file, has neither TLS nor driver parameters.
+ *
+ * Each slot is rendered inside the shell's `<Form>`, so it draws only the
  * driver-specific part of the form; display name, read-only, label colour and
  * the test/save buttons belong to the shell.
  */
 export interface DriverForm {
-  Fields: ComponentType<DriverFormProps>
+  /** Tab 1: how to reach the engine (address, credentials, or a file path). */
+  Basic: ComponentType<DriverFormProps>
+  /** Tab 2: TLS material; network drivers only. */
+  Security?: ComponentType<DriverFormProps>
+  /** Tab 3: free-form parameters handed to the driver verbatim. */
+  Advanced?: ComponentType<DriverFormProps>
   /** One line for the "new connection" picker, in the driver's own terms. */
   summary: string
+}
+
+/** The pages a connection form can have, in the order the dialog shows them. */
+export const CONNECTION_TABS = [
+  { key: 'basic', label: 'Basic' },
+  { key: 'security', label: 'Security' },
+  { key: 'advanced', label: 'Advanced' },
+] as const
+
+export type ConnectionTab = (typeof CONNECTION_TABS)[number]['key']
+
+/** The `DriverForm` member that fills a tab, for the shell to look up. */
+export function connectionTabSlot(tab: ConnectionTab): 'Basic' | 'Security' | 'Advanced' {
+  switch (tab) {
+    case 'security':
+      return 'Security'
+    case 'advanced':
+      return 'Advanced'
+    default:
+      return 'Basic'
+  }
 }
 
 export const COLOR_SWATCHES = [
@@ -169,12 +199,11 @@ export function DatabaseField({
   )
 }
 
-/** TLS mode plus the certificate files it may need. */
+/** TLS mode plus the certificate files it may need (the "Security" tab). */
 export function TlsFields() {
   const sslMode = Form.useWatch('sslMode') as SSLMode | undefined
   return (
     <>
-      <Divider style={{ margin: '4px 0 16px' }}>Security</Divider>
       <Form.Item name="sslMode" label="TLS mode">
         <Select options={SSL_MODES} />
       </Form.Item>
@@ -204,7 +233,6 @@ export function TlsFields() {
 export function ExtraParamsField({ hint }: { hint?: string }) {
   return (
     <>
-      <Divider style={{ margin: '4px 0 16px' }}>Advanced</Divider>
       <Form.Item label="Extra parameters" extra={hint} style={{ marginBottom: 8 }}>
         <Form.List name="params">
           {(fields, { add, remove }) => (

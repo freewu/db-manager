@@ -16,7 +16,7 @@ import {
  * database, so the profile has to name the one new tabs should land in. An
  * empty database falls back to `postgres` (see the driver's DSN builder).
  */
-function Fields({ driver, draft }: DriverFormProps) {
+function Basic({ driver, draft }: DriverFormProps) {
   return (
     <>
       <HostPortFields />
@@ -26,14 +26,26 @@ function Fields({ driver, draft }: DriverFormProps) {
         placeholder={driver.defaultDatabase || 'postgres'}
         extra={`PostgreSQL cannot query across databases, so this is the one new tabs open on. Empty connects to “${driver.defaultDatabase || 'postgres'}”.`}
       />
-      <TlsFields />
-      <ExtraParamsField hint="Passed to the driver verbatim, for example search_path or application_name." />
       <RememberPasswordField />
     </>
   )
 }
 
+/** TLS: off by default, which is why it is its own tab rather than more fields. */
+function Security() {
+  return <TlsFields />
+}
+
+/** Whatever the server needs beyond the DSN — search_path, application_name, … */
+function Advanced() {
+  return (
+    <ExtraParamsField hint="Passed to the driver verbatim, for example search_path or application_name." />
+  )
+}
+
 export const PostgresConnect: DriverForm = {
-  Fields,
+  Basic,
+  Security,
+  Advanced,
   summary: 'Host, port, user, password, TLS — one pool per database',
 }
