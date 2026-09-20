@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, App as AntApp, Button, Form, Modal, Space, Switch } from 'antd'
-import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { ThunderboltOutlined } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
 import type {
@@ -67,12 +67,11 @@ export function ConnectionDialog() {
   const closeEditor = useAppStore((s) => s.closeConnectionEditor)
   const saveConnection = useAppStore((s) => s.saveConnection)
 
-  const { message } = AntApp.useApp()
+  const { message, notification } = AntApp.useApp()
   const [form] = Form.useForm<ConnectionValues>()
   const [tab, setTab] = useState<ConnectionTab>('basic')
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [testResult, setTestResult] = useState<TestResult | null>(null)
 
   // The draft is the only source of the driver; fall back to the first
   // implemented one so a malformed draft still lands on a usable page.
@@ -97,7 +96,6 @@ export function ConnectionDialog() {
   // to that driver's defaults.
   useEffect(() => {
     if (!open) return
-    setTestResult(null)
     setTab('basic')
     const driver = driverFor(drivers, draft?.driver) ?? drivers.find((d) => d.implemented)
     const values = blankValues(driver)
@@ -191,16 +189,14 @@ export function ConnectionDialog() {
     const values = await validateAll()
     if (!values) return
     setTesting(true)
-    setTestResult(null)
     try {
-      const result = await api.testConnection(collect(values))
-      setTestResult(result)
+      notifyTest(notification, await api.testConnection(collect(values)))
     } catch (error) {
-      setTestResult({ ok: false, message: toMessage(error), latencyMs: 0 })
+      notifyTest(notification, { ok: false, message: toMessage(error), latencyMs: 0 })
     } finally {
       setTesting(false)
     }
-  }, [collect, validateAll])
+  }, [collect, notification, validateAll])
 
   const handleSave = useCallback(async () => {
     const values = await validateAll()
@@ -254,7 +250,6 @@ export function ConnectionDialog() {
         form={form}
         layout="vertical"
         initialValues={blankValues(driverInfo)}
-        onValuesChange={() => setTestResult(null)}
       >
         {driverInfo && !page ? (
           <Alert
@@ -301,38 +296,55 @@ export function ConnectionDialog() {
             </div>
           )
         })}
-
-        {testResult ? (
-          <Alert
-            type={testResult.ok ? 'success' : 'error'}
-            showIcon
-            icon={testResult.ok ? <CheckCircleOutlined /> : undefined}
-            title={testResult.ok ? 'Connection succeeded' : 'Connection failed'}
-            description={
-              <div className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                {testResult.message}
-                {testResult.ok ? (
-                  <>
-                    {'\n'}
-                    {[
-                      testResult.serverVersion,
-                      testResult.connectedDatabase ? `db=${testResult.connectedDatabase}` : null,
-                      `${testResult.latencyMs} ms`,
-                      testResult.databaseCount !== undefined
-                        ? `${testResult.databaseCount} databases`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </>
-                ) : null}
-              </div>
-            }
-          />
-        ) : null}
       </Form>
     </Modal>
   )
+}
+
+/**
+ * How long a test result stays on screen. Hovering holds it open, which is what
+ * a long refusal needs.
+ *
+ * Both outcomes share one duration, and that is not laziness: a notice whose
+ * duration is shortened to "stay open" while its timer is still running is
+ * closed on the spot (the timer reads `0 >= 0`), so a sticky failure replacing a
+ * timed success would flash and vanish.
+ */
+const TEST_TOAST_MS = 6
+
+/**
+ * Report a test result, as a toast on top of the dialog.
+ *
+ * A toast and not a banner in the form: testing checks the values that are
+ * already on screen, and its answer should not reflow the fields or leave a
+ * stale "succeeded" behind once they are edited. One key covers both outcomes,
+ * so pressing the button again updates the toast instead of stacking them.
+ */
+function notifyTest(
+  notification: ReturnType<typeof AntApp.useApp>['notification'],
+  result: TestResult,
+) {
+  const detail = [
+    result.serverVersion,
+    result.connectedDatabase ? `db=${result.connectedDatabase}` : null,
+    `${result.latencyMs} ms`,
+    result.databaseCount !== undefined ? `${result.databaseCount} databases` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  const shared = {
+    key: 'connection-test',
+    title: result.ok ? 'Connection succeeded' : 'Connection failed',
+    description: (
+      <div className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
+        {[result.message, result.ok ? detail : ''].filter(Boolean).join('\n')}
+      </div>
+    ),
+  }
+
+  if (result.ok) notification.success({ ...shared, duration: TEST_TOAST_MS })
+  else notification.error({ ...shared, duration: TEST_TOAST_MS })
 }
 
 function driverFor(drivers: DriverInfo[], type: DriverType | undefined): DriverInfo | undefined {

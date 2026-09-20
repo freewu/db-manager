@@ -11,6 +11,9 @@
 //     otherwise the user is asked on every connect attempt. This keeps the
 //     default posture "no secrets at rest" without forcing users to retype
 //     credentials if they consciously opt in.
+//   - a password that is written is sealed with AES-256-GCM (see the secret
+//     package): the file holds a token, never the password itself, so a copy of
+//     it that leaves this machine is not a copy of the secret
 package config
 
 import (
@@ -22,6 +25,7 @@ import (
 	"sync"
 
 	"dbmanager/internal/models"
+	"dbmanager/internal/secret"
 )
 
 const (
@@ -50,9 +54,16 @@ type queryFileFormat struct {
 
 // Store is a small, mutex guarded JSON store.
 type Store struct {
-	mu   sync.Mutex
-	dir  string
-	path string
+	mu     sync.Mutex
+	dir    string
+	path   string
+	cipher *secret.Cipher
+
+	// unreadable holds, by profile id, the sealed passwords this machine could
+	// not open (a replaced or missing key). Keeping them means a later save does
+	// not overwrite a secret that another machine — or a restored key file — can
+	// still read. See loadLocked and sealLocked.
+	unreadable map[string]string
 }
 
 // New returns a Store rooted at the per-user config directory.
@@ -71,7 +82,12 @@ func NewAt(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return nil, err
 	}
-	return &Store{dir: dir, path: filepath.Join(dir, fileName)}, nil
+	return &Store{
+		dir:        dir,
+		path:       filepath.Join(dir, fileName),
+		cipher:     secret.Open(dir),
+		unreadable: map[string]string{},
+	}, nil
 }
 
 // ConfigDir returns (and creates) the application config directory.
@@ -119,11 +135,33 @@ func (s *Store) loadLocked() ([]models.ConnectionConfig, error) {
 	if parsed.Connections == nil {
 		parsed.Connections = []models.ConnectionConfig{}
 	}
+	// Passwords come back in the clear for the session that is running now; the
+	// file only ever holds the sealed token (or a value an older build wrote).
+	for i := range parsed.Connections {
+		plain, err := s.cipher.Unseal(parsed.Connections[i].Password)
+		if err != nil {
+			// A token we cannot read (a replaced key, a hand-edited file) means
+			// "no stored password" rather than a store that refuses to open: the
+			// user is asked for the password again instead of being locked out of
+			// their own profiles. The token itself is kept so that saving this
+			// profile does not destroy it (see sealLocked).
+			if parsed.Connections[i].ID != "" && secret.IsSealed(parsed.Connections[i].Password) {
+				s.unreadable[parsed.Connections[i].ID] = parsed.Connections[i].Password
+			}
+			parsed.Connections[i].Password = ""
+			continue
+		}
+		parsed.Connections[i].Password = plain
+	}
 	return parsed.Connections, nil
 }
 
 func (s *Store) saveLocked(list []models.ConnectionConfig) error {
-	out := fileFormat{Version: schemaVer, Connections: list}
+	sealed, err := s.sealLocked(list)
+	if err != nil {
+		return err
+	}
+	out := fileFormat{Version: schemaVer, Connections: sealed}
 	raw, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return err
@@ -134,6 +172,36 @@ func (s *Store) saveLocked(list []models.ConnectionConfig) error {
 		return err
 	}
 	return os.Rename(tmp, s.path)
+}
+
+// sealLocked returns the list as it goes to disk: every password replaced by a
+// sealed token, and every password of a profile that did not opt in dropped.
+// Callers keep passing plain values around, so no other layer has to know that
+// the file on disk says something else.
+func (s *Store) sealLocked(list []models.ConnectionConfig) ([]models.ConnectionConfig, error) {
+	out := make([]models.ConnectionConfig, len(list))
+	copy(out, list)
+	for i := range out {
+		if !out[i].SavePassword {
+			out[i].Password = ""
+			continue
+		}
+		if out[i].Password == "" || secret.IsSealed(out[i].Password) {
+			// Put back a token this machine could not open instead of dropping
+			// it: it is still the password on the machine that wrote it.
+			if token, ok := s.unreadable[out[i].ID]; ok && out[i].Password == "" {
+				out[i].Password = token
+			}
+			continue
+		}
+		token, err := s.cipher.Seal(out[i].Password)
+		if err != nil {
+			return nil, err
+		}
+		delete(s.unreadable, out[i].ID)
+		out[i].Password = token
+	}
+	return out, nil
 }
 
 // Upsert inserts or updates a profile and returns the stored value.

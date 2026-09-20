@@ -41,7 +41,10 @@ type SSLConfig struct {
 // ConnectionConfig is a saved connection profile.
 //
 // Password is never sent back to the UI: ListConnections returns redacted
-// copies and the UI only ever sends a password when the user types one.
+// copies and the UI only ever sends a password when the user types one. It is
+// also never written to disk in the clear — when the profile opts into
+// SavePassword the store keeps a sealed (AES-256-GCM) token instead, and the
+// value in memory here stays plain. See internal/secret.
 type ConnectionConfig struct {
 	ID       string            `json:"id"`
 	Name     string            `json:"name"`

@@ -100,6 +100,7 @@ wails build
 ├── internal/
 │   ├── apperr/               # 错误码 + 脱敏（打码 password=... 与 URI userinfo）
 │   ├── config/store.go       # %APPDATA%/db-manager/{connections,queries,state}.json（0600）
+│   ├── secret/               # AES-256-GCM 封装连接的密码；密钥 secret.key（0600，首次用时生成）
 │   ├── models/               # 跨层 DTO，时间统一为 int64 unix ms
 │   ├── drivers/
 │   │   ├── driver.go         # Driver / Conn / Dialect / Grapher / Overviewer / Analyzer 契约 + 注册表（init 注册）
@@ -171,8 +172,20 @@ PostgreSQL 角色）全程不弹框；**只有这次尝试被服务端拒绝**�
 下次直接弹框，不再白跑一趟。
 
 框里敲下的密码只用于本次会话（后端在 `resolveConfig` 里复用已有会话与已存密码）；
-勾了「保存密码」的连接会在**连接成功之后**顺手落盘一次（文件权限 `0600`）—— 失败就不写，
-免得把一个打错的密码存进配置。前后端之间不会把密码回传到 UI：`ConnectionConfig.Redacted()`
+勾了「保存密码」的连接会在**连接成功之后**顺手落盘一次 —— 失败就不写，免得把一个打错的
+密码存进配置。
+
+**落盘的密码是密文**：`internal/secret` 用一个 32 字节随机密钥（`secret.key`，权限 `0600`，
+与 `connections.json` 同目录）做 AES-256-GCM，配置里存的是 `enc:v1:` + base64(nonce‖密文) 这串
+令牌，内存里才还原成明文（`config.Store` 在存/取时封装与解封，其它层拿到的永远是明文）。
+所以一个被拷走、被同步到网盘、被贴进工单的配置文件里没有可读的密码，手改过的密文也认证不过。
+密钥第一次真要写密码时才生成 —— 从不保存密码的安装根本不会有这个文件。它挡不住能同时读到
+这两个文件的人，要再上一层就得把密钥交给系统钥匙串（DPAPI / Keychain / libsecret），那是
+后续的事。旧版本直接写成明文的密码不会失效：读的时候照用，下一次保存时自动变成密文；
+密钥丢了或被换掉时，解不开的令牌按「没有存密码」处理（弹框重新问，而不是打不开配置），
+并且原样留在文件里 —— 免得在这台机器上一次无关的保存把别的机器还能读的密钥抹掉。
+
+前后端之间不会把密码回传到 UI：`ConnectionConfig.Redacted()`
 会剥离密码并置 `HasPassword`，`apperr.Sanitize()` 会把日志与错误里的 `password=…`、
 URI userinfo 打码。`HasPassword` 为真的连接要是连不上，只报错、不弹框：密码已经在库里了，
 再问一遍没有意义。
@@ -210,6 +223,12 @@ URI userinfo 打码。`HasPassword` 为真的连接要是连不上，只报错�
 
 三个 tab 的字段**一起挂载**（非当前 tab 只是 `hidden`），所以按保存时 `validateFields()` 一次校验全部；
 某个必填项出错就跳回它所在的 tab（`FIELD_TAB` 那张表），否则红字停在看不见的地方。
+
+「Test connection」的结果是**浮在弹窗右上的 `notification` 提示**，不是表单里的横幅：测试是对已经填好的
+值做一次校验，答案不该把字段挤得跳来跳去，也不该在值被改过之后还挂在那里说「连接成功」。成功与失败
+共用一个 `key`（再点十次也是更新同一条，不是叠一屏），也共用一个 `duration` —— 把正在倒计时的提示改成
+「永不关闭」时 rc-notification 会当场把它关掉（计时器读到 `0 >= 0`），所以失败的那条也只能到点自己消失，
+靠「鼠标悬停暂停倒计时」留住它。
 
 ### 文档型引擎怎么接进来
 
