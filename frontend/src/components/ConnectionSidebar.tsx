@@ -1167,10 +1167,22 @@ function errorNode(scope: string, text: string, onRetry?: () => void): TreeDataN
   }
 }
 
-/** Wraps a tree node title in a right-click menu. */
+/**
+ * One tree row's context menu.
+ *
+ * The overlay is drawn through a portal, but React keeps bubbling its events up
+ * the *component* tree, and this one hangs off a tree row — so without care a
+ * click on an item also reaches the row's own click handler, which re-opens the
+ * object on its data page and undoes whatever the item just asked for
+ * ("Design object" would land on Data, "New query" on a folder would open the
+ * object list). Stopping the event at the menu keeps a menu click a menu click.
+ */
 function NodeMenu({ items, children }: { items: MenuProps['items']; children: ReactNode }) {
   return (
-    <Dropdown menu={{ items }} trigger={['contextMenu']}>
+    <Dropdown
+      menu={{ items, onClick: (info) => info.domEvent.stopPropagation() }}
+      trigger={['contextMenu']}
+    >
       {children}
     </Dropdown>
   )
