@@ -19,6 +19,9 @@
 - **查询收藏**：查询窗口工具条上的「Favourites」可以把当前 SQL 命名保存（默认用第一行非注释文本作名），下拉里一键载入、重命名或删除；收藏存在 `queries.json` 里，与连接配置互不影响，换窗口、换连接都能用。
 - **ER 图**：在 schema（没有 schema 层的引擎就是 database）节点右键即可打开该命名空间的关系图 —— 一张 `GetSchemaGraph` 就把对象、字段与它们之间的外键取回来，节点按外键方向分层，主键高亮，箭头悬停显示「哪一列引用哪一列」；支持拖动平移、滚轮缩放、按名搜索、隐藏/显示字段、网格开关，点节点直接打开该表，还能把当前这张图导出成自包含的 SVG。跨命名空间的外键画成虚线 stub，读不到字段的对象仍在图里但会列出警告，超过 300 个对象时明确提示只画了前 300 个。
 - **DDL 编辑器**：把对象的定义开成可编辑的脚本窗口 —— 工具条、对象树右键「Edit DDL…」或结构页的「Edit in DDL editor」都能进；编辑器下方是**后端算出来的干跑结果**（逐条语句标出 query / DDL / DML、标红 DROP、TRUNCATE、无 WHERE 的 DELETE/UPDATE，并说明只读连接会拒掉几条），真正点「Run script」时只对破坏性脚本弹二次确认；执行完顺手刷新目录树与索引缓存。
+- **窗口即应用**：右键不再弹出 WebView 自带的那套菜单（后退 / 刷新 / 另存为 / 打印 / 检查），
+  右键要么什么都不做，要么就是应用自己的菜单（连接树等）；文本框与 SQL 编辑器是例外 —— 那里保留系统菜单，
+  右键粘贴照旧可用，其它地方用 `Ctrl+C` / `Ctrl+V`。
 - **运行情况**：双击连接节点即可打开该连接的「运行情况」页（未连接会先连上，密码框填完再自动打开）；页面上半部分是会话事实与快照时间，下面按引擎各画各的 —— MySQL 给进程列表、连接数、InnoDB 缓冲池与命中率，PostgreSQL 给后端/活动会话/数据库体积与提交率、缓存命中率，SQLite 则是「这是一个文件」的视角（路径、落盘大小、pragma、对象清单与 ATTACH 进来的库）。读不到的项一律显示 `—` 并附一条警告（缺权限、缺统计视图），不会拿 0 冒充；工具条的刷新按钮重新取一次快照。
 - **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（只画一个 GitHub 头像，悬停显示昵称、点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection / Open，以及连接树的右键菜单。
 - **导出**：CSV / JSON / INSERT 脚本，可写入文件或复制到剪贴板。
@@ -55,6 +58,24 @@ wails build
 ```
 
 > `wails` 构建的是 Windows 桌面程序，因此请使用 **Windows 工具链** 运行（在 Windows 终端或 `just.exe` 中执行），不要用 WSL 里的 Linux 工具链。
+
+### 开发时窗口一片空白（黑屏）
+
+`wails dev` 的窗口要 React 挂载之后才有内容，所以**模块加载失败的样子就是一片空白**（露出来的是窗口底色）。
+最常见的原因不是代码写错了，而是**开发服务器手里那份模块是旧的**：源码在 WSL 里改，Windows 侧 Vite 的
+文件监听并不总能收到这些写入，于是它一直发着「文件当时还是空的」那份 transform，页面在
+`does not provide an export named …` 上停住。
+
+判断与恢复：
+
+- 用浏览器（或 `curl`）打开 `wails dev` 打印的地址对应的源码 URL，例如
+  `http://127.0.0.1:34115/src/components/AboutProject.tsx`：**返回空内容**就是这个问题；
+- 在 **Windows 侧**碰一下那个文件让 Vite 重新读（`copy /b file+,,`，或用 PowerShell 原样重写一遍），
+  页面会自己恢复；仍然不行就重启 `wails dev`；
+- 现在有两层防护：`vite.config.ts` 里开了 `server.watch.usePolling`，开发服务器改为轮询源码，
+  WSL 侧写入也能看见；`index.html` 里有一段启动看门狗 —— 十秒后 `#root` 还是空的，就把错误
+  （暗底、原因、`Ctrl+R` 提示）画出来，不再只留一个空白窗口。看控制台按 **F12**（右键菜单已经关掉了，
+  见下面「窗口即应用」）。
 
 ## 项目结构
 
