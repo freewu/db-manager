@@ -30,5 +30,13 @@ export default defineConfig({
     // `@asserts` points outside the frontend package, so the dev server has to
     // be allowed to read one level up.
     fs: { allow: [fileURLToPath(new URL('..', import.meta.url))] },
+    // The checkout sits on a Windows drive but is usually edited from WSL, and
+    // the Windows file watcher does not reliably hear those writes. A missed
+    // change leaves the dev server handing out the transform it computed when
+    // the file was still empty — the app then fails to import a component and
+    // paints nothing at all (Wails' window colour, i.e. a black window).
+    // Polling re-stats the sources, so `wails dev` follows edits from either
+    // side of the fence.
+    watch: { usePolling: true, interval: 400 },
   },
 })

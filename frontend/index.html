@@ -7,6 +7,49 @@
     <!-- Copied from ../asserts/logo.png by `just icons`; Vite serves public/. -->
     <link rel="icon" type="image/png" href="/logo.png" />
     <title>DB Manager</title>
+    <script>
+      /*
+       * Boot watchdog. An empty window says nothing, and a window whose bundle
+       * failed to load (a stale dev-server module, a chunk that never arrived)
+       * is exactly that: nothing painted at all. Everything below is inert once
+       * React mounts — it only speaks when `#root` is still empty after the
+       * grace period — and the real error stays on the console for devtools.
+       */
+      ;(function () {
+        var error = null
+        window.addEventListener('error', function (event) {
+          if (!error) error = event.message || String(event.error || 'unknown error')
+        })
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event.reason
+          if (!error) error = String((reason && reason.message) || reason || 'unknown error')
+        })
+        setTimeout(function () {
+          var root = document.getElementById('root')
+          if (!root || root.childElementCount > 0) return
+          var box = document.createElement('div')
+          box.style.cssText =
+            'min-height:100vh;padding:28px;box-sizing:border-box;background:#1f1f1f;color:#e6e6e6;' +
+            'font:13px/1.7 ui-monospace,Consolas,"Courier New",monospace'
+          var title = document.createElement('div')
+          title.style.cssText = 'font-size:15px;color:#fff'
+          title.textContent = 'DB Manager could not start its interface'
+          var hint = document.createElement('div')
+          hint.style.cssText = 'margin-top:8px;color:#9d9d9d'
+          hint.textContent =
+            'The window is blank because the frontend bundle did not load. Reload with Ctrl+R; ' +
+            'if it keeps happening, the details below are the thing to report.'
+          var detail = document.createElement('pre')
+          detail.style.cssText = 'margin:14px 0 0;white-space:pre-wrap;color:#ff9c9c'
+          detail.textContent = error || 'no error was reported — check the developer tools (F12)'
+          box.appendChild(title)
+          box.appendChild(hint)
+          box.appendChild(detail)
+          root.textContent = ''
+          root.appendChild(box)
+        }, 10000)
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
