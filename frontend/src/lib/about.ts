@@ -18,6 +18,10 @@ export const PROJECT_URL = `https://github.com/${REPO_OWNER}/${REPO_NAME}`
 export const REPO_ISSUES_URL = `${PROJECT_URL}/issues`
 export const REPO_RELEASES_URL = `${PROJECT_URL}/releases`
 
+/**
+ * The author, as recorded in `wails.json`. The UI renders the avatar only — the
+ * name shows up in its tooltip — so `name` and `email` are here as metadata.
+ */
 export const DEVELOPER = {
   name: 'bluefrog',
   email: 'bluefrog.wu@gmail.com',

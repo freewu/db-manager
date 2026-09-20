@@ -1263,13 +1263,7 @@ body {
   word-break: break-all;
 }
 
-/* The developer row: GitHub avatar + handle, one link to the profile. */
-.dm-about-dev {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
+/* The developer row is a bare GitHub avatar; line it up with the label column. */
 .dm-about-avatar {
   flex: none;
   /* Also the fallback's colours: when the avatar cannot be fetched the initial

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Avatar, Space, Tooltip, Typography } from 'antd'
-import { GithubOutlined, MailOutlined } from '@ant-design/icons'
+import { GithubOutlined } from '@ant-design/icons'
 
 import { useAppStore } from '../store/appStore'
 import {
@@ -91,28 +91,24 @@ export function AboutProject() {
 
         <dt>Developer</dt>
         <dd>
-          <Space size={10} wrap>
-            <Tooltip title={DEVELOPER.url}>
-              <ExternalLink url={DEVELOPER.url}>
-                <span className="dm-about-dev">
-                  <Avatar
-                    size={22}
-                    className="dm-about-avatar"
-                    src={DEVELOPER.avatarUrl}
-                    alt={DEVELOPER.github}
-                  >
-                    {DEVELOPER.name.slice(0, 1).toUpperCase()}
-                  </Avatar>
-                  {DEVELOPER.name}
-                </span>
-              </ExternalLink>
+          {/* Just the avatar: it is the one thing worth showing at a glance, and
+              it links to the profile it was fetched from. The name lives in the
+              tooltip, the email in `wails.json` / the repository. */}
+          <ExternalLink url={DEVELOPER.url} ariaLabel={`${DEVELOPER.name} on GitHub`}>
+            {/* The Tooltip goes inside the link, not around it: it has to attach
+                its hover handlers to a real element, and `ExternalLink` is a
+                component that would swallow them. */}
+            <Tooltip title={`${DEVELOPER.name} · ${DEVELOPER.url}`}>
+              <Avatar
+                size={22}
+                className="dm-about-avatar"
+                src={DEVELOPER.avatarUrl}
+                alt={DEVELOPER.name}
+              >
+                {DEVELOPER.name.slice(0, 1).toUpperCase()}
+              </Avatar>
             </Tooltip>
-            <ExternalLink
-              url={`mailto:${DEVELOPER.email}`}
-              icon={<MailOutlined />}
-              label={DEVELOPER.email}
-            />
-          </Space>
+          </ExternalLink>
         </dd>
 
         <dt>Build</dt>
@@ -154,16 +150,20 @@ function ExternalLink({
   label,
   icon,
   children,
+  ariaLabel,
 }: {
   url: string
   /** Plain text to show; use `children` instead for richer content. */
   label?: string
   icon?: ReactNode
   children?: ReactNode
+  /** Required when the link shows no text of its own (a bare avatar). */
+  ariaLabel?: string
 }) {
   return (
     <a
       href={url}
+      aria-label={ariaLabel}
       onClick={(event) => {
         event.preventDefault()
         openExternal(url)

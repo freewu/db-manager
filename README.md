@@ -20,7 +20,7 @@
 - **ER 图**：在 schema（没有 schema 层的引擎就是 database）节点右键即可打开该命名空间的关系图 —— 一张 `GetSchemaGraph` 就把对象、字段与它们之间的外键取回来，节点按外键方向分层，主键高亮，箭头悬停显示「哪一列引用哪一列」；支持拖动平移、滚轮缩放、按名搜索、隐藏/显示字段、网格开关，点节点直接打开该表，还能把当前这张图导出成自包含的 SVG。跨命名空间的外键画成虚线 stub，读不到字段的对象仍在图里但会列出警告，超过 300 个对象时明确提示只画了前 300 个。
 - **DDL 编辑器**：把对象的定义开成可编辑的脚本窗口 —— 工具条、对象树右键「Edit DDL…」或结构页的「Edit in DDL editor」都能进；编辑器下方是**后端算出来的干跑结果**（逐条语句标出 query / DDL / DML、标红 DROP、TRUNCATE、无 WHERE 的 DELETE/UPDATE，并说明只读连接会拒掉几条），真正点「Run script」时只对破坏性脚本弹二次确认；执行完顺手刷新目录树与索引缓存。
 - **运行情况**：双击连接节点即可打开该连接的「运行情况」页（未连接会先连上，密码框填完再自动打开）；页面上半部分是会话事实与快照时间，下面按引擎各画各的 —— MySQL 给进程列表、连接数、InnoDB 缓冲池与命中率，PostgreSQL 给后端/活动会话/数据库体积与提交率、缓存命中率，SQLite 则是「这是一个文件」的视角（路径、落盘大小、pragma、对象清单与 ATTACH 进来的库）。读不到的项一律显示 `—` 并附一条警告（缺权限、缺统计视图），不会拿 0 冒充；工具条的刷新按钮重新取一次快照。
-- **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`platform`），下面是技术栈徽章（shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制），再下面依次是项目地址 / Releases / Issues、开发者（GitHub 头像 + 昵称，点一下打开 `github.com/freewu`）、Build（链接到 Justfile 并列出 `just build` / `just release` / `just publish`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection / Open，以及连接树的右键菜单。
+- **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`platform`），下面是技术栈徽章（shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制），再下面依次是项目地址 / Releases / Issues、开发者（只画一个 GitHub 头像，悬停显示昵称、点一下打开 `github.com/freewu`）、Build（链接到 Justfile 并列出 `just build` / `just release` / `just publish`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection / Open，以及连接树的右键菜单。
 - **导出**：CSV / JSON / INSERT 脚本，可写入文件或复制到剪贴板。
 - **外观**：Navicat 式窗口骨架（菜单栏 + icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏。
 
@@ -173,8 +173,10 @@ MySQL / PostgreSQL / SQLite 仅声明一份 `Spec`（`DSN` 构造函数、`Diale
 Justfile 链接都由 `REPO_OWNER` / `REPO_NAME` 拼出来，改一处即可），其中两处要手动对齐：作者与
 `wails.json` 的 `author`、`just` 版本与下面的「环境要求」表。许可证只以徽章形式出现，不再占一行。
 徽章是本地 CSS 画的灰标签 + 品牌色值，不依赖 shields.io，断网也照常显示；
-链接统一走 `openExternal`，桌面壳里交给系统浏览器，纯浏览器里退化成新标签页。开发者头像是这一页唯一
-需要联网的东西（`github.com/<owner>.png`），拿不到时 antd `Avatar` 会退回昵称首字母的灰底头像。
+链接统一走 `openExternal`，桌面壳里交给系统浏览器，纯浏览器里退化成新标签页。开发者一栏只画头像、不写
+名字，昵称放在悬停提示里（`Tooltip` 要挂在 DOM 元素上，包在 `ExternalLink` 外面会被组件吃掉 hover 事件），
+无障碍文本走 `aria-label`。头像是这一页唯一需要联网的东西（`github.com/<owner>.png`），拿不到时
+antd `Avatar` 会退回昵称首字母的灰底头像。
 
 ### 运行情况从哪来
 
