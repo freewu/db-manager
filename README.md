@@ -206,11 +206,12 @@ URI userinfo 打码。`HasPassword` 为真的连接要是连不上，只报错�
 代码三个平台。徽章是本地 CSS 画的灰标签 + 品牌色值（Linux 的黄底浅，值用深色字），不依赖 shields.io，
 断网也照常显示；链接统一走 `openExternal`，桌面壳里交给系统浏览器，纯浏览器里退化成新标签页。
 开发者一栏只画头像、不写名字，昵称放在悬停提示里（`Tooltip` 得挂在 DOM 元素上，包在 `ExternalLink`
-外面会被组件吃掉 hover 事件），无障碍文本走 `aria-label`。头像是这一页唯一需要联网的东西
-（`github.com/<owner>.png`），拿不到时 antd `Avatar` 会退回昵称首字母的灰底头像。项目地址 / 作者 /
-许可证 / 构建工具集中在 `frontend/src/lib/about.ts`（仓库地址、Issues、Releases、Justfile 链接都由
-`REPO_OWNER` / `REPO_NAME` 拼出来，改一处即可），其中三处要手动对齐：作者与 `wails.json` 的 `author`、
-`just` 版本与下面的「环境要求」表、`Platforms` 与 release workflow 的矩阵。
+外面会被组件吃掉 hover 事件），无障碍文本走 `aria-label`。**头像随程序发布，不在运行时去 GitHub 拿**
+（`asserts/developer.png`，由 `lib/assets.ts` 注册），所以整页断网也能完整渲染，拿不到图时还有 antd
+`Avatar` 的首字母灰底兜底；头像换了就按 `about.ts` 里 `avatarSourceUrl` 的注释重新下载一份。项目地址 /
+作者 / 许可证 / 构建工具集中在 `frontend/src/lib/about.ts`（仓库地址、Issues、Releases、Justfile 链接
+都由 `REPO_OWNER` / `REPO_NAME` 拼出来，改一处即可），其中三处要手动对齐：作者与 `wails.json` 的
+`author`、`just` 版本与下面的「环境要求」表、`Platforms` 与 release workflow 的矩阵。
 
 ### 运行情况从哪来
 
