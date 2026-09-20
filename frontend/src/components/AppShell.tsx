@@ -3,6 +3,7 @@ import { Splitter } from 'antd'
 import { ConnectProvider } from '../hooks/useConnect'
 import { ConnectionDialog } from './ConnectionDialog'
 import { ConnectionSidebar } from './ConnectionSidebar'
+import { ConnectionTypePicker } from './ConnectionTypePicker'
 import { MainToolbar } from './MainToolbar'
 import { MenuBar } from './MenuBar'
 import { StatusBar } from './StatusBar'
@@ -37,6 +38,7 @@ export function AppShell() {
         </div>
         <StatusBar />
         <ConnectionDialog />
+        <ConnectionTypePicker />
       </div>
     </ConnectProvider>
   )

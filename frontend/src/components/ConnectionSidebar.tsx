@@ -62,6 +62,7 @@ export function ConnectionSidebar() {
   const connections = useAppStore((s) => s.connections)
   const tree = useAppStore((s) => s.tree)
   const openEditor = useAppStore((s) => s.openConnectionEditor)
+  const openPicker = useAppStore((s) => s.openConnectionPicker)
   const loadDatabases = useAppStore((s) => s.loadDatabases)
   const loadSchemas = useAppStore((s) => s.loadSchemas)
   const loadObjects = useAppStore((s) => s.loadObjects)
@@ -812,7 +813,7 @@ export function ConnectionSidebar() {
       <div className="dm-sidebar-header">
         <span className="dm-sidebar-title">Connections</span>
         <Tooltip title="New connection">
-          <Button size="small" type="text" icon={<PlusOutlined />} onClick={() => openEditor()} />
+          <Button size="small" type="text" icon={<PlusOutlined />} onClick={openPicker} />
         </Tooltip>
         <Tooltip title="Collapse all">
           <Button size="small" type="text" icon={<MinusSquareOutlined />} onClick={collapseAll} />
@@ -845,7 +846,7 @@ export function ConnectionSidebar() {
             description={<span style={{ fontSize: 12 }}>No connections yet</span>}
             style={{ marginTop: 40 }}
           >
-            <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => openEditor()}>
+            <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openPicker}>
               New connection
             </Button>
           </Empty>
@@ -894,7 +895,7 @@ export function ConnectionSidebar() {
             selectable={false}
             onClick={() => {
               setBlankMenu(null)
-              openEditor()
+              openPicker()
             }}
           />
         </div>

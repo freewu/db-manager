@@ -56,7 +56,7 @@ export function MenuBar() {
   const activeTabId = useAppStore((s) => s.activeTabId)
   const theme = useAppStore((s) => s.theme)
   const appInfo = useAppStore((s) => s.appInfo)
-  const openConnectionEditor = useAppStore((s) => s.openConnectionEditor)
+  const openConnectionPicker = useAppStore((s) => s.openConnectionPicker)
   const closeSession = useAppStore((s) => s.closeSession)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
@@ -119,7 +119,7 @@ export function MenuBar() {
     }
     switch (key) {
       case 'file.new':
-        openConnectionEditor()
+        openConnectionPicker()
         break
       case 'file.close':
         if (activeSession) void closeSession(activeSession.id)

@@ -24,6 +24,7 @@ import type {
   TableDesign,
   TableStructure,
 } from '../api/types'
+import type { ConnectionDraft } from '../connection/shared'
 import { databaseKey, FOLDER_LABEL, indexesKey, namespaceKey, objectsKey } from '../lib/tree'
 import { designFrom } from '../lib/design'
 
@@ -51,6 +52,7 @@ export interface WorkspaceTab {
 }
 
 export type ThemeMode = 'light' | 'dark'
+
 
 /**
  * Table designer state, kept per table window so switching between the Data and
@@ -98,11 +100,15 @@ interface AppState {
   designs: Record<string, DesignState>
   savedQueries: SavedQuery[]
   editorOpen: boolean
-  editorDraft?: ConnectionConfig
+  editorDraft?: ConnectionDraft
+  /** Side panel that picks which driver a new connection is for. */
+  pickerOpen: boolean
 
   bootstrap: () => Promise<void>
   setTheme: (theme: ThemeMode) => void
-  openConnectionEditor: (draft?: ConnectionConfig) => void
+  openConnectionPicker: () => void
+  closeConnectionPicker: () => void
+  openConnectionEditor: (draft?: ConnectionDraft) => void
   closeConnectionEditor: () => void
 
   refreshSavedQueries: () => Promise<void>
@@ -191,9 +197,21 @@ export const useAppStore = create<AppState>((set, get) => ({
   designs: {},
   savedQueries: [],
   editorOpen: false,
+  pickerOpen: false,
 
+  openConnectionPicker() {
+    set({ pickerOpen: true })
+  },
+
+  closeConnectionPicker() {
+    set({ pickerOpen: false })
+  },
+
+  // Opening the editor always closes the picker: picking a driver is the only
+  // thing the picker does, and a panel left standing behind the modal would
+  // swallow the next click.
   openConnectionEditor(draft) {
-    set({ editorOpen: true, editorDraft: draft })
+    set({ pickerOpen: false, editorOpen: true, editorDraft: draft })
   },
 
   closeConnectionEditor() {

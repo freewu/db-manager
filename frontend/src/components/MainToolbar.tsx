@@ -38,7 +38,7 @@ export function MainToolbar() {
   const connections = useAppStore((s) => s.connections)
   const sessions = useAppStore((s) => s.sessions)
   const activeSessionId = useAppStore((s) => s.activeSessionId)
-  const openEditor = useAppStore((s) => s.openConnectionEditor)
+  const openPicker = useAppStore((s) => s.openConnectionPicker)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const closeSession = useAppStore((s) => s.closeSession)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
@@ -86,7 +86,7 @@ export function MainToolbar() {
         icon={<ApiOutlined />}
         label="Connection"
         hint="Create a new connection profile"
-        onClick={() => openEditor()}
+        onClick={openPicker}
       />
       <Dropdown menu={connectMenu} trigger={['click']} placement="bottomLeft">
         <span className="dm-ribbon-dropdown">
