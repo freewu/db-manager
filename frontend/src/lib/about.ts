@@ -53,6 +53,23 @@ export const JUST_VERSION = '1.58.0'
 export const BUILD_RECIPES = ['just build', 'just release', 'just publish']
 
 /**
+ * What the app is published for, mirroring the build matrix of
+ * `.github/workflows/release.yml` — Windows, macOS (universal) and Linux, all
+ * from one Wails codebase. Kept apart from the tech-stack groups so the pane
+ * answers "does it run on my machine?" without the reader having to know which
+ * platform the binary in front of them was built for.
+ */
+export const PLATFORM_GROUP: ShieldGroup = {
+  title: 'Platforms',
+  shields: [
+    { label: 'windows', value: 'amd64', color: '#0078D4' },
+    { label: 'macos', value: 'universal', color: '#000000' },
+    // Linux yellow is light, so the value needs dark text.
+    { label: 'linux', value: 'amd64', color: '#FCC624', dark: true },
+  ],
+}
+
+/**
  * Opens a URL in the user's browser.
  *
  * Wails injects `window.runtime` into the webview; under a plain browser (the

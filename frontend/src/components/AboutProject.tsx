@@ -6,6 +6,7 @@ import { useAppStore } from '../store/appStore'
 import {
   BUILD_RECIPES,
   DEVELOPER,
+  PLATFORM_GROUP,
   JUSTFILE_URL,
   JUST_VERSION,
   LICENSE,
@@ -30,12 +31,13 @@ export function AboutProject() {
   const appInfo = useAppStore((s) => s.appInfo)
 
   // The version is in the heading, so it is deliberately not repeated here.
+  // `running` is this binary; what the project ships is the Platforms group.
   const top: Shield[] = [
     { label: 'license', value: LICENSE, color: '#97CA00' },
     // The build tool has no brand colour we ship artwork for, so it borrows the
     // neutral grey the other "tooling" badges use.
     { label: 'build', value: `just ${JUST_VERSION}`, color: '#4B5563' },
-    { label: 'platform', value: appInfo?.platform ?? '—', color: '#007EC6' },
+    { label: 'running', value: appInfo?.platform ?? '—', color: '#007EC6' },
   ]
 
   return (
@@ -62,7 +64,7 @@ export function AboutProject() {
         <span className="mono">{appInfo?.configPath ?? 'the app config folder'}</span>.
       </Typography.Paragraph>
 
-      {techStack(appInfo?.goVersion).map((group) => (
+      {[...techStack(appInfo?.goVersion), PLATFORM_GROUP].map((group) => (
         <div className="dm-shield-group" key={group.title}>
           <span className="dm-shield-group-title">{group.title}</span>
           <div className="dm-shield-row">
