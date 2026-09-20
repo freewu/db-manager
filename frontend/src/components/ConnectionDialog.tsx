@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Alert, App as AntApp, Button, Divider, Form, Modal, Space, Switch } from 'antd'
+import { Alert, App as AntApp, Button, Form, Modal, Space, Switch } from 'antd'
 import { CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
@@ -36,9 +36,9 @@ const FIELD_TAB: Record<string, ConnectionTab> = {
   password: 'basic',
   database: 'basic',
   filePath: 'basic',
-  readOnly: 'basic',
   savePassword: 'basic',
-  color: 'basic',
+  readOnly: 'options',
+  color: 'options',
   params: 'advanced',
   sslMode: 'security',
   sslCAFile: 'security',
@@ -82,11 +82,14 @@ export function ConnectionDialog() {
   const showNetwork = !isFile
   const showCredentials = !isFile
 
-  // One tab per page the driver fills; a driver with nothing to put in the
-  // other tabs (SQLite) gets no tab strip at all.
-  const tabs = CONNECTION_TABS.filter(
-    (entry) => entry.key === 'basic' || Boolean(page?.[connectionTabSlot(entry.key)]),
-  )
+  // One tab per page: Basic and the shell's Options are always there, the
+  // driver adds Security (TLS) and Advanced (extra parameters) when it has
+  // something to put in them.
+  const tabs = CONNECTION_TABS.filter((entry) => {
+    if (entry.key === 'basic' || entry.key === 'options') return true
+    const slot = connectionTabSlot(entry.key)
+    return slot ? Boolean(page?.[slot]) : false
+  })
 
   // Reset the form whenever the dialog opens with a different profile. A draft
   // coming from the menu carries only a driver, so everything else falls back
@@ -281,24 +284,15 @@ export function ConnectionDialog() {
             but hidden: their rules still run on save, and their values stay in
             the form store, so switching tabs never loses what was typed. */}
         {tabs.map((entry) => {
-          const Fields = page?.[connectionTabSlot(entry.key)]
+          const slot = connectionTabSlot(entry.key)
+          const Fields = slot ? page?.[slot] : undefined
           return (
             <div key={entry.key} hidden={tab !== entry.key}>
               {entry.key === 'basic' ? <DisplayNameField /> : null}
               {Fields && driverInfo ? (
                 <Fields form={form} driver={driverInfo} draft={draft} />
               ) : null}
-              {entry.key === 'basic' ? (
-                <>
-                  <Divider style={{ margin: '4px 0 16px' }}>Options</Divider>
-                  <div className="dm-form-row">
-                    <Form.Item name="readOnly" label="Read only" valuePropName="checked">
-                      <Switch />
-                    </Form.Item>
-                    <LabelColourField />
-                  </div>
-                </>
-              ) : null}
+              {entry.key === 'options' ? <OptionsFields /> : null}
             </div>
           )
         })}
@@ -338,6 +332,21 @@ export function ConnectionDialog() {
 
 function driverFor(drivers: DriverInfo[], type: DriverType | undefined): DriverInfo | undefined {
   return type ? drivers.find((d) => d.type === type) : undefined
+}
+
+/**
+ * The Options page: what a profile says about itself rather than about the
+ * server. Every driver gets it, so the dialog draws it for all of them.
+ */
+function OptionsFields() {
+  return (
+    <div className="dm-form-row">
+      <Form.Item name="readOnly" label="Read only" valuePropName="checked">
+        <Switch />
+      </Form.Item>
+      <LabelColourField />
+    </div>
+  )
 }
 
 /** A blank profile for a driver: its port, its default database, no secrets. */

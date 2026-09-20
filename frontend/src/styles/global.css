@@ -1354,6 +1354,19 @@ body {
   gap: 1px;
   width: 320px;
   min-width: 0;
+  /* The row's line-height (40px) is inherited: left alone, each of the two lines
+     below would be 40px tall and the label would not fit in its row. */
+  line-height: 1.35;
+}
+
+/* Ant Design's vertical row is a 40px line-height block whose icon and label are
+   inline content: the two-line label then lands under the row rather than in it
+   (only the engine icon stayed inside, and the list read as blank rows). Lay the
+   row out as a flex box so the label sits beside the icon for good. */
+.dm-type-menu .ant-dropdown-menu-item,
+.dm-blank-menu .ant-menu-item {
+  display: flex;
+  align-items: center;
 }
 
 .dm-type-name {

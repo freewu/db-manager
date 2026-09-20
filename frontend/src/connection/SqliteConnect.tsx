@@ -1,5 +1,3 @@
-import { Alert } from 'antd'
-
 import {
   DatabaseField,
   FilePathField,
@@ -12,9 +10,9 @@ import {
  * SQLite.
  *
  * No host, no credentials: the profile is a path on this machine, which is why
- * this page shares nothing with the network drivers but the shared shell. There
- * is nothing to put in the Security or Advanced tabs either, so the dialog
- * shows no tab strip at all for this driver.
+ * this page shares nothing with the network drivers but the shared shell. It is
+ * also the one driver with no Security or Advanced page — the dialog's Options
+ * tab is all it gets on top of Basic.
  */
 function Basic({ form, driver }: DriverFormProps) {
   const browse = useFilePicker(form)
@@ -25,12 +23,6 @@ function Basic({ form, driver }: DriverFormProps) {
         label="Attached database alias"
         placeholder={driver.defaultDatabase || 'main'}
         extra="Leave as “main” unless you attach extra files to the same connection."
-      />
-      <Alert
-        type="info"
-        showIcon
-        title="Local file only"
-        description="Nothing leaves this machine, and the file is opened as-is — use Read only below to browse a database you do not want to write to."
       />
     </>
   )

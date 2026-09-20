@@ -74,30 +74,44 @@ export interface DriverFormProps {
 export interface DriverForm {
   /** Tab 1: how to reach the engine (address, credentials, or a file path). */
   Basic: ComponentType<DriverFormProps>
-  /** Tab 2: TLS material; network drivers only. */
+  /** The TLS material tab; network drivers only. */
   Security?: ComponentType<DriverFormProps>
-  /** Tab 3: free-form parameters handed to the driver verbatim. */
+  /** The free-form parameters tab, handed to the driver verbatim. */
   Advanced?: ComponentType<DriverFormProps>
   /** One line for the "new connection" picker, in the driver's own terms. */
   summary: string
 }
 
-/** The pages a connection form can have, in the order the dialog shows them. */
+/**
+ * The pages a connection form can have, in the order the dialog shows them.
+ *
+ * The first three are the driver's to fill; `Options` belongs to the shell and
+ * is on every form, because read-only and the profile colour mean the same
+ * thing whatever you are connecting to.
+ */
 export const CONNECTION_TABS = [
   { key: 'basic', label: 'Basic' },
   { key: 'security', label: 'Security' },
   { key: 'advanced', label: 'Advanced' },
+  { key: 'options', label: 'Options' },
 ] as const
 
 export type ConnectionTab = (typeof CONNECTION_TABS)[number]['key']
 
-/** The `DriverForm` member that fills a tab, for the shell to look up. */
-export function connectionTabSlot(tab: ConnectionTab): 'Basic' | 'Security' | 'Advanced' {
+/**
+ * The `DriverForm` member that fills a tab, for the shell to look up — or
+ * `null` for the tabs the dialog draws itself.
+ */
+export function connectionTabSlot(
+  tab: ConnectionTab,
+): 'Basic' | 'Security' | 'Advanced' | null {
   switch (tab) {
     case 'security':
       return 'Security'
     case 'advanced':
       return 'Advanced'
+    case 'options':
+      return null
     default:
       return 'Basic'
   }
