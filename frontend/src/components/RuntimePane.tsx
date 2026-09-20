@@ -133,7 +133,7 @@ export function RuntimePane({ tab }: RuntimePaneProps) {
           <Alert
             type="error"
             showIcon
-            message="Could not read the server state"
+            title="Could not read the server state"
             description={
               <span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
                 {error}
@@ -158,7 +158,7 @@ export function RuntimePane({ tab }: RuntimePaneProps) {
           <Alert
             type="warning"
             showIcon
-            message={
+            title={
               overview.warnings.length === 1
                 ? 'Part of this page could not be read'
                 : `${overview.warnings.length} parts of this page could not be read`

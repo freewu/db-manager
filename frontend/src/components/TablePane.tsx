@@ -433,7 +433,7 @@ export function TablePane({ tab }: TablePaneProps) {
               <Alert
                 type="error"
                 showIcon
-                message="Could not load rows"
+                title="Could not load rows"
                 description={<span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{error}</span>}
                 action={
                   <Button size="small" icon={<ReloadOutlined />} onClick={refresh}>

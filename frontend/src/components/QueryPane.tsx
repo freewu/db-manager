@@ -287,7 +287,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
                 <Alert
                   type="error"
                   showIcon
-                  message="Statement failed"
+                  title="Statement failed"
                   description={
                     <span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
                       {error}
@@ -304,7 +304,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
                 <Alert
                   type="success"
                   showIcon
-                  message={`${result.affectedRows} row(s) affected in ${formatDuration(result.durationMs)}`}
+                  title={`${result.affectedRows} row(s) affected in ${formatDuration(result.durationMs)}`}
                 />
               </div>
             ) : null}
@@ -314,7 +314,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
                 <Alert
                   type="warning"
                   showIcon
-                  message={`Result truncated at ${result.rowCount.toLocaleString()} rows (max rows = ${maxRows})`}
+                  title={`Result truncated at ${result.rowCount.toLocaleString()} rows (max rows = ${maxRows})`}
                 />
               </div>
             ) : null}

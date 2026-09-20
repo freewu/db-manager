@@ -16,7 +16,7 @@ export function UnsupportedOverview({ overview }: { overview: ServerOverview }) 
       <Alert
         type="info"
         showIcon
-        message={`${overview.driver} does not report runtime state yet`}
+        title={`${overview.driver} does not report runtime state yet`}
         description={
           <Typography.Text style={{ fontSize: 12 }}>
             The connection is open and usable — queries, the object tree and the designer all work.

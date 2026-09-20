@@ -347,7 +347,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
                 <Alert
                   type="error"
                   showIcon
-                  message="Could not load the object definition"
+                  title="Could not load the object definition"
                   description={
                     <span className="mono" style={{ fontSize: 12 }}>
                       {definitionError}
@@ -393,7 +393,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
                 <Alert
                   type={analysis?.destructive ? 'warning' : 'info'}
                   showIcon
-                  message="Dry run"
+                  title="Dry run"
                   description={
                     <ul style={{ paddingInlineStart: 18, margin: 0 }}>
                       {warnings.map((entry, index) => (
@@ -414,7 +414,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
                   showIcon
                   closable
                   onClose={() => setError(null)}
-                  message="Statement failed"
+                  title="Statement failed"
                   description={
                     <span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
                       {error}
@@ -431,7 +431,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
                     <Alert
                       type="success"
                       showIcon
-                      message={`${result.affectedRows} row(s) affected in ${formatDuration(result.durationMs)}`}
+                      title={`${result.affectedRows} row(s) affected in ${formatDuration(result.durationMs)}`}
                     />
                   </div>
                 ) : null}

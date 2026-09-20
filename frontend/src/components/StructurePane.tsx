@@ -230,7 +230,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
         <Alert
           type="error"
           showIcon
-          message="Could not read the structure"
+          title="Could not read the structure"
           description={<span className="mono">{error}</span>}
           action={
             <Button size="small" icon={<ReloadOutlined />} onClick={reload}>
@@ -459,7 +459,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
           showIcon
           closable
           style={{ margin: '8px 12px 0' }}
-          message="The script stopped in the middle"
+          title="The script stopped in the middle"
           description={<span className="mono">{applyError}</span>}
           onClose={() => setApplyError(null)}
         />
@@ -520,7 +520,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
         </div>
         <div className="dm-design-preview-body">
           {planError ? (
-            <Alert type="warning" showIcon message={<span className="mono">{planError}</span>} />
+            <Alert type="warning" showIcon title={<span className="mono">{planError}</span>} />
           ) : null}
           {plan && plan.warnings.length > 0 ? (
             <Alert
@@ -528,7 +528,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
               showIcon
               icon={<WarningOutlined />}
               style={{ marginBottom: 6 }}
-              message="This engine cannot do everything the design asks for"
+              title="This engine cannot do everything the design asks for"
               description={
                 <ul style={{ margin: 0, paddingLeft: 18 }}>
                   {plan.warnings.map((warning, index) => (

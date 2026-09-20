@@ -421,7 +421,7 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
         <Alert
           type="error"
           showIcon
-          message="Could not read the schema"
+          title="Could not read the schema"
           description={
             <span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
               {error}
@@ -504,7 +504,7 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
           <Alert
             type="warning"
             showIcon
-            message="Only the first 300 objects are shown"
+            title="Only the first 300 objects are shown"
             description="Open the namespace in a narrower scope (a schema, or a database per schema) to see the rest."
           />
         </div>
@@ -515,7 +515,7 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
           <Alert
             type="warning"
             showIcon
-            message={`${graph.warnings.length} object(s) could not be read in full`}
+            title={`${graph.warnings.length} object(s) could not be read in full`}
             description={
               <ul style={{ paddingInlineStart: 18, margin: 0 }}>
                 {graph.warnings.slice(0, 6).map((warning, index) => (
