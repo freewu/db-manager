@@ -49,8 +49,26 @@ export const JUSTFILE_URL = `${PROJECT_URL}/blob/main/Justfile`
  */
 export const JUST_VERSION = '1.58.0'
 
-/** The recipes a reader would type; shown next to the Justfile link. */
+/** The recipes a reader would type; listed inside the Justfile badge. */
 export const BUILD_RECIPES = ['just build', 'just release', 'just publish']
+
+/**
+ * The Justfile as a badge: the label names the file, the value lists the recipes
+ * a user would actually type, and the whole pill links to the file itself — a
+ * table row would say the same thing with more chrome.
+ */
+export const BUILD_GROUP: ShieldGroup = {
+  title: 'Build',
+  shields: [
+    {
+      label: 'justfile',
+      value: BUILD_RECIPES.join(' · '),
+      // Same neutral tooling grey as the `just` version badge above.
+      color: '#4B5563',
+      href: JUSTFILE_URL,
+    },
+  ],
+}
 
 /**
  * What the app is published for, mirroring the build matrix of
@@ -91,6 +109,8 @@ export interface Shield {
   color: string
   /** Set for light brand colours that need dark text (React's cyan). */
   dark?: boolean
+  /** Target of the badge in the page's own sense — the pill becomes a link. */
+  href?: string
 }
 
 export interface ShieldGroup {

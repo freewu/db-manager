@@ -1,13 +1,12 @@
 import type { ReactNode } from 'react'
-import { Avatar, Space, Tooltip, Typography } from 'antd'
+import { Avatar, Tooltip, Typography } from 'antd'
 import { GithubOutlined } from '@ant-design/icons'
 
 import { useAppStore } from '../store/appStore'
 import {
-  BUILD_RECIPES,
+  BUILD_GROUP,
   DEVELOPER,
   PLATFORM_GROUP,
-  JUSTFILE_URL,
   JUST_VERSION,
   LICENSE,
   PROJECT_URL,
@@ -64,7 +63,7 @@ export function AboutProject() {
         <span className="mono">{appInfo?.configPath ?? 'the app config folder'}</span>.
       </Typography.Paragraph>
 
-      {[...techStack(appInfo?.goVersion), PLATFORM_GROUP].map((group) => (
+      {[BUILD_GROUP, ...techStack(appInfo?.goVersion), PLATFORM_GROUP].map((group) => (
         <div className="dm-shield-group" key={group.title}>
           <span className="dm-shield-group-title">{group.title}</span>
           <div className="dm-shield-row">
@@ -112,36 +111,38 @@ export function AboutProject() {
             </Tooltip>
           </ExternalLink>
         </dd>
-
-        <dt>Build</dt>
-        <dd>
-          <Space size={6} wrap split="·">
-            <ExternalLink url={JUSTFILE_URL} label="Justfile" />
-            {BUILD_RECIPES.map((recipe) => (
-              <span className="mono" key={recipe}>
-                {recipe}
-              </span>
-            ))}
-          </Space>
-        </dd>
       </dl>
     </section>
   )
 }
 
-/** One shields.io-style badge. */
-function ShieldBadge({ label, value, color, dark }: Shield) {
+/** One shields.io-style badge, optionally a link (the Justfile is one). */
+function ShieldBadge({ label, value, color, dark, href }: Shield) {
+  const pill = (
+    <span className="dm-shield">
+      <span className="dm-shield-label">{label}</span>
+      <span className={`dm-shield-value${dark ? ' is-dark' : ''}`} style={{ background: color }}>
+        {value || 'n/a'}
+      </span>
+    </span>
+  )
+
   return (
     <Tooltip title={`${label} ${value}`}>
-      <span className="dm-shield">
-        <span className="dm-shield-label">{label}</span>
-        <span
-          className={`dm-shield-value${dark ? ' is-dark' : ''}`}
-          style={{ background: color }}
+      {href ? (
+        <a
+          className="dm-shield-link"
+          href={href}
+          onClick={(event) => {
+            event.preventDefault()
+            openExternal(href)
+          }}
         >
-          {value || 'n/a'}
-        </span>
-      </span>
+          {pill}
+        </a>
+      ) : (
+        pill
+      )}
     </Tooltip>
   )
 }

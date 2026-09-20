@@ -1245,6 +1245,23 @@ body {
   text-shadow: none;
 }
 
+/* A badge that links somewhere (the Justfile): the whole pill is the target, so
+   it keeps the badge look and only reacts on hover. */
+.dm-shield-link {
+  display: inline-flex;
+  border-radius: 3px;
+  color: inherit;
+}
+
+.dm-shield-link:hover .dm-shield {
+  filter: brightness(1.12);
+}
+
+.dm-shield-link:focus-visible .dm-shield {
+  outline: 2px solid var(--dm-accent, #36ab60);
+  outline-offset: 1px;
+}
+
 .dm-about-rows {
   display: grid;
   grid-template-columns: 132px minmax(0, 1fr);
