@@ -14,7 +14,7 @@ import type { FormInstance } from 'antd'
 import { FolderOpenOutlined, MinusCircleOutlined, PlusOutlined } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
-import type { ConnectionConfig, DriverInfo, DriverType, SSLMode } from '../api/types'
+import type { ConnectionConfig, DriverInfo, SSLMode } from '../api/types'
 
 /**
  * Every value the connection form holds, whichever driver page is on screen.
@@ -22,9 +22,12 @@ import type { ConnectionConfig, DriverInfo, DriverType, SSLMode } from '../api/t
  * The shape is deliberately the union of all drivers: the shell owns the form
  * instance and hands it down, so a page can add fields without the shell — or
  * its save path — knowing anything about them.
+ *
+ * The driver is deliberately *not* in here: it is picked before the dialog
+ * opens, and `validateFields()` only returns fields an input registered, so a
+ * value nobody renders comes back empty. The dialog reads it off the draft.
  */
 export interface ConnectionValues {
-  driver: DriverType
   name: string
   host?: string
   port?: number

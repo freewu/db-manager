@@ -54,10 +54,11 @@ const FIELD_TAB: Record<string, ConnectionTab> = {
  * fields that only make sense for one engine live in `src/connection/*.tsx`
  * and are dispatched on the driver the draft carries.
  *
- * The driver itself is not editable here: it was picked from the "new
- * connection" menu, which is the only thing that decides it. Switching engines
- * means picking a different entry there — the dialog only says which engine it
- * is, with the vendor logo next to the title.
+ * The driver itself is not editable here, and not a form field either: it was
+ * picked from the "new connection" menu, which is the only thing that decides
+ * it, and the dialog reads it off the draft (see `driverType`). Switching
+ * engines means picking a different entry there — the dialog only says which
+ * engine it is, with the vendor logo next to the title.
  */
 export function ConnectionDialog() {
   const open = useAppStore((s) => s.editorOpen)
@@ -102,7 +103,6 @@ export function ConnectionDialog() {
     const values = blankValues(driver)
     if (draft) {
       Object.assign(values, {
-        driver: draft.driver,
         name: draft.name ?? '',
         host: draft.host ?? values.host,
         port: draft.port ?? values.port,
@@ -144,7 +144,12 @@ export function ConnectionDialog() {
       return {
         id: draft?.id ?? '',
         name: values.name.trim(),
-        driver: values.driver,
+        // Read off the draft, never out of `values`: the driver is picked in the
+        // "new connection" menu before this dialog opens, `validateFields()`
+        // only returns registered fields, and a `driver` that no input owns came
+        // back empty — which the backend answers with "driver  is not available
+        // yet" for both Test connection and Save.
+        driver: driverType(driverInfo),
         host: showNetwork ? values.host?.trim() : undefined,
         port: showNetwork ? values.port : undefined,
         username: showCredentials ? values.username : undefined,
@@ -159,7 +164,7 @@ export function ConnectionDialog() {
         hasPassword: draft?.hasPassword,
       }
     },
-    [draft, isFile, showCredentials, showNetwork],
+    [driverInfo, draft, isFile, showCredentials, showNetwork],
   )
 
   /**
@@ -335,6 +340,17 @@ function driverFor(drivers: DriverInfo[], type: DriverType | undefined): DriverI
 }
 
 /**
+ * The driver name the backend's registry knows the draft by.
+ *
+ * MySQL is only the fallback for a registry that offers nothing at all (the
+ * dialog has no page to show then and says so); with a real registry the draft's
+ * own driver is always found.
+ */
+function driverType(driver: DriverInfo | undefined): DriverType {
+  return driver?.type ?? 'mysql'
+}
+
+/**
  * The Options page: what a profile says about itself rather than about the
  * server. Every driver gets it, so the dialog draws it for all of them.
  */
@@ -350,9 +366,8 @@ function OptionsFields() {
 }
 
 /** A blank profile for a driver: its port, its default database, no secrets. */
-function blankValues(driver: DriverInfo | undefined): ConnectionValues {
+function blankValues(driver: DriverInfo | undefined): Omit<ConnectionValues, 'driver'> {
   return {
-    driver: driver?.type ?? 'mysql',
     name: '',
     host: 'localhost',
     port: driver?.defaultPort,
