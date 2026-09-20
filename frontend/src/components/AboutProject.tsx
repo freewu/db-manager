@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Avatar, Tooltip, Typography } from 'antd'
 import { GithubOutlined } from '@ant-design/icons'
 
+import { developerAvatar } from '../lib/assets'
 import { useAppStore } from '../store/appStore'
 import {
   BUILD_GROUP,
@@ -93,7 +94,7 @@ export function AboutProject() {
         <dt>Developer</dt>
         <dd>
           {/* Just the avatar: it is the one thing worth showing at a glance, and
-              it links to the profile it was fetched from. The name lives in the
+              it links to the profile it stands for. The name lives in the
               tooltip, the email in `wails.json` / the repository. */}
           <ExternalLink url={DEVELOPER.url} ariaLabel={`${DEVELOPER.name} on GitHub`}>
             {/* The Tooltip goes inside the link, not around it: it has to attach
@@ -103,7 +104,7 @@ export function AboutProject() {
               <Avatar
                 size={22}
                 className="dm-about-avatar"
-                src={DEVELOPER.avatarUrl}
+                src={developerAvatar}
                 alt={DEVELOPER.name}
               >
                 {DEVELOPER.name.slice(0, 1).toUpperCase()}

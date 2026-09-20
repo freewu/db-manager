@@ -29,10 +29,14 @@ export const DEVELOPER = {
   github: REPO_OWNER,
   url: `https://github.com/${REPO_OWNER}`,
   /**
-   * GitHub serves any account's avatar as `<user>.png`. It is the one thing here
-   * that needs the network; offline the `Avatar` falls back to the initial.
+   * Where the profile picture came from. It is **not** fetched at runtime: the
+   * About block has to render on a machine with no network, so the picture ships
+   * as `asserts/developer.png` (see `lib/assets.ts`) and this URL only records
+   * its origin — re-download it with
+   * `curl -L -o asserts/developer.png 'https://github.com/freewu.png?size=64'`
+   * when the avatar changes.
    */
-  avatarUrl: `https://github.com/${REPO_OWNER}.png?size=64`,
+  avatarSourceUrl: `https://github.com/${REPO_OWNER}.png?size=64`,
 }
 
 export const LICENSE = 'MIT'

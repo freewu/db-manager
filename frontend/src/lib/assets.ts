@@ -1,3 +1,4 @@
+import developerAvatarImage from '@asserts/developer.png'
 import mongoIcon from '@asserts/icon/mongoDB.png'
 import mysqlIcon from '@asserts/icon/MYSQL.png'
 import postgresIcon from '@asserts/icon/postgresql.png'
@@ -14,6 +15,13 @@ import type { DriverType } from '../api/types'
  * copy of every image.
  */
 export const appLogo = logo
+
+/**
+ * The developer's profile picture. Bundled rather than fetched from GitHub so
+ * the About block still renders offline (`DEVELOPER.avatarSourceUrl` records
+ * where the file came from).
+ */
+export const developerAvatar = developerAvatarImage
 
 const DRIVER_ICONS: Partial<Record<DriverType, string>> = {
   mysql: mysqlIcon,
