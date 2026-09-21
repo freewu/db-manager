@@ -8,6 +8,7 @@ import {
   DeleteOutlined,
   DisconnectOutlined,
   EditOutlined,
+  FolderAddOutlined,
   FolderOutlined,
   KeyOutlined,
   MinusSquareOutlined,
@@ -22,10 +23,24 @@ import {
 } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
-import type { ConnectionConfig, DatabaseOptions, DatabasePlan, DriverInfo, IndexEntry, ObjectInfo, SessionInfo } from '../api/types'
+import type {
+  ConnectionConfig,
+  DatabaseOptions,
+  DatabasePlan,
+  DriverInfo,
+  IndexEntry,
+  ObjectInfo,
+  SessionInfo,
+} from '../api/types'
 import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
 import { capabilitiesOf, findDriver, objectKindsOf } from '../lib/capabilities'
+import {
+  arrangementOf,
+  groupOf,
+  type DropTarget,
+  type ExplorerEntry,
+} from '../lib/explorer'
 import { useAppStore, type ListScope, type TableView } from '../store/appStore'
 import { ConnectionTypeDropdown, connectionTypeItems, driverFromKey } from './ConnectionTypeMenu'
 import { objectIcon } from './objectIcon'
@@ -39,6 +54,13 @@ import {
   namespaceKey,
   objectsKey,
 } from '../lib/tree'
+
+/** Menu key of "New group…", which no driver ever answers to. */
+const NEW_GROUP_KEY = 'new-group'
+
+/** Key prefix of the driver list nested under a group, so a pick can be told
+ * apart from the group's own items: `group.mysql` on the way to the dialog. */
+const GROUP_PREFIX = 'group.'
 
 /** One entry of the connection pane: a saved profile and/or live session. */
 interface RootEntry {
@@ -56,11 +78,18 @@ interface RootEntry {
  * Every saved profile is listed; open ones expand into
  * `database → schemas → [Tables | Views | Indexes | …]`. Expanding a closed
  * profile connects it, mirroring Navicat's double-click-to-open behaviour.
+ *
+ * The list can be arranged: rows are dragged to reorder them, and groups — one
+ * level deep — hold connections the same way a folder holds files. Where things
+ * sit is stored per-profile-id in `layout.json` and re-derived against the
+ * profiles on both ends, so the tree and the file cannot disagree; see
+ * `lib/explorer.ts` for the UI's half of that.
  */
 export function ConnectionSidebar() {
   const sessions = useAppStore((s) => s.sessions)
   const drivers = useAppStore((s) => s.drivers)
   const connections = useAppStore((s) => s.connections)
+  const connectionLayout = useAppStore((s) => s.connectionLayout)
   const tree = useAppStore((s) => s.tree)
   const openEditor = useAppStore((s) => s.openConnectionEditor)
   const loadDatabases = useAppStore((s) => s.loadDatabases)
@@ -79,9 +108,11 @@ export function ConnectionSidebar() {
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const setActiveConnection = useAppStore((s) => s.setActiveConnection)
   const setActiveNamespace = useAppStore((s) => s.setActiveNamespace)
+  const moveConnection = useAppStore((s) => s.moveConnection)
+  const deleteConnectionGroup = useAppStore((s) => s.deleteConnectionGroup)
 
   const { connect, pending } = useConnect()
-  const { message } = AntApp.useApp()
+  const { message, modal } = AntApp.useApp()
 
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
@@ -98,6 +129,10 @@ export function ConnectionSidebar() {
   const openedByUser = useRef(new Set<string>())
   const [filter, setFilter] = useState('')
   const [manageOpen, setManageOpen] = useState(false)
+  /** Group the name window is creating (`group` unset) or renaming. */
+  const [groupDialog, setGroupDialog] = useState<{ group?: { id: string; name: string } } | null>(
+    null,
+  )
   /** Where the user asked for the empty-area context menu, if anywhere. */
   const [blankMenu, setBlankMenu] = useState<{ x: number; y: number } | null>(null)
   const blankMenuRef = useRef<HTMLDivElement | null>(null)
@@ -191,11 +226,56 @@ export function ConnectionSidebar() {
     return out
   }, [connections, driverOfType, sessions])
 
-  const visibleRoots = useMemo(() => {
-    const needle = filter.trim().toLowerCase()
-    if (!needle) return roots
-    return roots.filter((entry) => entry.name.toLowerCase().includes(needle))
-  }, [filter, roots])
+  /** The pane's top level as drawn: the groups, and the connections outside them. */
+  const arrangement = useMemo(
+    () => arrangementOf(connections, connectionLayout),
+    [connectionLayout, connections],
+  )
+
+  /**
+   * Connections with no profile — an ad-hoc session, or one whose profile was
+   * deleted. Nothing stores where they sit, so they follow the arrangement in
+   * the order the session list hands them over.
+   */
+  const looseSessions = useMemo(() => roots.filter((root) => !root.profile), [roots])
+
+  const rootById = useMemo(() => new Map(roots.map((root) => [root.id, root])), [roots])
+  const needle = filter.trim().toLowerCase()
+
+  /**
+   * The arrangement, filtered to what the search box matches.
+   *
+   * A group survives as a whole when its own name matches — the user asked for
+   * the folder — and with only its matching members when one of those matched.
+   * A group that ends up with nothing to show is dropped: an empty folder that
+   * appeared out of a filter would be a place with nothing in it, not a hit.
+   */
+  const visibleArrangement = useMemo(() => {
+    if (!needle) return arrangement
+    const nameOf = (id: string) => rootById.get(id)?.name.toLowerCase() ?? ''
+    const out: ExplorerEntry[] = []
+    for (const entry of arrangement) {
+      if (entry.t === 'connection') {
+        if (nameOf(entry.id).includes(needle)) out.push(entry)
+        continue
+      }
+      if (entry.name.toLowerCase().includes(needle)) {
+        out.push(entry)
+        continue
+      }
+      const members = entry.members.filter((id) => nameOf(id).includes(needle))
+      if (members.length > 0) out.push({ ...entry, members })
+    }
+    return out
+  }, [arrangement, needle, rootById])
+
+  const visibleSessions = useMemo(
+    () =>
+      needle
+        ? looseSessions.filter((root) => root.name.toLowerCase().includes(needle))
+        : looseSessions,
+    [looseSessions, needle],
+  )
 
   const openObject = useCallback(
     (sessionId: string, database: string, schema: string, object: ObjectInfo, view?: TableView) => {
@@ -643,10 +723,15 @@ export function ConnectionSidebar() {
     ],
   )
 
-  const treeData = useMemo<TreeDataNode[]>(() => {
-    return visibleRoots.map((root) => {
-      const session = root.session
-      const connectionKey = encodeNode({ t: 'connection', connectionId: root.id })
+  /**
+   * One connection row and, when it is open, the databases underneath it.
+   *
+   * The row is what the arrangement holds, so its key is the profile id — or the
+   * session id, for an ad-hoc connection that has no profile.
+   */
+  const buildConnectionNode = useCallback((root: RootEntry): TreeDataNode => {
+    const session = root.session
+    const connectionKey = encodeNode({ t: 'connection', connectionId: root.id })
 
       let children: TreeDataNode[] | undefined
       if (!session) {
@@ -723,25 +808,72 @@ export function ConnectionSidebar() {
         isLeaf: false,
         children,
       }
-    })
     // Menu builders close over the current tree/session state on purpose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     buildDatabaseNode,
-    buildNamespace,
     connections,
     driverOfType,
     loadDatabases,
+    loadedKeys,
     openQueryTab,
     pending,
     refreshSession,
-    roots,
     sessions,
     tree.databases,
     tree.errors,
     tree.loading,
-    visibleRoots,
   ])
+
+  /**
+   * The pane's rows: the arrangement, then whatever the arrangement cannot hold.
+   *
+   * A group is a row like any other connection, so it is dragged and dropped by
+   * the same two handlers — that is what makes "drag a connection into a folder"
+   * and "drag it back out" the same gesture in both directions.
+   */
+  const treeData = useMemo<TreeDataNode[]>(() => {
+    const nodes: TreeDataNode[] = []
+    for (const entry of visibleArrangement) {
+      if (entry.t === 'group') {
+        const members = entry.members
+          .map((id) => rootById.get(id))
+          .filter((root): root is RootEntry => Boolean(root))
+          .map(buildConnectionNode)
+        nodes.push({
+          key: encodeNode({ t: 'group', groupId: entry.id }),
+          title: (
+            <NodeMenu
+              items={groupMenuItems(entry)}
+              onClick={({ key }) => handleGroupMenuKey(entry, key)}
+            >
+              <span className="dm-group-node">
+                <span className="dm-truncate">{entry.name}</span>
+                {members.length > 0 ? (
+                  <span className="dm-group-count">{members.length}</span>
+                ) : null}
+              </span>
+            </NodeMenu>
+          ),
+          icon: <FolderOutlined />,
+          // A group with nothing in it has nothing to reveal, so it is a leaf —
+          // the same rule its object folders below follow.
+          isLeaf: members.length === 0,
+          children: members.length > 0 ? members : undefined,
+        })
+        continue
+      }
+      const root = rootById.get(entry.id)
+      // An entry whose profile went away between two fetches: the next refresh
+      // drops it from the arrangement and the row goes with it, so it is skipped
+      // for the moment instead of drawn with nothing behind it.
+      if (root) nodes.push(buildConnectionNode(root))
+    }
+    for (const root of visibleSessions) nodes.push(buildConnectionNode(root))
+    return nodes
+    // Menu builders close over the current tree/session state on purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildConnectionNode, rootById, visibleArrangement, visibleSessions])
 
   /* ------------------------------------------------------------ callbacks */
 
@@ -805,6 +937,93 @@ export function ConnectionSidebar() {
     ],
   )
 
+  /* ------------------------------------------------------------- dragging */
+
+  /** The id the arrangement uses for a row, or `undefined` for anything else. */
+  const entryIdOfKey = useCallback((key: React.Key | undefined): string | undefined => {
+    const ref = decodeNode(String(key))
+    if (!ref) return undefined
+    return ref.t === 'group' ? ref.groupId : ref.t === 'connection' ? ref.connectionId : undefined
+  }, [])
+
+  /**
+   * Where a drop would land, or `undefined` when the arrangement cannot express
+   * it.
+   *
+   * `allowDrop` and `onDrop` both come through here, so the hint the user
+   * follows is the same decision as the move that happens: a folder inside a
+   * folder is refused *before* the drop, rather than shown as allowed and then
+   * swallowed. A drop among things the arrangement does not know — a database, a
+   * schema, an object — lands nowhere at all.
+   */
+  const resolveDrop = useCallback(
+    (dragId: string, dropKey: string, relative: number): DropTarget | undefined => {
+      const dragged = arrangement.find((entry) => entry.id === dragId)
+      if (!dragged) return undefined
+      const ref = decodeNode(dropKey)
+      if (!ref) return undefined
+
+      if (ref.t === 'group') {
+        if (relative === 0) {
+          // Onto the folder's own row puts the connection inside it. A folder
+          // inside a folder is one level too deep.
+          return dragged.t === 'connection' ? { t: 'inside', groupId: ref.groupId } : undefined
+        }
+        return { t: 'root', neighborId: ref.groupId, after: relative > 0 }
+      }
+      if (ref.t === 'connection') {
+        const owner = groupOf(arrangement, ref.connectionId)
+        if (!owner) return { t: 'root', neighborId: ref.connectionId, after: relative >= 0 }
+        // A member sits inside its folder, so its neighbours are slots in that
+        // folder — and a folder does not go inside one. This is also how a
+        // connection is dragged back out: aim next to a top-level row.
+        if (dragged.t === 'group') return undefined
+        return { t: 'member', groupId: owner, neighborId: ref.connectionId, after: relative >= 0 }
+      }
+      return undefined
+    },
+    [arrangement],
+  )
+
+  const allowDrop = useCallback<NonNullable<TreeProps['allowDrop']>>(
+    ({ dragNode, dropNode, dropPosition }) => {
+      const dragId = entryIdOfKey(dragNode.key)
+      if (!dragId || dragId === entryIdOfKey(dropNode.key)) return false
+      return resolveDrop(dragId, String(dropNode.key), dropPosition) !== undefined
+    },
+    [entryIdOfKey, resolveDrop],
+  )
+
+  const handleDrop = useCallback<NonNullable<TreeProps['onDrop']>>(
+    (info) => {
+      const dragId = entryIdOfKey(info.dragNode?.key)
+      if (!dragId) return
+      // rc-tree reports where the drop landed as an index among the parent's
+      // children; what the hint meant is the same -1 / 0 / +1 relative to the
+      // node it names that `allowDrop` was asked about.
+      const pos = String((info.node as TreeDataNode & { pos?: string }).pos ?? '')
+      const relative = info.dropToGap
+        ? info.dropPosition - Number(pos.split('-').pop())
+        : 0
+      const target = resolveDrop(dragId, String(info.node.key), relative)
+      if (!target) return
+      void moveConnection(dragId, target).catch((error) => message.error(toMessage(error)))
+    },
+    [entryIdOfKey, message, moveConnection, resolveDrop],
+  )
+
+  /**
+   * Only the rows the arrangement holds are draggable.
+   *
+   * A filtered tree draws just what matched, so the rows around a drop are not
+   * the rows the arrangement holds and a position among them means nothing;
+   * dragging is off while the filter is on rather than quietly misplaced.
+   */
+  const nodeDraggable = useCallback(
+    (node: TreeDataNode): boolean => needle === '' && entryIdOfKey(node.key) !== undefined,
+    [entryIdOfKey, needle],
+  )
+
   const handleSelect = useCallback<NonNullable<TreeProps['onSelect']>>(
     (keys, info) => {
       setSelectedKeys(keys as React.Key[])
@@ -820,6 +1039,14 @@ export function ConnectionSidebar() {
         setActiveNamespace()
         const session = sessionForConnection(ref.connectionId)
         if (session) setActiveSession(session.id)
+        return
+      }
+
+      if (ref.t === 'group') {
+        // A folder names no connection and no database, so the ribbon's object
+        // buttons return to "nothing picked" — while the connection picked last
+        // stays focused, so Open / Close / Refresh keep working on it.
+        setActiveNamespace()
         return
       }
 
@@ -994,20 +1221,44 @@ export function ConnectionSidebar() {
   }, [blankMenu])
 
   // Right-clicking empty space is already the "new connection" gesture, so the
-  // menu lists the drivers directly instead of asking a second time.
-  const blankMenuItems: MenuProps['items'] = connectionTypeItems(drivers)
+  // menu lists the drivers directly instead of asking a second time. What else
+  // this pane can make — a group — rides along at the bottom of the same list,
+  // which is why the header `+` shows it too.
+  const newMenuItems: MenuProps['items'] = [
+    ...(connectionTypeItems(drivers) ?? []),
+    { type: 'divider' as const },
+    { key: NEW_GROUP_KEY, icon: <FolderAddOutlined />, label: 'New group…' },
+  ]
+
+  /** Both anchors dispatch through here, so a key means one thing in each. */
+  const handleNewMenuKey = useCallback(
+    (key: string) => {
+      if (key === NEW_GROUP_KEY) {
+        setGroupDialog({})
+        return
+      }
+      const driver = driverFromKey(key)
+      if (driver) openEditor({ driver })
+    },
+    [openEditor],
+  )
 
   return (
     <div className="dm-sidebar" onContextMenu={openBlankMenu}>
       <div className="dm-sidebar-header">
         <span className="dm-sidebar-title">Connections</span>
-        <ConnectionTypeDropdown>
+        <Dropdown
+          trigger={['click']}
+          placement="bottomLeft"
+          rootClassName="dm-type-menu"
+          menu={{ items: newMenuItems, onClick: ({ key }) => handleNewMenuKey(key) }}
+        >
           <span className="dm-dropdown-anchor">
-            <Tooltip title="New connection">
+            <Tooltip title="New connection or group">
               <Button size="small" type="text" icon={<PlusOutlined />} />
             </Tooltip>
           </span>
-        </ConnectionTypeDropdown>
+        </Dropdown>
         <Tooltip title="Collapse all">
           <Button size="small" type="text" icon={<MinusSquareOutlined />} onClick={collapseAll} />
         </Tooltip>
@@ -1033,7 +1284,7 @@ export function ConnectionSidebar() {
       </div>
 
       <div className="dm-sidebar-tree">
-        {roots.length === 0 ? (
+        {arrangement.length === 0 && looseSessions.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={<span style={{ fontSize: 12 }}>No connections yet</span>}
@@ -1045,7 +1296,7 @@ export function ConnectionSidebar() {
               </Button>
             </ConnectionTypeDropdown>
           </Empty>
-        ) : visibleRoots.length === 0 ? (
+        ) : treeData.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={<span style={{ fontSize: 12 }}>No match for “{filter}”</span>}
@@ -1063,6 +1314,9 @@ export function ConnectionSidebar() {
             onExpand={handleExpand}
             onSelect={handleSelect}
             onLoad={handleLoad}
+            draggable={{ icon: false, nodeDraggable }}
+            allowDrop={allowDrop}
+            onDrop={handleDrop}
             style={{ background: 'transparent' }}
           />
         )}
@@ -1079,6 +1333,8 @@ export function ConnectionSidebar() {
 
       <NewDatabaseModal session={newDatabase} onClose={() => setNewDatabase(null)} />
 
+      <GroupNameModal request={groupDialog} onClose={() => setGroupDialog(null)} />
+
       {blankMenu ? (
         <div
           ref={blankMenuRef}
@@ -1086,12 +1342,11 @@ export function ConnectionSidebar() {
           style={{ left: blankMenu.x, top: blankMenu.y }}
         >
           <Menu
-            items={blankMenuItems}
+            items={newMenuItems}
             selectable={false}
             onClick={({ key }) => {
               setBlankMenu(null)
-              const driver = driverFromKey(key)
-              if (driver) openEditor({ driver })
+              handleNewMenuKey(key)
             }}
           />
         </div>
@@ -1146,6 +1401,74 @@ export function ConnectionSidebar() {
     }
     pendingRuntime.current = root.id
     void connect(root.profile)
+  }
+
+  /**
+   * A group's own items carry their own handlers; the nested driver list is what
+   * needs following, and a new connection made there belongs in this folder.
+   */
+  function handleGroupMenuKey(entry: ExplorerEntry & { t: 'group' }, key: string) {
+    if (!key.startsWith(GROUP_PREFIX)) return
+    const driver = driverFromKey(key)
+    if (driver) openEditor({ driver, groupId: entry.id })
+  }
+
+  /**
+   * A group's menu: make a connection inside it, rename it, delete it.
+   *
+   * A user who makes a folder and then makes a connection means it to be in the
+   * folder, so the same driver list is nested here. `driverFromKey` reads only
+   * the last segment, so the keys reach it as `group.mysql`, and the menu-level
+   * handler follows them for this folder alone.
+   */
+  function groupMenuItems(entry: ExplorerEntry & { t: 'group' }): MenuProps['items'] {
+    return [
+      {
+        key: 'new',
+        icon: <PlusOutlined />,
+        label: 'New connection…',
+        children: connectionTypeItems(drivers, 'group.'),
+      },
+      { type: 'divider' as const },
+      {
+        key: 'rename',
+        icon: <EditOutlined />,
+        label: 'Rename group…',
+        onClick: () => setGroupDialog({ group: { id: entry.id, name: entry.name } }),
+      },
+      {
+        key: 'delete',
+        icon: <DeleteOutlined />,
+        label: 'Delete group',
+        danger: true,
+        onClick: () => confirmDeleteGroup(entry),
+      },
+    ]
+  }
+
+  /**
+   * Deleting a group never deletes what is in it — its connections go back to
+   * the top level — so the confirmation says so, and says how many there are
+   * instead of leaving the user to count rows.
+   */
+  function confirmDeleteGroup(entry: ExplorerEntry & { t: 'group' }) {
+    const count = entry.members.length
+    modal.confirm({
+      title: `Delete “${entry.name}”?`,
+      content:
+        count > 0
+          ? `Its ${count} connection${count === 1 ? '' : 's'} move back to the top level. No stored connection is deleted.`
+          : 'The group is empty, so nothing else changes.',
+      okText: 'Delete',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await deleteConnectionGroup(entry.id)
+        } catch (error) {
+          message.error(toMessage(error))
+        }
+      },
+    })
   }
 
   function connectionMenuItems(root: RootEntry, session: SessionInfo | undefined): MenuProps['items'] {
@@ -1317,10 +1640,25 @@ function errorNode(scope: string, text: string, onRetry?: () => void): TreeDataN
  * ("Design object" would land on Data, "New query" on a folder would open the
  * object list). Stopping the event at the menu keeps a menu click a menu click.
  */
-function NodeMenu({ items, children }: { items: MenuProps['items']; children: ReactNode }) {
+function NodeMenu({
+  items,
+  children,
+  onClick,
+}: {
+  items: MenuProps['items']
+  children: ReactNode
+  /** For menus that hold more than one kind of item — a group's driver submenu. */
+  onClick?: MenuProps['onClick']
+}) {
   return (
     <Dropdown
-      menu={{ items, onClick: (info) => info.domEvent.stopPropagation() }}
+      menu={{
+        items,
+        onClick: (info) => {
+          info.domEvent.stopPropagation()
+          onClick?.(info)
+        },
+      }}
       trigger={['contextMenu']}
     >
       {children}
@@ -1715,4 +2053,67 @@ export function describeProfile(profile: ConnectionConfig): string {
   const db = profile.database ? `/${profile.database}` : ''
   const user = profile.username ? `${profile.username}@` : ''
   return `${profile.driver} · ${user}${host}${port}${db}`
+}
+
+/**
+ * Names a group, for both "New group…" and "Rename group…".
+ *
+ * The name is the only thing either asks for — a rename keeps the position the
+ * folder already has, because typing a name is not a request to move it. What
+ * counts as a name is the backend's call (`internal/service/layout.go`), so its
+ * answer is what the user sees when one is refused.
+ */
+function GroupNameModal({
+  request,
+  onClose,
+}: {
+  request: { group?: { id: string; name: string } } | null
+  onClose: () => void
+}) {
+  const createConnectionGroup = useAppStore((s) => s.createConnectionGroup)
+  const renameConnectionGroup = useAppStore((s) => s.renameConnectionGroup)
+  const { message } = AntApp.useApp()
+
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const renaming = request?.group
+
+  useEffect(() => {
+    setName(request?.group?.name ?? '')
+  }, [request])
+
+  const submit = useCallback(async () => {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    setSaving(true)
+    try {
+      if (renaming) await renameConnectionGroup(renaming.id, trimmed)
+      else await createConnectionGroup(trimmed)
+      onClose()
+    } catch (error) {
+      message.error(toMessage(error))
+    } finally {
+      setSaving(false)
+    }
+  }, [createConnectionGroup, message, name, onClose, renaming, renameConnectionGroup])
+
+  return (
+    <Modal
+      open={Boolean(request)}
+      title={renaming ? 'Rename group' : 'New group'}
+      okText={renaming ? 'Rename' : 'Create'}
+      confirmLoading={saving}
+      okButtonProps={{ disabled: name.trim() === '' }}
+      onOk={() => void submit()}
+      onCancel={onClose}
+    >
+      <Input
+        autoFocus
+        value={name}
+        placeholder="Group name"
+        onChange={(event) => setName(event.target.value)}
+        onPressEnter={() => void submit()}
+      />
+    </Modal>
+  )
 }

@@ -49,8 +49,15 @@ export interface ConnectionValues {
  * A profile the editor is working on: either a saved connection (then `id` and
  * `name` are set) or a fresh draft seeded by the type picker, which knows only
  * the driver it was picked for.
+ *
+ * `groupId` is the exception to that: it rides along when the editor was opened
+ * from a group's own "New connection…", so the finished profile is moved into
+ * the folder the user asked for instead of appearing at the top level. It is not
+ * part of the stored profile — where a connection sits is the arrangement's
+ * business, not the profile's.
  */
-export type ConnectionDraft = Partial<ConnectionConfig> & Pick<ConnectionConfig, 'driver'>
+export type ConnectionDraft = Partial<ConnectionConfig> &
+  Pick<ConnectionConfig, 'driver'> & { groupId?: string }
 
 /** What the shell passes to the page of the driver being configured. */
 export interface DriverFormProps {

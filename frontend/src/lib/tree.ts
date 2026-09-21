@@ -10,6 +10,8 @@ import type { ObjectKind } from '../api/types'
 export type NodeRef =
   | { t: 'connection'; connectionId: string }
   | { t: 'session'; sessionId: string }
+  /** A user-made folder holding connections; it belongs to no session. */
+  | { t: 'group'; groupId: string }
   | { t: 'db'; sessionId: string; database: string }
   | { t: 'schema'; sessionId: string; database: string; schema: string }
   | {

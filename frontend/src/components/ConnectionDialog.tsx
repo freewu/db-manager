@@ -213,7 +213,7 @@ export function ConnectionDialog() {
     if (!values) return
     setSaving(true)
     try {
-      const saved = await saveConnection(collect(values))
+      const saved = await saveConnection(collect(values), draft?.groupId)
       message.success(`Saved “${saved.name}”`)
       closeEditor()
     } catch (error) {
@@ -221,7 +221,7 @@ export function ConnectionDialog() {
     } finally {
       setSaving(false)
     }
-  }, [closeEditor, collect, message, saveConnection, validateAll])
+  }, [closeEditor, collect, draft, message, saveConnection, validateAll])
 
   const icon = driverIcon(driverInfo?.type)
   const title = draft?.id

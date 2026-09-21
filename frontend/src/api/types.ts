@@ -49,6 +49,41 @@ export interface ConnectionConfig {
   hasPassword?: boolean
 }
 
+/**
+ * A named folder in the connection explorer.
+ *
+ * Groups are one level deep and are not part of a profile: which group a
+ * connection sits in is arrangement, not configuration, so it is stored apart
+ * from the profile (see ConnectionLayout).
+ */
+export interface ConnectionGroup {
+  id: string
+  name: string
+  /** Position among the explorer's top-level entries, shared with the ungrouped connections. */
+  order: number
+}
+
+/** Where one saved profile sits in the explorer. */
+export interface ConnectionPlacement {
+  id: string
+  /** The group holding it; absent means the top level. */
+  groupId?: string
+  /** Position among its siblings — the top level, or the members of its group. */
+  order: number
+}
+
+/**
+ * The connection explorer as the user arranged it.
+ *
+ * The backend re-derives this against the profiles that exist on every read and
+ * every write, so an entry for a deleted profile never survives and a profile
+ * that has no entry still gets drawn — at the bottom of the top level.
+ */
+export interface ConnectionLayout {
+  groups: ConnectionGroup[]
+  items: ConnectionPlacement[]
+}
+
 export interface DriverInfo {
   type: DriverType
   displayName: string

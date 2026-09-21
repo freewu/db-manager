@@ -77,6 +77,46 @@ func (c ConnectionConfig) Redacted() ConnectionConfig {
 	return c
 }
 
+// ConnectionGroup is a named folder in the connection explorer.
+//
+// Groups are one level deep on purpose: a folder that can hold folders turns
+// "where is that server" into a search problem, and no engine the explorer talks
+// to organises its own objects any deeper than this.
+//
+// Order places the group among the explorer's top-level entries, which shares
+// one sequence with the ungrouped connections (see ConnectionPlacement).
+type ConnectionGroup struct {
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Order int    `json:"order"`
+}
+
+// ConnectionPlacement says where one saved profile sits in the explorer: which
+// group holds it (empty means the top level) and its position among its
+// siblings.
+//
+// It is kept apart from ConnectionConfig so that editing a profile — or a
+// profile written by a build that never heard of groups — cannot lose the
+// arrangement.
+type ConnectionPlacement struct {
+	ID      string `json:"id"`
+	GroupID string `json:"groupId,omitempty"`
+	Order   int    `json:"order"`
+}
+
+// ConnectionLayout is the connection explorer as the user arranged it: the
+// groups, and every profile with its group and position.
+//
+// Order is authoritative on both sides. Groups and ungrouped profiles share one
+// top-level sequence, while a group's members have their own sequence starting
+// at zero. Entries that share an order keep the order they were stored in (a
+// group winning a tie against a profile), so the same file always draws the
+// same tree.
+type ConnectionLayout struct {
+	Groups []ConnectionGroup     `json:"groups"`
+	Items  []ConnectionPlacement `json:"items"`
+}
+
 // DriverInfo describes a driver to the UI so it can render the right form and
 // decide whether an entry is selectable yet.
 type DriverInfo struct {

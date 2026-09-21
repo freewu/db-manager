@@ -493,6 +493,34 @@ body {
   user-select: none;
 }
 
+/* A group's row: the same shape as a connection row, with its size on the right
+   so a folded folder still says how much is folded away. */
+.dm-group-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+  user-select: none;
+}
+
+.dm-group-node .dm-group-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  opacity: 0.45;
+}
+
+/* Rows are dragged with the whole row, not a handle — antd's handle is off (see
+   the tree's `draggable` prop) — so the cursor is what says a row can move. */
+.dm-sidebar-tree .ant-tree-treenode-draggable .ant-tree-node-content-wrapper {
+  cursor: grab;
+}
+
+.dm-sidebar-tree .ant-tree-treenode-draggable.ant-tree-treenode-drag-over
+  .ant-tree-node-content-wrapper {
+  cursor: grabbing;
+}
+
 .dm-connection-dot {
   width: 7px;
   height: 7px;

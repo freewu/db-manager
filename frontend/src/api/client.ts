@@ -9,6 +9,8 @@ import type {
   BackendBridge,
   CellUpdate,
   ConnectionConfig,
+  ConnectionGroup,
+  ConnectionLayout,
   CreateDatabaseRequest,
   DatabaseOptions,
   DatabasePlan,
@@ -106,6 +108,15 @@ export const api = {
     invoke<ConnectionConfig>('SaveConnection', cfg),
   deleteConnection: (id: string) => invoke<void>('DeleteConnection', id),
   testConnection: (cfg: ConnectionConfig) => invoke<TestResult>('TestConnection', cfg),
+
+  // --- explorer arrangement -----------------------------------------------
+  /** The connection tree as the user left it (groups, membership, order). */
+  listConnectionLayout: () => invoke<ConnectionLayout>('ListConnectionLayout'),
+  saveConnectionLayout: (layout: ConnectionLayout) =>
+    invoke<ConnectionLayout>('SaveConnectionLayout', layout),
+  saveConnectionGroup: (group: ConnectionGroup) =>
+    invoke<ConnectionGroup>('SaveConnectionGroup', group),
+  deleteConnectionGroup: (id: string) => invoke<void>('DeleteConnectionGroup', id),
 
   // --- sessions -----------------------------------------------------------
   openConnection: (req: OpenRequest) => invoke<SessionInfo>('OpenConnection', req),

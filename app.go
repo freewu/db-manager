@@ -158,6 +158,28 @@ func (a *App) SaveConnection(cfg models.ConnectionConfig) (models.ConnectionConf
 // DeleteConnection removes a profile.
 func (a *App) DeleteConnection(id string) error { return a.manager.DeleteConnection(id) }
 
+// ListConnectionLayout returns the explorer arrangement: the groups, and every
+// profile with its group and position.
+func (a *App) ListConnectionLayout() (models.ConnectionLayout, error) {
+	return a.manager.ConnectionLayout()
+}
+
+// SaveConnectionLayout stores the arrangement the explorer was left in.
+func (a *App) SaveConnectionLayout(layout models.ConnectionLayout) (models.ConnectionLayout, error) {
+	return a.manager.SaveConnectionLayout(layout)
+}
+
+// SaveConnectionGroup creates or renames a connection group.
+func (a *App) SaveConnectionGroup(group models.ConnectionGroup) (models.ConnectionGroup, error) {
+	return a.manager.SaveConnectionGroup(group)
+}
+
+// DeleteConnectionGroup removes a group; the connections in it move back to the
+// top level.
+func (a *App) DeleteConnectionGroup(id string) error {
+	return a.manager.DeleteConnectionGroup(id)
+}
+
 // TestConnection validates a profile without opening a session.
 func (a *App) TestConnection(cfg models.ConnectionConfig) models.TestResult {
 	return a.manager.TestConnection(cfg)

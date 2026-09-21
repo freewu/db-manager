@@ -14,6 +14,8 @@ import { api, toMessage } from '../api/client'
 import type {
   AppInfo,
   ConnectionConfig,
+  ConnectionGroup,
+  ConnectionLayout,
   DriverInfo,
   IndexEntry,
   ObjectInfo,
@@ -25,6 +27,7 @@ import type {
   TableStructure,
 } from '../api/types'
 import type { ConnectionDraft } from '../connection/shared'
+import { arrangementOf, layoutOf, moveEntry, type DropTarget } from '../lib/explorer'
 import { databaseKey, FOLDER_LABEL, indexesKey, namespaceKey, objectsKey } from '../lib/tree'
 import { designFrom, emptyStructure, newTableDesign } from '../lib/design'
 
@@ -106,6 +109,12 @@ interface AppState {
   appInfo?: AppInfo
   drivers: DriverInfo[]
   connections: ConnectionConfig[]
+  /**
+   * The explorer's arrangement: which groups exist, what sits in them and in
+   * what order. Derived from the profiles on the backend (see
+   * internal/service/layout.go), so it is always refreshed together with them.
+   */
+  connectionLayout: ConnectionLayout
   sessions: SessionInfo[]
   activeSessionId?: string
   /**
@@ -147,8 +156,22 @@ interface AppState {
   deleteSavedQuery: (id: string) => Promise<void>
 
   refreshConnections: () => Promise<void>
-  saveConnection: (cfg: ConnectionConfig) => Promise<ConnectionConfig>
+  /** Re-reads the arrangement alone, for changes the profiles do not show
+   * (deleting a group hands its connections back to the top level). */
+  refreshConnectionLayout: () => Promise<void>
+  saveConnection: (cfg: ConnectionConfig, groupId?: string) => Promise<ConnectionConfig>
   deleteConnection: (id: string) => Promise<void>
+
+  /**
+   * Moves an explorer entry — a connection or a group — to where a drop asked
+   * for it and stores the result. Rejects without changing anything the
+   * backend refused, so what is drawn is always what is stored.
+   */
+  moveConnection: (dragId: string, target: DropTarget) => Promise<void>
+  createConnectionGroup: (name: string) => Promise<ConnectionGroup>
+  renameConnectionGroup: (id: string, name: string) => Promise<void>
+  /** Removes a group; the connections in it go back to the top level. */
+  deleteConnectionGroup: (id: string) => Promise<void>
 
   openConnection: (req: OpenRequest) => Promise<SessionInfo>
   closeSession: (sessionId: string) => Promise<void>
@@ -253,6 +276,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   boot: 'loading',
   drivers: [],
   connections: [],
+  connectionLayout: { groups: [], items: [] },
   sessions: [],
   tabs: [],
   theme: 'light',
@@ -271,14 +295,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async bootstrap() {
     try {
-      const [appInfo, drivers, connections, savedQueries, persisted] = await Promise.all([
-        api.appInfo(),
-        api.listDrivers(),
-        api.listConnections(),
-        // A missing or unreadable favourites file must not block startup.
-        api.listSavedQueries().catch(() => [] as SavedQuery[]),
-        api.loadState().catch(() => ({}) as Record<string, unknown>),
-      ])
+      const [appInfo, drivers, connections, connectionLayout, savedQueries, persisted] =
+        await Promise.all([
+          api.appInfo(),
+          api.listDrivers(),
+          api.listConnections(),
+          // A missing or unreadable layout file just means "no arrangement".
+          api.listConnectionLayout().catch(() => ({ groups: [], items: [] }) as ConnectionLayout),
+          // A missing or unreadable favourites file must not block startup.
+          api.listSavedQueries().catch(() => [] as SavedQuery[]),
+          api.loadState().catch(() => ({}) as Record<string, unknown>),
+        ])
 
       const storedTheme = persisted?.[STATE_KEY] as { theme?: ThemeMode } | undefined
       // Navicat's classic look is light; dark stays one toggle away.
@@ -289,6 +316,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         appInfo,
         drivers,
         connections,
+        connectionLayout,
         savedQueries,
         theme,
       })
@@ -306,8 +334,64 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   async refreshConnections() {
-    const connections = await api.listConnections()
-    set({ connections })
+    // The arrangement is derived from the profiles, so the two are always read
+    // together: a profile added or removed anywhere shows up in both.
+    const [connections, connectionLayout] = await Promise.all([
+      api.listConnections(),
+      api.listConnectionLayout(),
+    ])
+    set({ connections, connectionLayout })
+  },
+
+  async refreshConnectionLayout() {
+    set({ connectionLayout: await api.listConnectionLayout() })
+  },
+
+  async moveConnection(dragId, target) {
+    const before = get().connectionLayout
+    const entries = arrangementOf(get().connections, before)
+    // Drawn at once — a drag that waited for a round trip would feel broken —
+    // and rolled back if the backend refused it, so the tree never shows an
+    // arrangement that was not stored.
+    set({ connectionLayout: layoutOf(moveEntry(entries, dragId, target)) })
+    try {
+      set({ connectionLayout: await api.saveConnectionLayout(get().connectionLayout) })
+    } catch (error) {
+      set({ connectionLayout: before })
+      throw error
+    }
+  },
+
+  async createConnectionGroup(name) {
+    const created = await api.saveConnectionGroup({ id: '', name, order: 0 })
+    // The backend appends a new group, so the answer settles where it landed.
+    set((state) => ({
+      connectionLayout: {
+        ...state.connectionLayout,
+        groups: [...state.connectionLayout.groups, created],
+      },
+    }))
+    return created
+  },
+
+  async renameConnectionGroup(id, name) {
+    const existing = get().connectionLayout.groups.find((group) => group.id === id)
+    // A rename keeps the position it had; sending it back is what makes the
+    // request say what it means.
+    const saved = await api.saveConnectionGroup({ id, name, order: existing?.order ?? 0 })
+    set((state) => ({
+      connectionLayout: {
+        ...state.connectionLayout,
+        groups: state.connectionLayout.groups.map((group) => (group.id === saved.id ? saved : group)),
+      },
+    }))
+  },
+
+  async deleteConnectionGroup(id) {
+    await api.deleteConnectionGroup(id)
+    // The connections of a deleted group are handed back to the top level by the
+    // backend; asking it where everything landed beats repeating that rule here.
+    await get().refreshConnectionLayout()
   },
 
   async refreshSavedQueries() {
@@ -326,9 +410,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     await get().refreshSavedQueries()
   },
 
-  async saveConnection(cfg) {
+  async saveConnection(cfg, groupId) {
     const saved = await api.saveConnection(cfg)
     await get().refreshConnections()
+    // A connection created from a group's menu belongs in that group: a new
+    // profile is appended to the top level, so this is a move, not a flag.
+    if (groupId) await get().moveConnection(saved.id, { t: 'inside', groupId })
     return saved
   },
 
