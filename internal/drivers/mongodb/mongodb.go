@@ -64,7 +64,10 @@ func (Driver) Info() models.DriverInfo {
 		SupportsSchema:   false,
 		// There is no schema to design: a collection's fields are whatever the
 		// sampled documents happen to contain.
-		SupportsDesign:  false,
+		SupportsDesign: false,
+		// Collections lead: a document store is browsed as collections, and the
+		// Mongo views among them are a marginal second kind.
+		ObjectKinds:     []models.ObjectKind{models.KindCollection, models.KindView},
 		DefaultDatabase: defaultDatabase,
 		SortOrder:       40,
 		Notes:           "Document store: databases hold collections, collections hold documents. Fields are inferred from a document sample.",

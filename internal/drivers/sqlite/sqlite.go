@@ -39,9 +39,12 @@ func (Driver) Info() models.DriverInfo {
 		SupportsSchema:   false,
 		RequiresFile:     true,
 		SupportsDesign:   true,
-		DefaultDatabase:  "main",
-		SortOrder:        30,
-		Notes:            "SQLite is a single file; attach additional files to browse them side by side.",
+		// A SQLite file holds tables and views; its indexes hang off the tables,
+		// so the explorer keeps them in the namespace-wide index folder.
+		ObjectKinds:     []models.ObjectKind{models.KindTable, models.KindView},
+		DefaultDatabase: "main",
+		SortOrder:       30,
+		Notes:           "SQLite is a single file; attach additional files to browse them side by side.",
 	}
 }
 

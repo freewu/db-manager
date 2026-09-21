@@ -36,9 +36,13 @@ func (Driver) Info() models.DriverInfo {
 		SupportsDatabase: true,
 		SupportsSchema:   true,
 		SupportsDesign:   true,
-		SortOrder:        20,
-		DefaultDatabase:  "postgres",
-		Notes:            "PostgreSQL cannot query across databases; the app opens a separate pool per database.",
+		// Materialized views exist here, so the explorer draws their folder too.
+		// Sequences and procedures do not have an introspector, and a folder that
+		// could never fill up is worse than no folder.
+		ObjectKinds:     []models.ObjectKind{models.KindTable, models.KindView, models.KindMatView},
+		SortOrder:       20,
+		DefaultDatabase: "postgres",
+		Notes:           "PostgreSQL cannot query across databases; the app opens a separate pool per database.",
 	}
 }
 
@@ -464,8 +468,8 @@ ORDER BY t.relname, i.relname, k.ord`
 	for rows.Next() {
 		var (
 			table, name, method, column string
-			unique, primary           bool
-			ord                       int
+			unique, primary             bool
+			ord                         int
 		)
 		if err := rows.Scan(&table, &name, &unique, &primary, &method, &ord, &column); err != nil {
 			return nil, err

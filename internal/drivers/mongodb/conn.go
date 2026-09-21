@@ -443,6 +443,12 @@ func indexDirection(value any) string {
 
 // Indexes implements drivers.Conn: every index of every collection of a
 // database, for the explorer's index folder.
+//
+// The folder carries a count like every other folder, so the explorer asks for
+// this as soon as a database is expanded instead of waiting for a click. The
+// per-collection reads therefore run with the same bounded concurrency as the
+// collection statistics: a database with hundreds of collections must not turn
+// one expansion into hundreds of sequential commands.
 func (c *Conn) Indexes(ctx context.Context, database, schema string) ([]models.IndexEntry, error) {
 	db := c.database(database)
 	names, err := db.ListCollectionNames(ctx, bson.D{})
@@ -451,25 +457,44 @@ func (c *Conn) Indexes(ctx context.Context, database, schema string) ([]models.I
 	}
 	sort.Strings(names)
 
+	// One slot per collection keeps the folder in name order whatever order the
+	// reads come back in.
+	groups := make([][]models.IndexEntry, len(names))
+	sem := make(chan struct{}, statsConcurrency)
+	var wg sync.WaitGroup
+	for i, name := range names {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(slot int, collection string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			indexes, err := c.indexes(ctx, db.Collection(collection))
+			if err != nil {
+				// A collection that vanished between the two calls, or one the
+				// user cannot read: skip it, the rest of the folder is still
+				// useful.
+				return
+			}
+			entries := make([]models.IndexEntry, 0, len(indexes))
+			for _, idx := range indexes {
+				entries = append(entries, models.IndexEntry{
+					Name:     idx.Name,
+					Table:    collection,
+					Database: db.Name(),
+					Columns:  idx.Columns,
+					Unique:   idx.Unique,
+					Primary:  idx.Primary,
+					Method:   idx.Method,
+				})
+			}
+			groups[slot] = entries
+		}(i, name)
+	}
+	wg.Wait()
+
 	out := make([]models.IndexEntry, 0, len(names))
-	for _, name := range names {
-		indexes, err := c.indexes(ctx, db.Collection(name))
-		if err != nil {
-			// A collection that vanished between the two calls, or one the
-			// user cannot read: skip it, the rest of the folder is still useful.
-			continue
-		}
-		for _, idx := range indexes {
-			out = append(out, models.IndexEntry{
-				Name:     idx.Name,
-				Table:    name,
-				Database: db.Name(),
-				Columns:  idx.Columns,
-				Unique:   idx.Unique,
-				Primary:  idx.Primary,
-				Method:   idx.Method,
-			})
-		}
+	for _, group := range groups {
+		out = append(out, group...)
 	}
 	return out, nil
 }

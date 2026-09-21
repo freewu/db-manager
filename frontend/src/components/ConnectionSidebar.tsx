@@ -228,6 +228,26 @@ export function ConnectionSidebar() {
 
   /* ----------------------------------------------------------- tree build */
 
+  /**
+   * Loads a namespace's objects, and the index list that goes with them.
+   *
+   * Each folder in the tree carries a count, and the index folder's is built
+   * from a request of its own — so it cannot wait for a click on that folder
+   * the way it used to. The explorer asks for both as soon as the namespace
+   * opens; the index list is cached, so expanding the folder afterwards (or
+   * opening a table's Indexes page) costs nothing.
+   */
+  const loadNamespace = useCallback(
+    (sessionId: string, database: string, schema: string) => {
+      const key = indexesKey(sessionId, database, schema)
+      if (tree.indexes[key] === undefined && !tree.loading[key]) {
+        void loadIndexes(sessionId, database, schema)
+      }
+      return loadObjects(sessionId, database, schema)
+    },
+    [loadIndexes, loadObjects, tree.indexes, tree.loading],
+  )
+
   const buildIndexFolder = useCallback(
     (sessionId: string, database: string, schema: string): TreeDataNode => {
       const key = indexesKey(sessionId, database, schema)
@@ -315,10 +335,25 @@ export function ConnectionSidebar() {
         groups.set(object.kind, list)
       }
 
+      // Which folders to draw: the ones the engine declares, then anything the
+      // object list handed us that it did not declare.
+      //
+      // The declared list leads because it carries the engine's own order (a
+      // document store shows collections before its few views), and every one
+      // of them is drawn even while empty: "Tables (0)" says the database is
+      // there and empty, whereas a folder that only shows up once it holds
+      // something cannot be told apart from an engine that has no such folder.
+      // A kind nobody declared is still drawn rather than dropped — the
+      // explorer shows what it is given — after the declared ones, in the
+      // order the UI sorts them.
+      const declared = driverOfSession(sessionId)?.objectKinds ?? []
+      const undeclared = FOLDER_ORDER.filter(
+        (kind) => !declared.includes(kind) && (groups.get(kind)?.length ?? 0) > 0,
+      )
+
       const folders: TreeDataNode[] = []
-      for (const kind of FOLDER_ORDER) {
-        const items = groups.get(kind)
-        if (!items || items.length === 0) continue
+      for (const kind of [...declared, ...undeclared]) {
+        const items = groups.get(kind) ?? []
         folders.push({
           key: encodeNode({ t: 'folder', sessionId, database, schema, kind }),
           title: (
@@ -362,7 +397,7 @@ export function ConnectionSidebar() {
                   key: 'refresh',
                   icon: <ReloadOutlined />,
                   label: 'Reload objects',
-                  onClick: () => void loadObjects(sessionId, database, schema),
+                  onClick: () => void loadNamespace(sessionId, database, schema),
                 },
               ]}
             >
@@ -425,6 +460,11 @@ export function ConnectionSidebar() {
               </NodeMenu>
             ),
           })),
+          // A folder with nothing in it has nothing to reveal, so it is a leaf:
+          // its title already carries the (0), and an arrow opening onto empty
+          // space is a click that goes nowhere. Selecting it still opens the
+          // (empty) object list, exactly like a folder with contents.
+          isLeaf: items.length === 0,
         })
       }
 
@@ -436,7 +476,7 @@ export function ConnectionSidebar() {
     [
       buildIndexFolder,
       driverOfSession,
-      loadObjects,
+      loadNamespace,
       openDdlTab,
       openList,
       openNewTableTab,
@@ -453,11 +493,30 @@ export function ConnectionSidebar() {
       if (tree.loading[ns]) return [placeholderNode(ns, 'Loading objects…')]
       const error = tree.errors[ns]
       if (error) {
-        return [errorNode(ns, error, () => void loadObjects(sessionId, database, schema))]
+        return [errorNode(ns, error, () => void loadNamespace(sessionId, database, schema))]
       }
       return buildFolders(sessionId, database, schema)
     },
-    [buildFolders, loadObjects, tree.errors, tree.loading],
+    [buildFolders, loadNamespace, tree.errors, tree.loading],
+  )
+
+  /**
+   * A namespace's folders, or `undefined` while its object list is on its way.
+   *
+   * rc-tree calls `loadData` for a node that has no children, and the folders
+   * only exist once that load has landed — this is what turns the expand into
+   * an actual subtree. Both shapes the explorer browses from need it: a schema,
+   * and the database itself on an engine without one.
+   */
+  const namespaceChildren = useCallback(
+    (sessionId: string, database: string, schema: string): TreeDataNode[] | undefined => {
+      const ns = namespaceKey(sessionId, database, schema)
+      if (tree.loaded[ns] || tree.errors[ns]) {
+        return buildNamespace(sessionId, database, schema)
+      }
+      return undefined
+    },
+    [buildNamespace, tree.errors, tree.loaded],
   )
 
   const buildDatabaseNode = useCallback(
@@ -502,7 +561,7 @@ export function ConnectionSidebar() {
                     key: 'refresh',
                     icon: <ReloadOutlined />,
                     label: 'Reload objects',
-                    onClick: () => void loadObjects(session.id, database, schema),
+                    onClick: () => void loadNamespace(session.id, database, schema),
                   },
                 ]}
               >
@@ -511,14 +570,10 @@ export function ConnectionSidebar() {
             ),
             icon: <AppstoreOutlined />,
             isLeaf: false,
-            // The schema holds the folders, so they only show up once its object
-            // list has landed — this is the level PostgreSQL browses from, and
-            // without it the tree ended here.
-            children:
-              tree.loaded[namespaceKey(session.id, database, schema)] ||
-              tree.errors[namespaceKey(session.id, database, schema)]
-                ? buildNamespace(session.id, database, schema)
-                : undefined,
+            // The schema holds the folders, so they only appear once its
+            // object list has landed — this is the level PostgreSQL browses
+            // from, and without it the tree ended here.
+            children: namespaceChildren(session.id, database, schema),
           }))
         }
 
@@ -533,7 +588,6 @@ export function ConnectionSidebar() {
 
       // Engines without a schema layer (MySQL, SQLite) read their objects
       // straight from the database node; MySQL uses the database as schema.
-      const ns = namespaceKey(session.id, database, database)
       return {
         key: encodeNode({ t: 'db', sessionId: session.id, database }),
         title: (
@@ -560,7 +614,7 @@ export function ConnectionSidebar() {
                 key: 'refresh',
                 icon: <ReloadOutlined />,
                 label: 'Reload objects',
-                onClick: () => void loadObjects(session.id, database, database),
+                onClick: () => void loadNamespace(session.id, database, database),
               },
             ]}
           >
@@ -569,17 +623,15 @@ export function ConnectionSidebar() {
         ),
         icon: <DatabaseOutlined />,
         isLeaf: false,
-        children: tree.loaded[ns] || tree.errors[ns]
-          ? buildNamespace(session.id, database, database)
-          : undefined,
+        children: namespaceChildren(session.id, database, database),
       }
     },
     [
-      buildNamespace,
       driverOfType,
-      loadObjects,
+      loadNamespace,
       loadSchemas,
       loadedKeys,
+      namespaceChildren,
       openDdlTab,
       openErTab,
       tree.errors,
@@ -715,16 +767,23 @@ export function ConnectionSidebar() {
           if (session && driverOfType(session.driver)?.supportsSchema) {
             await loadSchemas(ref.sessionId, ref.database)
           } else {
-            await loadObjects(ref.sessionId, ref.database, ref.database)
+            await loadNamespace(ref.sessionId, ref.database, ref.database)
           }
           break
         }
         case 'schema':
-          await loadObjects(ref.sessionId, ref.database, ref.schema)
+          await loadNamespace(ref.sessionId, ref.database, ref.schema)
           break
-        case 'indexFolder':
-          await loadIndexes(ref.sessionId, ref.database, ref.schema)
+        case 'indexFolder': {
+          // The namespace load already asked for this list, so an expand that
+          // finds it cached (or on its way) does not ask twice. "Reload index
+          // list" in the folder's menu is the way to force a fresh read.
+          const key = indexesKey(ref.sessionId, ref.database, ref.schema)
+          if (tree.indexes[key] === undefined && !tree.loading[key]) {
+            await loadIndexes(ref.sessionId, ref.database, ref.schema)
+          }
           break
+        }
         default:
           break
       }
@@ -735,10 +794,12 @@ export function ConnectionSidebar() {
       driverOfType,
       loadDatabases,
       loadIndexes,
-      loadObjects,
+      loadNamespace,
       loadSchemas,
       sessionForConnection,
       sessions,
+      tree.indexes,
+      tree.loading,
     ],
   )
 
@@ -755,20 +816,22 @@ export function ConnectionSidebar() {
       }
 
       setActiveSession(ref.sessionId)
-      if (ref.t === 'folder') {
-        // Navicat reveals the folder's contents and its object list together.
-        const key = info.node.key
-        setExpandedKeys((current) =>
-          current.some((k) => String(k) === String(key)) ? current : [...current, key],
+      if (ref.t === 'folder' || ref.t === 'indexFolder') {
+        // An empty folder is a leaf (the (0) in its title is the whole story),
+        // so there is nothing to reveal and expanding it is skipped.
+        if (!info.node.isLeaf) {
+          // Navicat reveals the folder's contents and its object list together.
+          const key = info.node.key
+          setExpandedKeys((current) =>
+            current.some((k) => String(k) === String(key)) ? current : [...current, key],
+          )
+        }
+        openList(
+          ref.sessionId,
+          ref.database,
+          ref.schema,
+          ref.t === 'folder' ? ref.kind : 'index',
         )
-        openList(ref.sessionId, ref.database, ref.schema, ref.kind)
-      }
-      if (ref.t === 'indexFolder') {
-        const key = info.node.key
-        setExpandedKeys((current) =>
-          current.some((k) => String(k) === String(key)) ? current : [...current, key],
-        )
-        openList(ref.sessionId, ref.database, ref.schema, 'index')
       }
       if (ref.t === 'object') {
         const objects = tree.objects[objectsKey(ref.sessionId, ref.database, ref.schema)] ?? []

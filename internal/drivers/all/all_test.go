@@ -1,6 +1,7 @@
 package all
 
 import (
+	"slices"
 	"testing"
 
 	"dbmanager/internal/drivers"
@@ -73,6 +74,43 @@ func TestRegistryListsImplementedDriversInMenuOrder(t *testing.T) {
 	for _, no := range []models.DriverType{models.DriverMongoDB, models.DriverDoris} {
 		if designable[no] {
 			t.Errorf("%s should not offer the table designer", no)
+		}
+	}
+}
+
+// The explorer draws one folder per declared kind, empty or not, so this list
+// is the difference between "Tables (0)" and no folder at all. It has to be
+// what the engine can actually return: a kind nothing introspects would leave
+// a folder that can never fill up.
+func TestExplorerFoldersAreTheKindsEachEngineCanHold(t *testing.T) {
+	want := map[models.DriverType][]models.ObjectKind{
+		models.DriverMySQL:    {models.KindTable, models.KindView},
+		models.DriverTiDB:     {models.KindTable, models.KindView},
+		models.DriverDoris:    {models.KindTable, models.KindView},
+		models.DriverSQLite:   {models.KindTable, models.KindView},
+		models.DriverPostgres: {models.KindTable, models.KindView, models.KindMatView},
+		// A document store is browsed as collections first, Mongo views second.
+		models.DriverMongoDB: {models.KindCollection, models.KindView},
+	}
+
+	for _, info := range drivers.Infos() {
+		kinds, pinned := want[info.Type]
+		if !pinned {
+			t.Errorf("%s has no expected folder list; pin it here and in Info()", info.Type)
+			continue
+		}
+		if !slices.Equal(info.ObjectKinds, kinds) {
+			t.Errorf("%s folders = %v, want %v", info.Type, info.ObjectKinds, kinds)
+		}
+		for _, kind := range info.ObjectKinds {
+			switch kind {
+			case models.KindTable, models.KindView, models.KindMatView, models.KindCollection:
+			default:
+				// Sequences and procedures are modelled in the UI, but no
+				// introspector returns them yet: declaring one would draw a
+				// folder that can never fill up.
+				t.Errorf("%s promises a folder for %q, which nothing introspects", info.Type, kind)
+			}
 		}
 	}
 }

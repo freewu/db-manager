@@ -34,9 +34,12 @@ func (Driver) Info() models.DriverInfo {
 		SupportsDatabase: true,
 		SupportsSchema:   false,
 		SupportsDesign:   true,
-		SortOrder:        10,
-		DefaultDatabase:  "",
-		Notes:            "MySQL treats schemas as databases; the explorer shows a single level.",
+		// MySQL keeps views next to tables in the catalog; there is no third
+		// object kind the explorer would be honest about drawing.
+		ObjectKinds:     []models.ObjectKind{models.KindTable, models.KindView},
+		SortOrder:       10,
+		DefaultDatabase: "",
+		Notes:           "MySQL treats schemas as databases; the explorer shows a single level.",
 	}
 }
 

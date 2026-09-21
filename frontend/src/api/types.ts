@@ -68,6 +68,15 @@ export interface DriverInfo {
    * designable.
    */
   supportsDesign: boolean
+  /**
+   * The kinds of object this engine can hold, in the order the explorer draws
+   * their folders. Every one gets a folder whether or not it holds anything,
+   * so an empty database still shows "Tables (0)" instead of nothing. The
+   * backend owns the list because which folders an engine has is an engine
+   * fact; a kind the driver did not declare but the object list returned is
+   * still drawn, after the declared ones.
+   */
+  objectKinds?: ObjectKind[]
 }
 
 export interface SessionInfo {

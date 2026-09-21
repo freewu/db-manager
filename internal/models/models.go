@@ -98,6 +98,16 @@ type DriverInfo struct {
 	// tables and edits them through the DDL editor, but gets a read-only field
 	// list in place of the designer.
 	SupportsDesign bool `json:"supportsDesign"`
+
+	// ObjectKinds are the kinds of object this engine can hold, in the order the
+	// explorer draws their folders. Every one of them gets a folder whether or
+	// not it holds anything: "Tables (0)" tells the user the database exists and
+	// is empty, whereas a folder that appears only once something is in it
+	// cannot be told apart from an engine that has no such folder. A kind the
+	// engine can never return does not belong in this list — the folder would
+	// stay empty forever. It is deliberately not derived from the current
+	// object list: an empty database still has to show its folders.
+	ObjectKinds []ObjectKind `json:"objectKinds"`
 }
 
 // SessionInfo describes a live (or recently live) connection held by the
@@ -229,7 +239,6 @@ type TableStructure struct {
 // statements that turn one into the other. That keeps the dialect knowledge in
 // one place and makes the preview and the applied script the exact same code
 // path.
-//
 type TableDesign struct {
 	SessionID string `json:"sessionId"`
 	Database  string `json:"database,omitempty"`
@@ -241,7 +250,6 @@ type TableDesign struct {
 }
 
 // DesignColumn is one field of a table design.
-//
 type DesignColumn struct {
 	// Name is what the column should be called. OriginalName is the catalog
 	// name it currently has (empty for a column that is about to be created),
@@ -298,7 +306,6 @@ type DesignResult struct {
 // DatabaseCharset is one character set (MySQL family) or encoding (PostgreSQL)
 // a server accepts for a new database, together with the collations that go
 // with it.
-//
 type DatabaseCharset struct {
 	Name string `json:"name"`
 	// Default marks what the server itself would use, which is also what

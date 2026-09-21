@@ -51,6 +51,7 @@ func (Driver) Info() models.DriverInfo {
 		// designer does not model. Tables are still browsable and editable
 		// through the DDL editor, including CREATE TABLE.
 		SupportsDesign:  false,
+		ObjectKinds:     []models.ObjectKind{models.KindTable, models.KindView},
 		SortOrder:       46,
 		DefaultDatabase: "",
 		Notes:           "MySQL protocol, MPP analytics: the designer is read-only here because Doris DDL needs distribution clauses.",

@@ -45,6 +45,7 @@ func (Driver) Info() models.DriverInfo {
 		SupportsDatabase: true,
 		SupportsSchema:   false,
 		SupportsDesign:   true,
+		ObjectKinds:      []models.ObjectKind{models.KindTable, models.KindView},
 		SortOrder:        45,
 		DefaultDatabase:  "",
 		Notes:            "MySQL-compatible distributed SQL: the explorer reads the MySQL catalog, the status page adds the cluster topology.",

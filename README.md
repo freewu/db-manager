@@ -9,7 +9,7 @@
 ## 功能
 
 - **连接管理**：连接配置的增删改查、连通性测试、SQLite 文件选择、TLS（CA / 证书 / 私钥）、自定义 DSN 参数、只读标记、颜色标签、密码可选保存。新建连接先点出**驱动菜单**（命令条 `Connection`、连接树的 `+`、面板空白处右键，三处挂的是同一份列表，就展开在你刚点的那个东西下面），再落到**这个引擎自己的那一页** —— 走网络的要地址、端口、账号与 TLS，SQLite 只要一个文件加一个附加库别名，两边不会互相看到无关字段（保存下来的配置也照着这一页来，文件型连接不会混进 host / port / ssl）；编辑已有连接同样按它的驱动打开对应那页。
-- **对象浏览器**：会话 → 数据库 → Schema → 表 / 视图 / 索引 的懒加载树，右键菜单支持打开数据、新建查询、复制名称；文档型引擎这里是 database → Collections / Indexes，没有 schema 层，SQL 专属的入口（新建 DDL 脚本、ER 图、设计对象）自动不出现。
+- **对象浏览器**：会话 → 数据库 → Schema → 表 / 视图 / 索引 的懒加载树，**每个文件夹都带数量、空着也画**（`Tables (0)` / `Views (0)` / `Indexes (0)` —— 文件夹一空就消失，跟「这个引擎根本没有这种对象」就分不出来了），该画哪几个由后端按引擎声明（`DriverInfo.objectKinds`），前端不猜；右键菜单支持打开数据、新建查询、复制名称；文档型引擎这里是 database → Collections / Indexes，没有 schema 层，SQL 专属的入口（新建 DDL 脚本、ER 图、设计对象）自动不出现。
 - **新建数据库**：连接右键 `New database…`，问什么由**服务端**回答 —— MySQL / TiDB 给出字符集与可配的排序规则，PostgreSQL 给出编码与 locale（locale 名单不可能完整，那一栏可以手打），Doris 与 MongoDB 没有可选项、只有一句说明。语句由后端按引擎渲染后**先展示再执行**（MongoDB 下是 `use <db>`，并明说「第一条 collection 写进去之前它什么都不存」）；SQLite 这类文件型引擎不出现这个菜单项，只读会话里它是灰的。
 - **MongoDB**：连接（含副本集多主机、`mongodb+srv`、TLS、认证库）、集合浏览（文档数 / 体积 / 索引）、数据网格的过滤排序与分页、双击改标量字段、批量删文档、索引列表与定义脚本、运行情况页（serverStatus + 每库 dbStats）。查询窗口跑的是 **mongosh 风格的 shell**（`db.orders.find({...}).sort({ts: -1}).limit(20)`），不是 SQL。
 - **TiDB / Apache Doris**：两个引擎对客户端都讲 MySQL 线协议，但脾气各不相同。TiDB 默认端口 4000，有 TLS 页（`Security`），表单里的 `Database` 只是新标签页的默认库 —— 一个 TiDB 集群就是一份逻辑数据库，树里一次列全所有库，所以这一栏是可选的；运行情况是 MySQL 那一页再加一张 `information_schema.CLUSTER_INFO` 的集群成员表（tidb / tikv / tiflash / ticdc / pd）。Doris 默认端口 9030，前端（FE）与后端（BE）都在集群网内、MySQL 端也不做那套握手，于是**没有 TLS 页**；它是分析型引擎，本工具里**只读浏览** —— 表结构与索引照样能看（字段列表说的是引擎自己的类型拼写，如 `varchar(120)` / `decimal(10,2)`），但没有表设计器，改动走 DDL 编辑器。两者的连接、库表浏览、数据网格、SQL 查询与导出都复用 MySQL 那条代码路径。
@@ -151,7 +151,9 @@ Doris 与 MongoDB 只回一句 hint（前者没有库级字符集，后者根本
 **「引擎能不能做这件事」由后端说，前端只读结果**：`DriverInfo.relational` / `supportsDatabase` /
 `supportsSchema` 决定界面上出现什么，`supportsDesign` 说明这个引擎有没有表设计器（MongoDB、Doris 为
 `false`）——「结构」页据此换成只读字段列表：有列不等于这个引擎能被这个设计器编辑，如实说「没有设计器」
-比给一个点了会失败的按钮好。前端读的是同一份结果（`frontend/src/lib/capabilities.ts`），不按引擎名写 if ——
+比给一个点了会失败的按钮好。`objectKinds` 是同一类事实的第四项：这个引擎装得下哪几种对象
+（MySQL / TiDB / Doris / SQLite 是表与视图，PostgreSQL 多一个物化视图，MongoDB 是集合加视图），
+浏览器的文件夹就照着它画。前端读的是同一份结果（`frontend/src/lib/capabilities.ts`），不按引擎名写 if ——
 `driver !== 'mongodb'` 这种判断只对一次，再加一个文档型引擎就全是洞。
 
 ### `sqlbase` 用一个包实现全部 SQL 引擎
@@ -320,6 +322,14 @@ MongoDB 不从 `sqlbase` 继承任何东西（那个包是 `database/sql` 专用
 | 面板空白处 | 引擎列表（MySQL / MariaDB、PostgreSQL、SQLite、MongoDB、TiDB、Apache Doris） |
 | 未连接的连接 | Open connection / Edit connection… |
 | 已连接的连接 | New query / Refresh / New database… / Edit connection… / Disconnect |
+
+**每个文件夹都带数量，空着也照样画。** 画哪几个文件夹是引擎事实，由后端在 `DriverInfo.objectKinds` 里给
+（顺序也是它的：MongoDB 先集合后视图），前端只管画。早先的规则是「对象列表里出现过的种类才画文件夹」，
+于是空库展开之后是一片空白 —— 分不清「这个库是空的」和「这个引擎没有这种文件夹」，而「是空的」
+恰恰是用户想知道的事。索引装的是整个 namespace 的索引，是**另一次请求**，所以它跟着对象列表一起取：
+展开数据库 / schema 时两个请求一起发，索引数量到了就在标题里补上，之后点开索引文件夹（或表的索引页）
+是现成的；「Reload index list」仍是强制重取的那个入口。空文件夹在树里是**叶子** —— 标题里的 `(0)`
+已经把话说完了，箭头点开只会是空的 —— 但点它照样打开（空的）对象列表。
 
 菜单的浮层是 portal，但 React 的事件依旧顺着**组件树**冒泡，而这个浮层就挂在树节点下面 ——
 不拦一下的话，点菜单项会顺手触发这一行的 `onSelect`，刚选的动作当场被「打开这个对象」盖掉
