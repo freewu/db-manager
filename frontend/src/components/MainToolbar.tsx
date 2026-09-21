@@ -19,15 +19,18 @@ import {
 import { ConnectionTypeDropdown } from './ConnectionTypeMenu'
 import { useAppStore } from '../store/appStore'
 import { useConnect } from '../hooks/useConnect'
+import { findDriver, objectKindsOf } from '../lib/capabilities'
+import { FOLDER_LABEL } from '../lib/tree'
 
 /**
  * Tooltip for the buttons that are temporarily parked.
  *
  * The ribbon keeps its shape so the layout still reads like the main window,
- * but only the commands that act on the connection the explorer is focused on
- * are live: creating one, opening the picked profile, closing the picked
- * session, and refreshing its catalog. The handlers are left wired so putting a
- * group back in service is a one-line change.
+ * but only the commands that act on what the explorer is focused on are live:
+ * creating a connection, opening the picked profile, closing the picked
+ * session, refreshing its catalog, and listing the objects of the picked
+ * namespace. The handlers are left wired so putting a group back in service is
+ * a one-line change.
  */
 const PARKED = 'Temporarily unavailable'
 
@@ -35,16 +38,20 @@ const PARKED = 'Temporarily unavailable'
  * Navicat-style ribbon: flat, grouped, icon-over-label buttons.
  *
  * The button set mirrors Navicat's main window one-for-one so the layout reads
- * the same, but only *Connection*, *Open*, *Close* and *Refresh* are live.
- * Everything else is disabled and says why — a dead button is worse than an
- * honest gap, but an empty toolbar is not the layout we are after.
+ * the same, but only *Connection*, *Open*, *Close*, *Refresh*, *Table* and
+ * *View* are live. Everything else is disabled and says why — a dead button is
+ * worse than an honest gap, but an empty toolbar is not the layout we are
+ * after.
  */
 export function MainToolbar() {
   const connections = useAppStore((s) => s.connections)
+  const drivers = useAppStore((s) => s.drivers)
   const sessions = useAppStore((s) => s.sessions)
   const activeSessionId = useAppStore((s) => s.activeSessionId)
   const activeConnectionId = useAppStore((s) => s.activeConnectionId)
+  const activeNamespace = useAppStore((s) => s.activeNamespace)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
+  const openObjectsTab = useAppStore((s) => s.openObjectsTab)
   const closeSession = useAppStore((s) => s.closeSession)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
   const loadDatabases = useAppStore((s) => s.loadDatabases)
@@ -62,6 +69,15 @@ export function MainToolbar() {
   const focusedSession = sessions.find(
     (s) => s.id === activeConnectionId || s.connectionId === activeConnectionId,
   )
+  // The namespace the ribbon lists objects from. Its session has to still be
+  // open — closing one drops the note — so this is also the backstop for a
+  // click that lands before the explorer has reacted.
+  const namespaceSession = sessions.find((s) => s.id === activeNamespace?.sessionId)
+  const focusedNamespace = namespaceSession ? activeNamespace : undefined
+  // Which object kinds the engine has is the backend's answer, not ours.
+  const namespaceDriver = findDriver(drivers, namespaceSession?.driver)
+  const namespaceKinds = objectKindsOf(namespaceDriver)
+  const driverLabel = namespaceDriver?.displayName ?? 'This engine'
 
   const refresh = async () => {
     if (!focusedSession) return
@@ -73,6 +89,47 @@ export function MainToolbar() {
       setRefreshing(false)
     }
   }
+
+  /**
+   * One object-list button: what it lists, or the reason it cannot.
+   *
+   * The explorer hands us the namespace it is focused on, which is not always a
+   * list. A PostgreSQL database node names a database but no objects — they live
+   * in its schemas — and an engine may not have the kind at all (a document
+   * store has collections, not tables). Both are said in the tooltip instead of
+   * opening a window that could only ever be empty.
+   */
+  const listButton = (
+    kind: 'table' | 'view',
+  ): { disabled: boolean; hint: string; onClick?: () => void } => {
+    if (!focusedNamespace) {
+      return { disabled: true, hint: 'Pick a database in the tree first' }
+    }
+    const { sessionId, database, schema } = focusedNamespace
+    if (!schema) {
+      return {
+        disabled: true,
+        hint: `${driverLabel} keeps its objects in schemas — pick one of ${database}'s`,
+      }
+    }
+    if (!namespaceKinds.includes(kind)) {
+      // Point at the folder this engine does have, so the tooltip leads
+      // somewhere instead of just refusing.
+      const instead = namespaceKinds[0] ? FOLDER_LABEL[namespaceKinds[0]] : 'the explorer'
+      return {
+        disabled: true,
+        hint: `${driverLabel} has no ${kind}s — its objects are in ${instead}`,
+      }
+    }
+    return {
+      disabled: false,
+      hint: `List every ${kind} in ${database}`,
+      onClick: () => openObjectsTab(sessionId, database, schema, kind),
+    }
+  }
+
+  const tableButton = listButton('table')
+  const viewButton = listButton('view')
 
   return (
     <div className="dm-ribbon">
@@ -139,8 +196,23 @@ export function MainToolbar() {
 
       <span className="dm-ribbon-sep" />
 
-      <RibbonButton icon={<TableOutlined />} label="Table" hint={PARKED} disabled />
-      <RibbonButton icon={<EyeOutlined />} label="View" hint={PARKED} disabled />
+      <RibbonButton
+        icon={<TableOutlined />}
+        label="Table"
+        // Lights up while the explorer is inside a namespace, and opens the
+        // very list its Tables folder holds — the same window the folder
+        // itself opens, so the tree and the ribbon never disagree.
+        disabled={tableButton.disabled}
+        hint={tableButton.hint}
+        onClick={tableButton.onClick}
+      />
+      <RibbonButton
+        icon={<EyeOutlined />}
+        label="View"
+        disabled={viewButton.disabled}
+        hint={viewButton.hint}
+        onClick={viewButton.onClick}
+      />
 
       <span className="dm-ribbon-sep" />
 

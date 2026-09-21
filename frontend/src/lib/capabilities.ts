@@ -1,4 +1,4 @@
-import type { DriverInfo, DriverType } from '../api/types'
+import type { DriverInfo, DriverType, ObjectKind } from '../api/types'
 
 /**
  * What the UI is allowed to show for a driver.
@@ -54,4 +54,18 @@ export function findDriver(
   type: DriverType | undefined,
 ): DriverInfo | undefined {
   return drivers.find((driver) => driver.type === type)
+}
+
+/**
+ * The kinds of object a driver can hold, in the order the explorer folder list
+ * uses.
+ *
+ * Same default rule as the helpers above: a driver this build ships no record
+ * for is treated as a plain SQL engine, so it gets the two folders every SQL
+ * engine has. A caller draws every kind in this list whether or not it holds
+ * anything, and still draws a kind the list does not name when the object list
+ * returned one.
+ */
+export function objectKindsOf(driver: DriverInfo | undefined): ObjectKind[] {
+  return driver?.objectKinds ?? ['table', 'view']
 }

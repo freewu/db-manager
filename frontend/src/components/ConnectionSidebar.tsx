@@ -25,7 +25,7 @@ import { api, toMessage } from '../api/client'
 import type { ConnectionConfig, DatabaseOptions, DatabasePlan, DriverInfo, IndexEntry, ObjectInfo, SessionInfo } from '../api/types'
 import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
-import { capabilitiesOf, findDriver } from '../lib/capabilities'
+import { capabilitiesOf, findDriver, objectKindsOf } from '../lib/capabilities'
 import { useAppStore, type ListScope, type TableView } from '../store/appStore'
 import { ConnectionTypeDropdown, connectionTypeItems, driverFromKey } from './ConnectionTypeMenu'
 import { objectIcon } from './objectIcon'
@@ -78,6 +78,7 @@ export function ConnectionSidebar() {
   const closeSession = useAppStore((s) => s.closeSession)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const setActiveConnection = useAppStore((s) => s.setActiveConnection)
+  const setActiveNamespace = useAppStore((s) => s.setActiveNamespace)
 
   const { connect, pending } = useConnect()
   const { message } = AntApp.useApp()
@@ -347,7 +348,7 @@ export function ConnectionSidebar() {
       // A kind nobody declared is still drawn rather than dropped — the
       // explorer shows what it is given — after the declared ones, in the
       // order the UI sorts them.
-      const declared = driverOfSession(sessionId)?.objectKinds ?? []
+      const declared = objectKindsOf(driverOfSession(sessionId))
       const undeclared = FOLDER_ORDER.filter(
         (kind) => !declared.includes(kind) && (groups.get(kind)?.length ?? 0) > 0,
       )
@@ -814,6 +815,9 @@ export function ConnectionSidebar() {
         // Picking a profile is what hands it to the ribbon: a closed one lights
         // up Open, an open one lights up Close.
         setActiveConnection(ref.connectionId)
+        // A connection is not a database, so the ribbon's object buttons return
+        // to "nothing picked" — even when there is a live session behind it.
+        setActiveNamespace()
         const session = sessionForConnection(ref.connectionId)
         if (session) setActiveSession(session.id)
         return
@@ -822,6 +826,26 @@ export function ConnectionSidebar() {
       setActiveSession(ref.sessionId)
       const owner = sessions.find((s) => s.id === ref.sessionId)
       if (owner?.connectionId) setActiveConnection(owner.connectionId)
+      // What the ribbon's Table / View buttons act on: the namespace the picked
+      // node sits in. Both levels that hold objects count — the schema where the
+      // engine has them, the database where it does not — so a database on an
+      // engine with a schema layer is noted without one. A node that names no
+      // objects at all clears the note.
+      if (ref.t === 'session') {
+        setActiveNamespace()
+      } else if (ref.t === 'db') {
+        setActiveNamespace(
+          driverOfSession(ref.sessionId)?.supportsSchema
+            ? { sessionId: ref.sessionId, database: ref.database }
+            : { sessionId: ref.sessionId, database: ref.database, schema: ref.database },
+        )
+      } else {
+        setActiveNamespace({
+          sessionId: ref.sessionId,
+          database: ref.database,
+          schema: ref.schema,
+        })
+      }
       if (ref.t === 'folder' || ref.t === 'indexFolder') {
         // An empty folder is a leaf (the (0) in its title is the whole story),
         // so there is nothing to reveal and expanding it is skipped.
@@ -851,10 +875,12 @@ export function ConnectionSidebar() {
       }
     },
     [
+      driverOfSession,
       openList,
       openObject,
       sessionForConnection,
       setActiveConnection,
+      setActiveNamespace,
       setActiveSession,
       tree.objects,
     ],

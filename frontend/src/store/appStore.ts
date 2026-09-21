@@ -36,6 +36,21 @@ export type TableView = 'data' | 'structure' | 'indexes' | 'foreignKeys' | 'ddl'
 /** Object-list windows: one per folder of the explorer tree. */
 export type ListScope = ObjectKind | 'index'
 
+/**
+ * A place in the explorer that holds objects: a schema where the engine has
+ * them, the database itself where it does not.
+ *
+ * `schema` is left off for a database that is not a namespace of its own —
+ * PostgreSQL's databases hold schemas, so picking one says where the user is
+ * without saying which list to open. The ribbon says as much instead of
+ * guessing a schema.
+ */
+export interface NamespaceScope {
+  sessionId: string
+  database: string
+  schema?: string
+}
+
 export interface WorkspaceTab {
   id: string
   kind: TabKind
@@ -105,6 +120,13 @@ interface AppState {
    * and *Close* does.
    */
   activeConnectionId?: string
+  /**
+   * The namespace the explorer is focused on: the schema where the engine has
+   * them, the database where it does not. Written by the tree's selection (see
+   * `setActiveNamespace`) and read by the ribbon's *Table* / *View* buttons,
+   * which list the objects of the place the user is standing in.
+   */
+  activeNamespace?: NamespaceScope
   tabs: WorkspaceTab[]
   activeTabId?: string
   theme: ThemeMode
@@ -133,6 +155,12 @@ interface AppState {
   setActiveSession: (sessionId: string) => void
   /** Marks which connection the explorer is focused on (see `activeConnectionId`). */
   setActiveConnection: (connectionId: string) => void
+  /**
+   * Marks which namespace the explorer is focused on (see `activeNamespace`).
+   * Called with no argument for a node that is not in one — a connection node
+   * is about the connection, not about any database.
+   */
+  setActiveNamespace: (scope?: NamespaceScope) => void
 
   loadDatabases: (sessionId: string) => Promise<void>
   loadSchemas: (sessionId: string, database: string) => Promise<void>
@@ -344,7 +372,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           state.activeSessionId === sessionId
             ? sessions[sessions.length - 1]?.id
             : state.activeSessionId
-        return { sessions, tabs, designs, activeTabId, activeSessionId }
+        // The namespace note goes with the session it pointed at: the database
+        // node it came from is gone from the tree, and the ribbon must not offer
+        // to list the objects of a connection that is no longer open.
+        const activeNamespace =
+          state.activeNamespace?.sessionId === sessionId ? undefined : state.activeNamespace
+        return { sessions, tabs, designs, activeTabId, activeSessionId, activeNamespace }
       })
     }
   },
@@ -355,6 +388,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveConnection(connectionId) {
     set({ activeConnectionId: connectionId })
+  },
+
+  setActiveNamespace(scope) {
+    set({ activeNamespace: scope })
   },
 
   async loadDatabases(sessionId) {
