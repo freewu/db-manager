@@ -658,38 +658,6 @@ body {
 /* Navicat-style chrome                                                */
 /* =================================================================== */
 
-/* ------------------------------------------------------------- menu bar */
-
-.dm-menubar {
-  display: flex;
-  align-items: stretch;
-  flex: 0 0 auto;
-  height: 24px;
-  padding: 0 4px;
-  background: var(--dm-chrome-bg);
-  font-size: 12px;
-  user-select: none;
-}
-
-.dm-menubar-item {
-  display: inline-flex;
-  align-items: center;
-  height: 100%;
-  padding: 0 9px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: default;
-}
-
-.dm-menubar-item:hover,
-.dm-menubar-item:focus-visible {
-  background: var(--dm-hot-bg);
-  color: var(--dm-hot-text);
-  outline: none;
-}
-
 .dm-about p {
   margin: 0 0 6px;
   font-size: 12px;

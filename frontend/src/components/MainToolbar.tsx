@@ -10,13 +10,11 @@ import {
   DisconnectOutlined,
   EyeOutlined,
   FileTextOutlined,
-  FunctionOutlined,
   ReloadOutlined,
   SwapOutlined,
   SyncOutlined,
   TableOutlined,
   ThunderboltOutlined,
-  UserOutlined,
 } from '@ant-design/icons'
 
 import { ConnectionTypeDropdown } from './ConnectionTypeMenu'
@@ -24,15 +22,23 @@ import { useAppStore } from '../store/appStore'
 import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
 
-/** Tooltip for commands whose backend is not written yet. */
-const SOON = 'Not available yet — the editor behind this command is still to come'
+/**
+ * Tooltip for the buttons that are temporarily parked.
+ *
+ * The ribbon keeps its shape so the layout still reads like the main window,
+ * but only the two commands that always make sense are live: creating or
+ * opening a connection, and refreshing the catalog of the active one. The
+ * handlers are left wired so putting a group back in service is a one-line
+ * change.
+ */
+const PARKED = 'Temporarily unavailable'
 
 /**
  * Navicat-style ribbon: flat, grouped, icon-over-label buttons.
  *
  * The button set mirrors Navicat's main window one-for-one so the layout reads
- * the same. Commands we cannot honour yet stay visible but disabled and carry
- * a tooltip explaining why — a dead button is worse than an honest gap, but an
+ * the same, but only *Connection* and *Refresh* are live. Everything else is
+ * disabled and says why — a dead button is worse than an honest gap, but an
  * empty toolbar is not the layout we are after.
  */
 export function MainToolbar() {
@@ -91,12 +97,13 @@ export function MainToolbar() {
           />
         </span>
       </ConnectionTypeDropdown>
-      <Dropdown menu={connectMenu} trigger={['click']} placement="bottomLeft">
+      <Dropdown menu={connectMenu} trigger={['click']} placement="bottomLeft" disabled>
         <span className="dm-ribbon-dropdown">
           <RibbonButton
             icon={<ThunderboltOutlined />}
             label="Open"
-            hint="Open a saved connection"
+            hint={PARKED}
+            disabled
             loading={pending !== null}
           />
         </span>
@@ -104,8 +111,8 @@ export function MainToolbar() {
       <RibbonButton
         icon={<DisconnectOutlined />}
         label="Close"
-        hint="Close the active connection"
-        disabled={!activeSession}
+        hint={PARKED}
+        disabled
         onClick={() => activeSession && void closeSession(activeSession.id)}
       />
 
@@ -114,8 +121,8 @@ export function MainToolbar() {
       <RibbonButton
         icon={<CodeOutlined />}
         label="New Query"
-        hint="Open a new SQL editor"
-        disabled={!activeSession}
+        hint={PARKED}
+        disabled
         onClick={() => activeSession && openQueryTab(activeSession.id, activeSession.database)}
       />
       <RibbonButton
@@ -129,19 +136,17 @@ export function MainToolbar() {
 
       <span className="dm-ribbon-sep" />
 
-      <RibbonButton icon={<TableOutlined />} label="Table" hint={SOON} />
-      <RibbonButton icon={<EyeOutlined />} label="View" hint={SOON} />
-      <RibbonButton icon={<FunctionOutlined />} label="Function" hint={SOON} />
-      <RibbonButton icon={<UserOutlined />} label="User" hint={SOON} />
+      <RibbonButton icon={<TableOutlined />} label="Table" hint={PARKED} disabled />
+      <RibbonButton icon={<EyeOutlined />} label="View" hint={PARKED} disabled />
 
       <span className="dm-ribbon-sep" />
 
-      <RibbonButton icon={<CloudUploadOutlined />} label="Backup" hint={SOON} />
-      <RibbonButton icon={<ClockCircleOutlined />} label="Auto Run" hint={SOON} />
-      <RibbonButton icon={<SwapOutlined />} label="Transfer" hint={SOON} />
-      <RibbonButton icon={<SyncOutlined />} label="Data Sync" hint={SOON} />
-      <RibbonButton icon={<DiffOutlined />} label="Structure Sync" hint={SOON} />
-      <RibbonButton icon={<FileTextOutlined />} label="Report" hint={SOON} />
+      <RibbonButton icon={<CloudUploadOutlined />} label="Backup" hint={PARKED} disabled />
+      <RibbonButton icon={<ClockCircleOutlined />} label="Auto Run" hint={PARKED} disabled />
+      <RibbonButton icon={<SwapOutlined />} label="Transfer" hint={PARKED} disabled />
+      <RibbonButton icon={<SyncOutlined />} label="Data Sync" hint={PARKED} disabled />
+      <RibbonButton icon={<DiffOutlined />} label="Structure Sync" hint={PARKED} disabled />
+      <RibbonButton icon={<FileTextOutlined />} label="Report" hint={PARKED} disabled />
     </div>
   )
 }

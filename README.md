@@ -8,7 +8,7 @@
 
 ## 功能
 
-- **连接管理**：连接配置的增删改查、连通性测试、SQLite 文件选择、TLS（CA / 证书 / 私钥）、自定义 DSN 参数、只读标记、颜色标签、密码可选保存。新建连接先点出**驱动菜单**（命令条 `Connection`、连接树的 `+`、`File ▸ New Connection`、面板空白处右键，四处挂的是同一份列表，就展开在你刚点的那个东西下面），再落到**这个引擎自己的那一页** —— 走网络的要地址、端口、账号与 TLS，SQLite 只要一个文件加一个附加库别名，两边不会互相看到无关字段（保存下来的配置也照着这一页来，文件型连接不会混进 host / port / ssl）；编辑已有连接同样按它的驱动打开对应那页。
+- **连接管理**：连接配置的增删改查、连通性测试、SQLite 文件选择、TLS（CA / 证书 / 私钥）、自定义 DSN 参数、只读标记、颜色标签、密码可选保存。新建连接先点出**驱动菜单**（命令条 `Connection`、连接树的 `+`、面板空白处右键，三处挂的是同一份列表，就展开在你刚点的那个东西下面），再落到**这个引擎自己的那一页** —— 走网络的要地址、端口、账号与 TLS，SQLite 只要一个文件加一个附加库别名，两边不会互相看到无关字段（保存下来的配置也照着这一页来，文件型连接不会混进 host / port / ssl）；编辑已有连接同样按它的驱动打开对应那页。
 - **对象浏览器**：会话 → 数据库 → Schema → 表 / 视图 / 索引 的懒加载树，右键菜单支持打开数据、新建查询、复制名称；文档型引擎这里是 database → Collections / Indexes，没有 schema 层，SQL 专属的入口（新建 DDL 脚本、ER 图、设计对象）自动不出现。
 - **MongoDB**：连接（含副本集多主机、`mongodb+srv`、TLS、认证库）、集合浏览（文档数 / 体积 / 索引）、数据网格的过滤排序与分页、双击改标量字段、批量删文档、索引列表与定义脚本、运行情况页（serverStatus + 每库 dbStats）。查询窗口跑的是 **mongosh 风格的 shell**（`db.orders.find({...}).sort({ts: -1}).limit(20)`），不是 SQL。
 - **TiDB / Apache Doris**：两个引擎对客户端都讲 MySQL 线协议，但脾气各不相同。TiDB 默认端口 4000，有 TLS 页（`Security`），表单里的 `Database` 只是新标签页的默认库 —— 一个 TiDB 集群就是一份逻辑数据库，树里一次列全所有库，所以这一栏是可选的；运行情况是 MySQL 那一页再加一张 `information_schema.CLUSTER_INFO` 的集群成员表（tidb / tikv / tiflash / ticdc / pd）。Doris 默认端口 9030，前端（FE）与后端（BE）都在集群网内、MySQL 端也不做那套握手，于是**没有 TLS 页**；它是分析型引擎，本工具里**只读浏览** —— 表结构与索引照样能看（字段列表说的是引擎自己的类型拼写，如 `varchar(120)` / `decimal(10,2)`），但没有表设计器，改动走 DDL 编辑器。两者的连接、库表浏览、数据网格、SQL 查询与导出都复用 MySQL 那条代码路径。
@@ -25,9 +25,9 @@
   右键要么什么都不做，要么就是应用自己的菜单（连接树等）；文本框与 SQL 编辑器是例外 —— 那里保留系统菜单，
   右键粘贴照旧可用，其它地方用 `Ctrl+C` / `Ctrl+V`。
 - **运行情况**：双击连接节点即可打开该连接的「运行情况」页（未连接会先连上，密码框填完再自动打开）；页面上半部分是会话事实与快照时间，下面按引擎各画各的 —— MySQL 给进程列表、连接数、InnoDB 缓冲池与命中率（TiDB 走同一页，外加集群成员表；Doris 也尽力取这一套，取不到的项挂进警告里），PostgreSQL 给后端/活动会话/数据库体积与提交率、缓存命中率，SQLite 则是「这是一个文件」的视角（路径、落盘大小、pragma、对象清单与 ATTACH 进来的库）。读不到的项一律显示 `—` 并附一条警告（缺权限、缺统计视图），不会拿 0 冒充；工具条的刷新按钮重新取一次快照。
-- **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（只画一个 GitHub 头像，悬停显示昵称、点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection / Open，以及连接树的右键菜单。
+- **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（只画一个 GitHub 头像，悬停显示昵称、点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection，以及连接树的右键菜单。
 - **导出**：CSV / JSON / INSERT 脚本（MongoDB 下是 `insertMany` 脚本，按列的 BSON 类型还原 `$oid` / `$date` / 文档字面量），可写入文件或复制到剪贴板。
-- **外观**：Navicat 式窗口骨架（菜单栏 + icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏。
+- **外观**：Navicat 式窗口骨架（icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏。命令条上目前只有 **Connection** 与 **Refresh** 是活的，其余按钮保持原来的位置但禁用并在提示里说明 —— 摆着的空位比消失的按钮更好认。
 
 ## 环境要求
 
@@ -217,7 +217,7 @@ URI userinfo 打码。`HasPassword` 为真的连接要是连不上，只报错�
 1. `connectionTypeItems()`（`ConnectionTypeMenu.tsx`）把 `ListDrivers` 按 `sortOrder` 排成一份两行的
    菜单项 —— 第一行引擎名，第二行是这个引擎的路数（「A local .db file — no server, no credentials」）；
    `implemented=false` 的驱动在分隔线下面，看得见但点不动 —— 空菜单比禁用按钮更让人困惑。
-   这份列表挂在四个入口上：命令条 `Connection`、连接树的 `+`、`File ▸ New Connection`（子菜单）、
+   这份列表挂在三个入口上：命令条 `Connection`、连接树的 `+`、
    面板空白处右键（`dm-blank-menu` 直接列引擎，不再多一次「New connection」跳转）。
    按钮上挂菜单要小心：`Dropdown` 的 `onClick` 会注入给子元素，中间隔一个 `Tooltip` 就被吞掉，
    这类触发点外面套一层 `<span class="dm-dropdown-anchor">`。
