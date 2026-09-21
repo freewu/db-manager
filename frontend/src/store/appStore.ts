@@ -93,6 +93,18 @@ interface AppState {
   connections: ConnectionConfig[]
   sessions: SessionInfo[]
   activeSessionId?: string
+  /**
+   * The connection node the explorer is focused on — the same id the tree
+   * stores in its `connection` nodes: a saved profile's id, or the session's own
+   * id when there is no profile behind it (ad-hoc, or its profile was deleted).
+   *
+   * Set whenever a session is focused (see `focused`), and additionally when a
+   * saved profile that nobody has opened yet is picked in the tree, since that
+   * one has no session to hand the focus to. The ribbon speaks about this
+   * connection: pick a closed profile and *Open* lights up, pick an open one
+   * and *Close* does.
+   */
+  activeConnectionId?: string
   tabs: WorkspaceTab[]
   activeTabId?: string
   theme: ThemeMode
@@ -119,6 +131,8 @@ interface AppState {
   openConnection: (req: OpenRequest) => Promise<SessionInfo>
   closeSession: (sessionId: string) => Promise<void>
   setActiveSession: (sessionId: string) => void
+  /** Marks which connection the explorer is focused on (see `activeConnectionId`). */
+  setActiveConnection: (connectionId: string) => void
 
   loadDatabases: (sessionId: string) => Promise<void>
   loadSchemas: (sessionId: string, database: string) => Promise<void>
@@ -184,6 +198,28 @@ function withoutKey<T>(source: Record<string, T>, key: string): Record<string, T
   delete out[key]
   return out
 }
+
+/** The profile a live session came from, or the session's own id when there is
+ * none (an ad-hoc connection, or one whose profile was deleted). */
+const connectionOfSession = (sessions: SessionInfo[], sessionId: string): string | undefined => {
+  const session = sessions.find((s) => s.id === sessionId)
+  return session ? session.connectionId ?? session.id : undefined
+}
+
+/**
+ * The patch that hands the focus to a session.
+ *
+ * Two ids move together here. `activeSessionId` is the live session the status
+ * bar describes and the query tabs belong to; `activeConnectionId` is the
+ * connection node the explorer is working on, which is *not* always the same
+ * thing — a profile nobody has opened yet has no session to point at. Focusing
+ * a session always focuses its connection node, so the two never drift apart on
+ * their own.
+ */
+const focused = (state: AppState, sessionId: string) => ({
+  activeSessionId: sessionId,
+  activeConnectionId: connectionOfSession(state.sessions, sessionId) ?? state.activeConnectionId,
+})
 
 export const useAppStore = create<AppState>((set, get) => ({
   boot: 'loading',
@@ -275,13 +311,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async openConnection(req) {
     const session = await api.openConnection(req)
-    set((state) => {
-      const others = state.sessions.filter((s) => s.id !== session.id)
-      return {
-        sessions: [...others, session],
-        activeSessionId: session.id,
-      }
-    })
+    set((state) => ({
+      sessions: [...state.sessions.filter((s) => s.id !== session.id), session],
+      activeSessionId: session.id,
+      // An ad-hoc session is its own connection node, exactly like the tree
+      // draws it.
+      activeConnectionId: session.connectionId ?? session.id,
+    }))
     void get().loadDatabases(session.id)
     return session
   },
@@ -315,6 +351,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setActiveSession(sessionId) {
     set({ activeSessionId: sessionId })
+  },
+
+  setActiveConnection(connectionId) {
+    set({ activeConnectionId: connectionId })
   },
 
   async loadDatabases(sessionId) {
@@ -472,7 +512,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       tabs: [...state.tabs, tab],
       activeTabId: id,
-      activeSessionId: sessionId,
+      ...focused(state, sessionId),
     }))
   },
 
@@ -490,7 +530,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       activeTabId: id,
-      activeSessionId: sessionId,
+      ...focused(state, sessionId),
     }))
   },
 
@@ -517,7 +557,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         tabs,
         activeTabId: id,
-        activeSessionId: sessionId,
+        ...focused(state, sessionId),
       }
     })
   },
@@ -538,7 +578,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       tabs: [...state.tabs, tab],
       activeTabId: id,
-      activeSessionId: sessionId,
+      ...focused(state, sessionId),
       designs: {
         ...state.designs,
         [id]: {
@@ -563,7 +603,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       activeTabId: id,
-      activeSessionId: sessionId,
+      ...focused(state, sessionId),
     }))
   },
 
@@ -580,7 +620,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       activeTabId: id,
-      activeSessionId: sessionId,
+      ...focused(state, sessionId),
     }))
   },
 
@@ -598,7 +638,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       activeTabId: id,
-      activeSessionId: sessionId,
+      ...focused(state, sessionId),
     }))
   },
 
@@ -658,7 +698,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   setActiveTab(tabId) {
     set((state) => {
       const tab = state.tabs.find((t) => t.id === tabId)
-      return { activeTabId: tabId, activeSessionId: tab?.sessionId ?? state.activeSessionId }
+      if (!tab) return { activeTabId: tabId }
+      return { activeTabId: tabId, ...focused(state, tab.sessionId) }
     })
   },
 

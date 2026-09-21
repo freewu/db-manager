@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react'
-import { Dropdown, Tooltip } from 'antd'
-import type { MenuProps } from 'antd'
+import { Tooltip } from 'antd'
 import {
   ApiOutlined,
   ClockCircleOutlined,
@@ -20,16 +19,15 @@ import {
 import { ConnectionTypeDropdown } from './ConnectionTypeMenu'
 import { useAppStore } from '../store/appStore'
 import { useConnect } from '../hooks/useConnect'
-import { driverIconOrLogo } from '../lib/assets'
 
 /**
  * Tooltip for the buttons that are temporarily parked.
  *
  * The ribbon keeps its shape so the layout still reads like the main window,
- * but only the commands that always make sense are live: creating or opening a
- * connection, closing the one the tree has selected, and refreshing its catalog.
- * The handlers are left wired so putting a group back in service is a one-line
- * change.
+ * but only the commands that act on the connection the explorer is focused on
+ * are live: creating one, opening the picked profile, closing the picked
+ * session, and refreshing its catalog. The handlers are left wired so putting a
+ * group back in service is a one-line change.
  */
 const PARKED = 'Temporarily unavailable'
 
@@ -37,14 +35,15 @@ const PARKED = 'Temporarily unavailable'
  * Navicat-style ribbon: flat, grouped, icon-over-label buttons.
  *
  * The button set mirrors Navicat's main window one-for-one so the layout reads
- * the same, but only *Connection*, *Close* and *Refresh* are live. Everything
- * else is disabled and says why — a dead button is worse than an honest gap, but
- * an empty toolbar is not the layout we are after.
+ * the same, but only *Connection*, *Open*, *Close* and *Refresh* are live.
+ * Everything else is disabled and says why — a dead button is worse than an
+ * honest gap, but an empty toolbar is not the layout we are after.
  */
 export function MainToolbar() {
   const connections = useAppStore((s) => s.connections)
   const sessions = useAppStore((s) => s.sessions)
   const activeSessionId = useAppStore((s) => s.activeSessionId)
+  const activeConnectionId = useAppStore((s) => s.activeConnectionId)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const closeSession = useAppStore((s) => s.closeSession)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
@@ -54,33 +53,22 @@ export function MainToolbar() {
   const [refreshing, setRefreshing] = useState(false)
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
-  const openConnectionIds = new Set(sessions.map((s) => s.connectionId))
-  const closedProfiles = connections.filter((c) => !openConnectionIds.has(c.id))
-
-  const connectMenu: MenuProps = {
-    items: closedProfiles.length
-      ? closedProfiles.map((profile) => ({
-          key: profile.id,
-          label: profile.name,
-          icon: (
-            <img
-              src={driverIconOrLogo(profile.driver)}
-              alt=""
-              className="dm-menu-icon"
-              draggable={false}
-            />
-          ),
-          onClick: () => void connect(profile),
-        }))
-      : [{ key: 'none', label: 'Every saved connection is open', disabled: true }],
-  }
+  // What the ribbon acts on: the connection the explorer is focused on. It is
+  // either a profile nobody has opened yet (Open lights up) or one with a live
+  // session behind it (Close and Refresh do).
+  const focusedProfile = connections.find((c) => c.id === activeConnectionId)
+  // Matches both kinds of connection node: a saved profile, and a session that
+  // stands in for one of its own (ad-hoc, or its profile was deleted).
+  const focusedSession = sessions.find(
+    (s) => s.id === activeConnectionId || s.connectionId === activeConnectionId,
+  )
 
   const refresh = async () => {
-    if (!activeSessionId) return
+    if (!focusedSession) return
     setRefreshing(true)
     try {
-      invalidateSession(activeSessionId)
-      await loadDatabases(activeSessionId)
+      invalidateSession(focusedSession.id)
+      await loadDatabases(focusedSession.id)
     } finally {
       setRefreshing(false)
     }
@@ -97,30 +85,34 @@ export function MainToolbar() {
           />
         </span>
       </ConnectionTypeDropdown>
-      <Dropdown menu={connectMenu} trigger={['click']} placement="bottomLeft" disabled>
-        <span className="dm-ribbon-dropdown">
-          <RibbonButton
-            icon={<ThunderboltOutlined />}
-            label="Open"
-            hint={PARKED}
-            disabled
-            loading={pending !== null}
-          />
-        </span>
-      </Dropdown>
+      <RibbonButton
+        icon={<ThunderboltOutlined />}
+        label="Open"
+        // Lights up when the tree has a profile picked that is not open yet —
+        // the mirror image of Close below, and the same one-click connection the
+        // explorer's right-click "Open connection" does (password prompt and
+        // all, since both go through the same connect flow).
+        hint={
+          focusedProfile
+            ? focusedSession
+              ? `${focusedProfile.name} is already open`
+              : `Open ${focusedProfile.name}`
+            : 'Pick a connection in the tree first'
+        }
+        disabled={!focusedProfile || Boolean(focusedSession)}
+        loading={pending !== null}
+        onClick={() => focusedProfile && void connect(focusedProfile)}
+      />
       <RibbonButton
         icon={<DisconnectOutlined />}
         label="Close"
-        // Lights up as soon as a connection is picked in the tree (i.e. a
-        // session is active) and closes that one. No confirmation — the tree's
-        // own Disconnect does not ask either, and reconnecting is one click.
         hint={
-          activeSession
-            ? `Close ${activeSession.name}`
+          focusedSession
+            ? `Close ${focusedSession.name}`
             : 'Pick an open connection in the tree first'
         }
-        disabled={!activeSession}
-        onClick={() => activeSession && void closeSession(activeSession.id)}
+        disabled={!focusedSession}
+        onClick={() => focusedSession && void closeSession(focusedSession.id)}
       />
 
       <span className="dm-ribbon-sep" />
@@ -135,8 +127,12 @@ export function MainToolbar() {
       <RibbonButton
         icon={<ReloadOutlined />}
         label="Refresh"
-        hint="Reload the active connection's catalog"
-        disabled={!activeSession}
+        hint={
+          focusedSession
+            ? `Reload the catalog of ${focusedSession.name}`
+            : 'Pick an open connection in the tree first'
+        }
+        disabled={!focusedSession}
         loading={refreshing}
         onClick={() => void refresh()}
       />

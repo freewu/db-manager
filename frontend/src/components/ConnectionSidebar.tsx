@@ -77,6 +77,7 @@ export function ConnectionSidebar() {
   const openRuntimeTab = useAppStore((s) => s.openRuntimeTab)
   const closeSession = useAppStore((s) => s.closeSession)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
+  const setActiveConnection = useAppStore((s) => s.setActiveConnection)
 
   const { connect, pending } = useConnect()
   const { message } = AntApp.useApp()
@@ -810,12 +811,17 @@ export function ConnectionSidebar() {
       if (!ref) return
 
       if (ref.t === 'connection') {
+        // Picking a profile is what hands it to the ribbon: a closed one lights
+        // up Open, an open one lights up Close.
+        setActiveConnection(ref.connectionId)
         const session = sessionForConnection(ref.connectionId)
         if (session) setActiveSession(session.id)
         return
       }
 
       setActiveSession(ref.sessionId)
+      const owner = sessions.find((s) => s.id === ref.sessionId)
+      if (owner?.connectionId) setActiveConnection(owner.connectionId)
       if (ref.t === 'folder' || ref.t === 'indexFolder') {
         // An empty folder is a leaf (the (0) in its title is the whole story),
         // so there is nothing to reveal and expanding it is skipped.
@@ -844,7 +850,14 @@ export function ConnectionSidebar() {
         if (object) openObject(ref.sessionId, ref.database, ref.schema, object, 'indexes')
       }
     },
-    [openList, openObject, sessionForConnection, setActiveSession, tree.objects],
+    [
+      openList,
+      openObject,
+      sessionForConnection,
+      setActiveConnection,
+      setActiveSession,
+      tree.objects,
+    ],
   )
 
   const handleExpand = useCallback<NonNullable<TreeProps['onExpand']>>(
