@@ -487,6 +487,10 @@ body {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  /* Double-clicking the node opens the connection, so the label must not turn
+     into a browser text selection under the cursor — the tree already draws its
+     own "this is selected" state. */
+  user-select: none;
 }
 
 .dm-connection-dot {
