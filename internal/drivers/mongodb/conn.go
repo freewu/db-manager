@@ -610,8 +610,9 @@ func (c *Conn) Execute(ctx context.Context, req drivers.ExecRequest) (*models.Qu
 	ctx, cancel := withTimeout(ctx, req.TimeoutMS)
 	defer cancel()
 
-	// One database for the whole script: the shell editor selects it, and a
-	// statement cannot change it (there is no "use" in this language).
+	// One database for the whole script, unless a `use` statement changes it:
+	// the editor selects the first one, and `use` moves the statements that
+	// follow it, exactly like the shell it is written for.
 	database := c.resolveDatabase(req.Database)
 
 	var (
@@ -627,6 +628,21 @@ func (c *Conn) Execute(ctx context.Context, req drivers.ExecRequest) (*models.Qu
 		}
 		if req.ReadOnly && stmt.isWrite() {
 			return nil, apperr.New(apperr.CodeReadOnly, "connection is read-only, refusing to run statement %d (%s)", i+1, stmt.commandName())
+		}
+
+		// `use` never reaches the server: it moves the script to another
+		// database. It is not a write either — nothing is created until the
+		// first collection is — so a read-only session may still switch.
+		if stmt.command == "use" {
+			name, err := argString(argAt(stmt.args, 0))
+			if err != nil || strings.TrimSpace(name) == "" {
+				return nil, apperr.New(apperr.CodeInvalidConfig, "statement %d: use needs a database name", i+1)
+			}
+			database = strings.TrimSpace(name)
+			messages = append(messages, fmt.Sprintf("#%d: switched to database %s", i+1, database))
+			lastExec = affected(0, "switched to database "+database)
+			lastExec.SQL = stmt.raw
+			continue
 		}
 
 		started := time.Now()

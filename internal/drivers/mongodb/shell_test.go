@@ -130,6 +130,31 @@ func TestParseStatement(t *testing.T) {
 			args:    `["collections"]`,
 		},
 		{
+			name:    "use switches the database of what follows",
+			input:   `use shop`,
+			command: "use",
+			args:    `["shop"]`,
+		},
+		{
+			name:    "a database name may carry the characters MongoDB allows in one",
+			input:   `use logs-2026_v2`,
+			command: "use",
+			args:    `["logs-2026_v2"]`,
+		},
+		{
+			name:    "a quoted name is how spaces survive",
+			input:   `use "my db"`,
+			command: "use",
+			args:    `["my db"]`,
+		},
+		{
+			name:       "a collection whose name starts with use is still a method call",
+			input:      `db.users.find({})`,
+			collection: "users",
+			command:    "find",
+			args:       `[{}]`,
+		},
+		{
 			name:       "extended json argument",
 			input:      `db.users.deleteOne({"_id": {"$oid": "507f1f77bcf86cd799439011"}})`,
 			collection: "users",
@@ -175,6 +200,8 @@ func TestParseStatementErrors(t *testing.T) {
 		{"unquoted text argument", `db.users.find(active)`, "not a valid JSON value"},
 		{"getCollection without a method", `db.getCollection("x")`, "expected a method call"},
 		{"show without a target", `show`, "must start with db or show"},
+		{"use without a name", `use`, "use needs a database name"},
+		{"a quoted use name with a tail", `use "a" "b"`, "must start with db or show"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -309,6 +336,7 @@ func TestAnalyzeScript(t *testing.T) {
 		{"find", `db.orders.find({"a": 1})`, "query", false, ""},
 		{"count", `db.orders.countDocuments({})`, "query", false, ""},
 		{"show", `show collections`, "query", false, ""},
+		{"use", `use shop`, "query", false, ""},
 		{"insert", `db.orders.insertOne({"a": 1})`, "dml", false, ""},
 		{"update with a filter", `db.orders.updateMany({"a": 1}, {"$set": {"b": 2}})`, "dml", false, ""},
 		{"update without a filter", `db.orders.updateMany({}, {"$set": {"b": 2}})`, "dml", true, "rewrites every document"},

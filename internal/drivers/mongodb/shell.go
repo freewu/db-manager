@@ -54,6 +54,7 @@ import (
 //
 //	shell shorthands
 //	  show dbs | show databases | show collections | show tables
+//	  use <database>
 //
 // Statements are separated by ";" or by a newline at nesting level zero, so a
 // multi-line pipeline inside one call stays one statement. "//" starts a
@@ -150,6 +151,10 @@ var readCommands = map[string]bool{
 	"getcollectionnames": true,
 	"getcollection":      true,
 	"show":               true,
+	// `use` only selects a database for the statements that follow it: it
+	// creates nothing and reads nothing, so the dry run shows it as the query it
+	// is and a read-only session keeps it.
+	"use": true,
 }
 
 // AnalyzeScript is the dry run the DDL editor shows before running a script.
@@ -371,8 +376,8 @@ func stripComments(script string) string {
 // --- parsing ----------------------------------------------------------------
 
 // parseStatement parses one statement of the shell language. Which database it
-// runs against is decided by the caller: the shell has no "use" statement, the
-// database comes from the editor's selector.
+// runs against is decided by the caller: the database comes from the editor's
+// selector or from a `use` statement earlier in the same script.
 func parseStatement(raw string) (*statement, error) {
 	text := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(raw), ";"))
 	if text == "" {
@@ -383,6 +388,20 @@ func parseStatement(raw string) (*statement, error) {
 	if fields := strings.Fields(text); len(fields) == 2 && strings.EqualFold(fields[0], "show") {
 		stmt.command = "show"
 		stmt.args = []any{strings.ToLower(fields[1])}
+		return stmt, nil
+	}
+
+	// `use <database>` has no parentheses, so it is recognised before the
+	// db.<...> path below. The name is read the way the shell reads it — the
+	// rest of the line, or a quoted string when it needs spaces — and whatever
+	// the server's naming rules say about it is the server's business: this
+	// statement only changes which database the following statements address.
+	if strings.EqualFold(text, "use") {
+		return nil, fmt.Errorf("use needs a database name")
+	}
+	if name, ok := cutUse(text); ok {
+		stmt.command = "use"
+		stmt.args = []any{name}
 		return stmt, nil
 	}
 
@@ -500,6 +519,32 @@ func parseStatement(raw string) (*statement, error) {
 		stmt.chained = append(stmt.chained, call)
 	}
 	return stmt, nil
+}
+
+// cutUse splits `use <database>` into the name it names.
+//
+// A statement that merely *starts* with the letters (db.user.find()) reports
+// false, and so does a bare `use`. Everything after the keyword is the name —
+// the shell's own rule — except for the quoted form, which is how a name with
+// spaces in it is written anywhere else in this language.
+func cutUse(text string) (name string, ok bool) {
+	if len(text) < 3 || !strings.EqualFold(text[:3], "use") {
+		return "", false
+	}
+	body := text[3:]
+	rest := strings.TrimSpace(body)
+	if len(rest) == len(body) || rest == "" {
+		// No space after the keyword (db.user.find(...)), or nothing at all.
+		return "", false
+	}
+	if rest[0] == '"' || rest[0] == '\'' {
+		value, pos, err := readName(rest, 0)
+		if err != nil || strings.TrimSpace(rest[pos:]) != "" {
+			return "", false
+		}
+		return value, true
+	}
+	return rest, true
 }
 
 // readName reads an identifier or a quoted name.
