@@ -26,9 +26,9 @@ import { driverIconOrLogo } from '../lib/assets'
  * Tooltip for the buttons that are temporarily parked.
  *
  * The ribbon keeps its shape so the layout still reads like the main window,
- * but only the two commands that always make sense are live: creating or
- * opening a connection, and refreshing the catalog of the active one. The
- * handlers are left wired so putting a group back in service is a one-line
+ * but only the commands that always make sense are live: creating or opening a
+ * connection, closing the one the tree has selected, and refreshing its catalog.
+ * The handlers are left wired so putting a group back in service is a one-line
  * change.
  */
 const PARKED = 'Temporarily unavailable'
@@ -37,9 +37,9 @@ const PARKED = 'Temporarily unavailable'
  * Navicat-style ribbon: flat, grouped, icon-over-label buttons.
  *
  * The button set mirrors Navicat's main window one-for-one so the layout reads
- * the same, but only *Connection* and *Refresh* are live. Everything else is
- * disabled and says why — a dead button is worse than an honest gap, but an
- * empty toolbar is not the layout we are after.
+ * the same, but only *Connection*, *Close* and *Refresh* are live. Everything
+ * else is disabled and says why — a dead button is worse than an honest gap, but
+ * an empty toolbar is not the layout we are after.
  */
 export function MainToolbar() {
   const connections = useAppStore((s) => s.connections)
@@ -111,8 +111,15 @@ export function MainToolbar() {
       <RibbonButton
         icon={<DisconnectOutlined />}
         label="Close"
-        hint={PARKED}
-        disabled
+        // Lights up as soon as a connection is picked in the tree (i.e. a
+        // session is active) and closes that one. No confirmation — the tree's
+        // own Disconnect does not ask either, and reconnecting is one click.
+        hint={
+          activeSession
+            ? `Close ${activeSession.name}`
+            : 'Pick an open connection in the tree first'
+        }
+        disabled={!activeSession}
         onClick={() => activeSession && void closeSession(activeSession.id)}
       />
 
