@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync/atomic"
 
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -13,6 +14,10 @@ import (
 	"dbmanager/internal/models"
 	"dbmanager/internal/service"
 )
+
+// appName is what the window title, the notification-area tooltip and the
+// project-info pane call this program.
+const appName = "DB Manager"
 
 // Version is overridden at build time:
 //
@@ -24,6 +29,15 @@ var Version = "0.1.0-dev"
 type App struct {
 	ctx     context.Context
 	manager *service.Manager
+
+	// tray is the notification-area icon; nil until startup, and a no-op stub on
+	// platforms that have no notification area.
+	tray *tray
+
+	// quitting is what the tray's Quit sets, so the close hook can tell "the user
+	// closed the window" (hide it, stay running) from "the user is done" (go
+	// down).
+	quitting atomic.Bool
 }
 
 // NewApp wires the application layer.
@@ -36,15 +50,75 @@ func NewApp() (*App, error) {
 }
 
 // startup stores the Wails context so runtime helpers (dialogs, events) and
-// query cancellation work.
+// query cancellation work, and puts the app in the notification area.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.manager.SetContext(ctx)
+	a.tray = newTray(a.trayActions())
 }
 
-// shutdown releases every database pool.
+// trayActions is what the notification-area menu can ask of the app.
+func (a *App) trayActions() trayActions {
+	return trayActions{
+		showWindow: a.showWindow,
+		openRepo:   func() { a.openURL(repoURL) },
+		openIssue:  func() { a.openURL(issuesURL) },
+		quit:       a.quit,
+	}
+}
+
+// shutdown releases every database pool and takes the tray icon down.
 func (a *App) shutdown(context.Context) {
+	if a.tray != nil {
+		a.tray.close()
+	}
 	a.manager.Shutdown()
+}
+
+// --- window and tray -------------------------------------------------------
+
+// showWindow brings the main window back to the front — the tray's "Show window",
+// and a click on the icon itself. It may be hidden (the close button put it away)
+// or minimised (the taskbar button did), and both have to end with the window in
+// front of the user, so it is un-minimised before it is shown.
+func (a *App) showWindow() {
+	wruntime.WindowUnminimise(a.ctx)
+	wruntime.WindowShow(a.ctx)
+}
+
+// openURL hands a link to the user's browser instead of navigating the webview
+// away from the app.
+func (a *App) openURL(url string) {
+	wruntime.BrowserOpenURL(a.ctx, url)
+}
+
+// quit leaves through the front door: the flag stops beforeClose from putting
+// the window away again, the icon goes back out of the notification area, and
+// Wails unwinds — running OnShutdown, so the connection pools are closed.
+func (a *App) quit() {
+	a.quitting.Store(true)
+	if a.tray != nil {
+		a.tray.close()
+	}
+	wruntime.Quit(a.ctx)
+}
+
+// beforeClose is Wails' close hook. While the tray icon is up, closing the
+// window means "put it away", not "stop": the icon is the way back, and the
+// menu's Quit is the way out — which is what a desktop app with a tray is
+// expected to do.
+//
+// The check on the icon is what keeps that a promise we can keep: if the icon
+// never made it into the notification area there would be no way back to the
+// window, so the close goes through and the app exits as it did before the tray
+// existed.
+func (a *App) beforeClose(context.Context) bool {
+	if a.quitting.Load() || a.tray == nil || !a.tray.running() {
+		return false
+	}
+	wruntime.WindowHide(a.ctx)
+	a.tray.noticeHidden()
+	return true
 }
 
 // --- application -----------------------------------------------------------
@@ -52,7 +126,7 @@ func (a *App) shutdown(context.Context) {
 // AppInfo returns build metadata for the welcome screen.
 func (a *App) AppInfo() models.AppInfo {
 	return models.AppInfo{
-		Name:       "DB Manager",
+		Name:       appName,
 		Version:    Version,
 		GoVersion:  runtime.Version(),
 		ConfigPath: a.manager.ConfigDir(),

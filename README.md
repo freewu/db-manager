@@ -29,6 +29,7 @@
 - **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（只画一个 GitHub 头像，悬停显示昵称、点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection，以及连接树的右键菜单。
 - **导出**：CSV / JSON / INSERT 脚本（MongoDB 下是 `insertMany` 脚本，按列的 BSON 类型还原 `$oid` / `$date` / 文档字面量），可写入文件或复制到剪贴板。
 - **外观**：Navicat 式窗口骨架（icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏。命令条上目前只有 **Connection**、**Open**、**Close** 与 **Refresh** 是活的，其余按钮保持原来的位置但禁用并在提示里说明 —— 摆着的空位比消失的按钮更好认。
+- **托盘**（Windows）：关掉窗口是**收进托盘**，不是退出；托盘图标左键单击等于把窗口叫回来，右键的菜单从上到下是 `Show window` / `Project page` / `Report an issue` / 版本号（灰色，只是给你看的）/ `Quit`。第一次收起来会弹一次气泡说明「还在运行」，免得以为程序没了；`Quit` 走的是正常退出（连接池照常关），而**图标没能建出来时关窗照旧直接退出** —— 一个没能出现的托盘不该留下一个看不见的进程。其它平台没有通知区域，行为保持原样（关窗即退出）。
 
 ## 环境要求
 
@@ -86,6 +87,9 @@ wails build
 .
 ├── app.go                    # Wails 绑定层：AppInfo / 连接 / 元数据 / 查询 / 文件对话框
 ├── main.go                   # 应用入口，embed frontend/dist，窗口 1360×860
+├── tray.go                   # 托盘菜单的内容与动作（文字 / 顺序 / 版本号只有这一处）
+├── tray_windows.go           # 纯 Win32 的托盘：隐藏窗口 + 自己的消息循环 + Shell_NotifyIcon
+├── tray_other.go             # 非 Windows 的空实现：没有通知区域，关窗照旧退出
 ├── AGENTS.md                 # 开发约定：提交 / 发版 / 环境坑（动手前必读）
 ├── Justfile                  # 开发任务（windows-shell = PowerShell）
 ├── wails.json                # 版本号权威来源（info.productVersion）
@@ -385,6 +389,30 @@ PostgreSQL `… ENCODING '…' LOCALE '…' TEMPLATE template0`、MongoDB `use <
 `pg_database_size`、`SHOW FULL PROCESSLIST` …）失败都只降级成自己的那条警告，
 一个权限不足不会让整页白掉。
 
+### 托盘只有 Windows 有
+
+Wails 不提供托盘 API（`runtime` 里只有窗口、对话框与事件），所以这一小块是自己写的：
+`Shell_NotifyIcon` 只有 Win32 有，走 `golang.org/x/sys/windows` 直接调，不引 cgo，也不引第三方
+托盘库（那些库在 Linux 上要么要 cgo + appindicator，要么根本没有统一的通知区域）。
+
+托盘事件是 shell **post 到一个窗口**上的，而应用主窗口归 Wails，所以自己建了一个隐藏窗口
+（类名 `DBManagerTray`）；Win32 的窗口属于创建它的那个线程，因此这个窗口连同它的消息循环
+都在**自己的线程**上，不去抢 Wails 那条已经有消息循环的主线程。窗口只做两件事：收 `trayMessage`
+（左键 = 显示窗口，右键 = 弹菜单）与 `WM_COMMAND`（菜单选中哪一行）。菜单每次右键现建现用，
+所以版本号永远跟着二进制走。
+
+菜单文字、顺序与版本号只在 `tray.go` 一处（`trayMenuRows()`），`tray_windows.go` 只负责把它画成
+Win32 的菜单；`tray_test.go` 断言这五行、两条分隔线与「只有版本行不可点」，Windows 上再加一组
+测试真的建一次菜单、用 `GetMenuString` / `GetMenuState` 读回来，确认标签原样到达 Win32；
+手写的 `NOTIFYICONDATAW` 与 `MSG` 也用测试钉住字段偏移量 —— `cbSize` 是 shell 判断结构体版本的
+唯一依据，错一个字节就是一句没说出口的错误。
+
+关窗语义在 `app.beforeClose` 里：**图标确实在，才把窗口藏起来**（`tray.running()` 查的就是这一点），
+否则让关闭照常发生。托盘里的 `Quit` 先置 `quitting` 再 `runtime.Quit`，同一个钩子因此放行，
+`OnShutdown` 照常关掉连接池。图标本身用 `ExtractIconEx` 从自己的可执行文件里取（就是构建时由
+`build/appicon.png` 生成、随 `.syso` 嵌进去的那枚资源），取不到就退回系统默认图标 —— `asserts/` 仍然是
+品牌素材的唯一来源，不为托盘另存一份 ICO。
+
 ## 测试
 
 ```sh
@@ -429,6 +457,13 @@ DMB_TEST_DORIS_HOST=127.0.0.1 go test ./internal/drivers/doris/ -run Integration
 ```
 
 两者默认 skip，CI 不需要备 TiDB / Doris。
+
+托盘那一圈不需要桌面也能测：菜单内容按 `trayMenuRows()` 断言，Windows 上再加一组只在 Windows 跑
+的测试 —— 手写的 `NOTIFYICONDATAW` / `MSG` 字段偏移量与 `utf16Fill` 的截断 / 终止符、真的建一次
+托盘菜单再用 `GetMenuString` 读回来（标签原样、版本行是 `MF_GRAYED`）、图标能从可执行文件或系统
+默认图标里拿到。窗口那半边（关窗进托盘、点图标回来、菜单里的 `Quit` 干净退出）是脚本化的手工
+烟测：用 `PostMessage` 把 shell 会发的消息发给应用自己的窗口，看进程还在不在、窗口可见不可见，
+不放进 CI。
 
 ## 发布
 

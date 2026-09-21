@@ -28,7 +28,7 @@ func main() {
 	}
 
 	err = wails.Run(&options.App{
-		Title:     "DB Manager",
+		Title:     appName,
 		Width:     1360,
 		Height:    860,
 		MinWidth:  900,
@@ -41,6 +41,9 @@ func main() {
 		BackgroundColour: &options.RGBA{R: 238, G: 240, B: 243, A: 1},
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
+		// Closing the window hides it behind the notification-area icon rather
+		// than quitting; the tray menu's Quit is the way out.
+		OnBeforeClose: app.beforeClose,
 		Bind: []interface{}{
 			app,
 		},
