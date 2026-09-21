@@ -499,6 +499,7 @@ body {
 /* thin scrollbars, closer to a native tool feel */
 .dm-sidebar-tree::-webkit-scrollbar,
 .dm-pane-body::-webkit-scrollbar,
+.dm-runtime-scroll::-webkit-scrollbar,
 .dm-ddl::-webkit-scrollbar,
 .dm-messages::-webkit-scrollbar,
 .ant-table-body::-webkit-scrollbar,
@@ -509,6 +510,7 @@ body {
 
 .dm-sidebar-tree::-webkit-scrollbar-thumb,
 .dm-pane-body::-webkit-scrollbar-thumb,
+.dm-runtime-scroll::-webkit-scrollbar-thumb,
 .dm-ddl::-webkit-scrollbar-thumb,
 .dm-messages::-webkit-scrollbar-thumb,
 .ant-table-body::-webkit-scrollbar-thumb,
@@ -521,6 +523,7 @@ body {
 
 .dm-sidebar-tree::-webkit-scrollbar-thumb:hover,
 .dm-pane-body::-webkit-scrollbar-thumb:hover,
+.dm-runtime-scroll::-webkit-scrollbar-thumb:hover,
 .ant-table-body::-webkit-scrollbar-thumb:hover {
   background: rgba(128, 128, 128, 0.6);
   background-clip: content-box;
@@ -1086,15 +1089,87 @@ body {
 
 /* ------------------------------------------------- runtime status page */
 
-.dm-runtime {
+/* The page is one scrollbar read top to bottom, with the rail on the left
+   naming the blocks it passes. The rail is the page's table of contents, not a
+   set of panes, so nothing here is hidden: scrolling *is* the switching. */
+.dm-runtime-body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 12px 14px 18px;
+  padding: 12px 14px 0;
+  /* The column below owns the scrolling, so this box only hands it a height. */
+  overflow: hidden;
 }
 
-.dm-runtime .ant-alert {
+.dm-runtime-body > .ant-alert {
   margin-bottom: 0;
+  flex: none;
+}
+
+.dm-runtime {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.dm-runtime-rail {
+  flex: none;
+  width: 158px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 10px;
+  overflow-y: auto;
+  border-right: 1px solid var(--dm-border);
+}
+
+.dm-runtime-tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.35;
+  text-align: left;
+  padding: 6px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.dm-runtime-tab:hover {
+  background: var(--dm-tree-hover);
+  opacity: 1;
+}
+
+/* The same selected look as the tree and the object list. */
+.dm-runtime-tab.is-active {
+  background: var(--dm-accent-soft);
+  color: var(--dm-accent-text);
+  font-weight: 600;
+  opacity: 1;
+}
+
+.dm-runtime-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: auto;
+  padding: 12px 2px 18px 16px;
+}
+
+/* A block keeps its own heading, the way a page with a sidebar always does: the
+   rail is how you get there, the heading is where you arrived. */
+.dm-runtime-section {
+  min-width: 0;
+}
+
+.dm-runtime-footnote {
+  opacity: 0.65;
 }
 
 .dm-metric-group {
