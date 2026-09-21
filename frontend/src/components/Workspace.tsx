@@ -6,6 +6,7 @@ import { CodeOutlined, DashboardOutlined, FileTextOutlined, FolderOutlined, Part
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { DdlPane } from './DdlPane'
 import { ErDiagramPane } from './ErDiagramPane'
+import { NewTablePane } from './NewTablePane'
 import { ObjectListPane } from './ObjectListPane'
 import { QueryPane } from './QueryPane'
 import { RuntimePane } from './RuntimePane'
@@ -31,6 +32,8 @@ export function Workspace() {
         children:
           tab.kind === 'query' ? (
             <QueryPane tab={tab} />
+          ) : tab.kind === 'newtable' ? (
+            <NewTablePane tab={tab} />
           ) : tab.kind === 'objects' ? (
             <ObjectListPane tab={tab} />
           ) : tab.kind === 'ddl' ? (
@@ -84,10 +87,16 @@ export function Workspace() {
 }
 
 function TabLabel({ tab, sessionName }: { tab: WorkspaceTab; sessionName?: string }) {
+  // A new table has no catalog name yet, so the tab follows the name being
+  // typed in the designer instead of staying "New table" while it is written.
+  const draftName = useAppStore((s) => (tab.kind === 'newtable' ? s.designs[tab.id]?.draft.object : ''))
+  const title = draftName?.trim() ? draftName.trim() : tab.title
   return (
     <Space size={6} className="dm-tab-label">
       {tab.kind === 'query' ? (
         <CodeOutlined style={{ opacity: 0.7 }} />
+      ) : tab.kind === 'newtable' ? (
+        <PlusOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'objects' ? (
         <FolderOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'ddl' ? (
@@ -99,7 +108,7 @@ function TabLabel({ tab, sessionName }: { tab: WorkspaceTab; sessionName?: strin
       ) : (
         <TableOutlined style={{ opacity: 0.7 }} />
       )}
-      <span>{tab.title}</span>
+      <span>{title}</span>
       {sessionName ? (
         <Typography.Text type="secondary" style={{ fontSize: 11 }}>
           {sessionName}

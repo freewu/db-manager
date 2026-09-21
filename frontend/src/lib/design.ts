@@ -54,6 +54,57 @@ export function designFrom(structure: TableStructure, sessionId: string): TableD
 }
 
 /**
+ * The structure of a table that does not exist yet.
+ *
+ * The designer compares a draft against the structure it was prefilled from, so
+ * creating a table needs a baseline too: an empty one, which every draft of a
+ * new table differs from as soon as it has a field.
+ */
+export function emptyStructure(database: string, schema: string): TableStructure {
+  return {
+    object: { name: '', kind: 'table', database, schema, rowEstimate: 0, sizeBytes: 0 },
+    columns: [],
+    indexes: [],
+    foreignKeys: [],
+    ddl: '',
+  }
+}
+
+/**
+ * A draft for a new table: a name to fill in and one auto-incrementing key, the
+ * way a designer window opens on a fresh table.
+ */
+export function newTableDesign(
+  sessionId: string,
+  database: string,
+  schema: string,
+  driver: DriverType | undefined,
+): TableDesign {
+  const first = typeSuggestions(driver)[0] ?? 'int'
+  return {
+    sessionId,
+    database,
+    schema,
+    object: '',
+    // SQLite auto-increments its INTEGER PRIMARY KEY by definition, so the flag
+    // would only make the designer claim something the engine writes itself.
+    columns: [
+      {
+        name: 'id',
+        originalName: '',
+        dataType: first,
+        nullable: false,
+        defaultValue: null,
+        primaryKey: true,
+        autoIncrement: driver !== 'sqlite',
+        comment: '',
+      },
+    ],
+    indexes: [],
+  }
+}
+
+/**
  * Canonical serialisation of a draft, used to tell "the user changed something"
  * from "the draft came straight out of the catalog".
  *

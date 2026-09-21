@@ -26,9 +26,9 @@ import type {
 } from '../api/types'
 import type { ConnectionDraft } from '../connection/shared'
 import { databaseKey, FOLDER_LABEL, indexesKey, namespaceKey, objectsKey } from '../lib/tree'
-import { designFrom } from '../lib/design'
+import { designFrom, emptyStructure, newTableDesign } from '../lib/design'
 
-export type TabKind = 'query' | 'table' | 'objects' | 'ddl' | 'er' | 'runtime'
+export type TabKind = 'query' | 'table' | 'newtable' | 'objects' | 'ddl' | 'er' | 'runtime'
 
 /** Sub-views of a table/view window (Navicat-style bottom tab strip). */
 export type TableView = 'data' | 'structure' | 'indexes' | 'foreignKeys' | 'ddl'
@@ -140,6 +140,8 @@ interface AppState {
     object: ObjectInfo,
     view?: TableView,
   ) => void
+  /** Opens the table designer for a table that does not exist yet. */
+  openNewTableTab: (sessionId: string, database: string, schema: string) => void
   /**
    * Opens the DDL editor. With `object` it starts from that object's live
    * definition; without it, from a template for a new object.
@@ -518,6 +520,33 @@ export const useAppStore = create<AppState>((set, get) => ({
         activeSessionId: sessionId,
       }
     })
+  },
+
+  openNewTableTab(sessionId, database, schema) {
+    // Every "new table" window is its own draft, so it gets its own id instead
+    // of being deduplicated like a table that has a name to key on.
+    const id = `newtable:${sessionId}:${database}:${schema}:${Math.random().toString(36).slice(2, 10)}`
+    const tab: WorkspaceTab = {
+      id,
+      kind: 'newtable',
+      sessionId,
+      title: 'New table',
+      database,
+      schema,
+    }
+    const driver = get().driverOf(sessionId)?.type
+    set((state) => ({
+      tabs: [...state.tabs, tab],
+      activeTabId: id,
+      activeSessionId: sessionId,
+      designs: {
+        ...state.designs,
+        [id]: {
+          draft: newTableDesign(sessionId, database, schema, driver),
+          baseline: emptyStructure(database, schema),
+        },
+      },
+    }))
   },
 
   openDdlTab(sessionId, database, schema, object) {

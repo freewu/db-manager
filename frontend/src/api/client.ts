@@ -125,6 +125,11 @@ export const api = {
     invoke<DesignPlan>('PlanTableDesign', design),
   applyTableDesign: (design: TableDesign) =>
     invoke<DesignResult>('ApplyTableDesign', design),
+  /** The same pair for a table that does not exist yet. */
+  planCreateTable: (design: TableDesign) =>
+    invoke<DesignPlan>('PlanCreateTable', design),
+  applyCreateTable: (design: TableDesign) =>
+    invoke<DesignResult>('ApplyCreateTable', design),
 
   // --- data ---------------------------------------------------------------
   fetchRows: (req: FetchRequest) => invoke<FetchResult>('FetchRows', req),

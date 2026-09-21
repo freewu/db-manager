@@ -260,3 +260,112 @@ func TestDesignerRefusesUnknownSessions(t *testing.T) {
 		t.Fatal("expected an error for an unknown session")
 	}
 }
+
+// newTableDesign is the draft the window opens for a table that does not exist
+// yet: a name to fill in and a key field to start from.
+func newTableDesign() models.TableDesign {
+	return models.TableDesign{
+		SessionID: "s1",
+		Database:  "main",
+		Object:    "customers",
+		Columns: []models.DesignColumn{
+			{Name: "id", DataType: "INTEGER", PrimaryKey: true, AutoIncrement: true},
+			{Name: "email", DataType: "TEXT"},
+		},
+		Indexes: []models.DesignIndex{
+			{Name: "idx_customers_email", Columns: []string{"email"}},
+		},
+	}
+}
+
+// TestCreateDesignerRoundTripThroughTheManager drives the create path the way
+// the window does: plan a draft for a table that is not there, run the script,
+// then read the new table back from the catalog.
+func TestCreateDesignerRoundTripThroughTheManager(t *testing.T) {
+	manager, _ := testManager(t)
+	design := newTableDesign()
+
+	plan, err := manager.PlanCreateDesign(design)
+	if err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if len(plan.Statements) != 2 || plan.Destructive {
+		t.Fatalf("expected a CREATE TABLE and a CREATE INDEX, got %v", plan.Statements)
+	}
+
+	result, err := manager.ApplyCreateDesign(design)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if result.Error != "" {
+		t.Fatalf("apply failed at %d: %s", result.FailedIndex, result.Error)
+	}
+	if len(result.Executed) != len(plan.Statements) {
+		t.Fatalf("executed %d statements, expected %d", len(result.Executed), len(plan.Statements))
+	}
+
+	// The table is now an ordinary one: it reads back with the fields and the
+	// index the draft asked for.
+	structure, err := manager.Structure("s1", "main", "", "customers")
+	if err != nil {
+		t.Fatalf("structure after create: %v", err)
+	}
+	names := []string{}
+	for _, column := range structure.Columns {
+		names = append(names, column.Name)
+	}
+	if len(names) != 2 || names[0] != "id" || names[1] != "email" {
+		t.Fatalf("unexpected columns after create: %v", names)
+	}
+	if len(structure.Indexes) != 1 || structure.Indexes[0].Name != "idx_customers_email" {
+		t.Fatalf("unexpected indexes after create: %v", structure.Indexes)
+	}
+
+	// Creating it a second time is the engine's error to give, and the manager
+	// reports where the script stopped instead of pretending it worked.
+	again, err := manager.ApplyCreateDesign(design)
+	if err != nil {
+		t.Fatalf("apply again must report, not throw: %v", err)
+	}
+	if again.Error == "" || again.FailedIndex != 0 || len(again.Executed) != 0 {
+		t.Fatalf("expected the second CREATE to fail on its first statement, got %+v", again)
+	}
+}
+
+// A read-only connection must refuse before it writes anything: the window can
+// never be allowed to open a CREATE TABLE on it.
+func TestCreateDesignerRefusesReadOnlySessions(t *testing.T) {
+	manager, _ := testManager(t)
+	manager.sessions["s1"].readOnly = true
+
+	// Planning is a read, so the preview still works and simply says what would
+	// have been created.
+	if _, err := manager.PlanCreateDesign(newTableDesign()); err != nil {
+		t.Fatalf("plan: %v", err)
+	}
+	if _, err := manager.ApplyCreateDesign(newTableDesign()); err == nil {
+		t.Fatal("expected a read-only session to refuse CREATE TABLE")
+	}
+}
+
+func TestCreateDesignerNeedsANameAndAKnownSession(t *testing.T) {
+	manager, _ := testManager(t)
+
+	nameless := newTableDesign()
+	nameless.Object = "  "
+	if _, err := manager.PlanCreateDesign(nameless); err == nil {
+		t.Fatal("expected a table without a name to be refused")
+	}
+	if _, err := manager.ApplyCreateDesign(nameless); err == nil {
+		t.Fatal("expected apply to refuse a table without a name")
+	}
+
+	unknown := newTableDesign()
+	unknown.SessionID = "nope"
+	if _, err := manager.PlanCreateDesign(unknown); err == nil {
+		t.Fatal("expected an error for an unknown session")
+	}
+	if _, err := manager.ApplyCreateDesign(unknown); err == nil {
+		t.Fatal("expected an error for an unknown session")
+	}
+}

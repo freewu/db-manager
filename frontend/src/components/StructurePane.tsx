@@ -4,6 +4,7 @@ import {
   App as AntApp,
   Button,
   Empty,
+  Input,
   Space,
   Spin,
   Splitter,
@@ -47,6 +48,14 @@ interface StructureViewProps {
   section: StructureSection
   /** Bumping this value forces a reload. */
   reloadToken?: number
+  /**
+   * Design a table that does not exist yet.
+   *
+   * There is no catalog structure to fetch and nothing to compare the draft
+   * against; the draft *is* the whole definition and Save runs CREATE TABLE
+   * instead of ALTER TABLE.
+   */
+  creating?: boolean
 }
 
 /**
@@ -60,7 +69,7 @@ interface StructureViewProps {
  * the SQL that would turn the live table into that draft is previewed next to
  * it. Nothing runs until Save is pressed.
  */
-export function StructureView({ tab, section, reloadToken = 0 }: StructureViewProps) {
+export function StructureView({ tab, section, reloadToken = 0, creating = false }: StructureViewProps) {
   const { message, modal } = AntApp.useApp()
   const appInfo = useAppStore((s) => s.appInfo)
   const session = useAppStore((s) => s.sessionOf(tab.sessionId))
@@ -72,7 +81,9 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
 
   const database = tab.database ?? session?.database ?? ''
   const schema = tab.schema ?? ''
-  const object = tab.object ?? ''
+  // A new table has no catalog name yet: the name being typed in the designer
+  // is the one every statement will be rendered with.
+  const object = creating ? (design?.draft.object ?? '') : (tab.object ?? '')
   const readOnly = Boolean(session?.readOnly)
   // A document store has nothing to design: its fields are whatever the
   // documents happen to contain, so the Columns slice degrades to the sampled
@@ -84,7 +95,10 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
     drivers.find((d) => d.type === session?.driver),
   )
 
-  const [structure, setStructure] = useState<TableStructure | null>(null)
+  const [fetched, setFetched] = useState<TableStructure | null>(null)
+  // Creating compares the draft against an empty baseline instead of the live
+  // catalog, so there is nothing to fetch and nothing to reload.
+  const structure = creating ? (design?.baseline ?? null) : fetched
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -98,6 +112,12 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   const rebase = useRef(false)
 
   useEffect(() => {
+    if (creating) {
+      // Nothing to read and no draft to prefill: the store opened this window
+      // with an empty baseline and a fresh draft.
+      setLoading(false)
+      return undefined
+    }
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -105,14 +125,14 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
       .getStructure(tab.sessionId, database, schema, object)
       .then((value) => {
         if (cancelled) return
-        setStructure(value)
+        setFetched(value)
         if (designable) ensureDesign(tab.id, value, rebase.current)
         rebase.current = false
       })
       .catch((err: unknown) => {
         if (cancelled) return
         setError(toMessage(err))
-        setStructure(null)
+        setFetched(null)
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -120,7 +140,18 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
     return () => {
       cancelled = true
     }
-  }, [attempt, database, designable, ensureDesign, object, reloadToken, schema, tab.id, tab.sessionId])
+  }, [
+    attempt,
+    creating,
+    database,
+    designable,
+    ensureDesign,
+    object,
+    reloadToken,
+    schema,
+    tab.id,
+    tab.sessionId,
+  ])
 
   const draft = design?.draft
   const draftKey = draft ? JSON.stringify(draft) : ''
@@ -129,10 +160,17 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   // otherwise be a catalog round trip.
   useEffect(() => {
     if (!designable || !draft || section !== 'structure') return
+    // A table needs a name before anything can be rendered, and asking the
+    // backend without one would only repeat “the new table needs a name”.
+    if (creating && !draft.object.trim()) {
+      setPlan(null)
+      setPlanError(null)
+      return
+    }
     let cancelled = false
     const timer = window.setTimeout(() => {
-      api
-        .planTableDesign(draft)
+      const planned = creating ? api.planCreateTable(draft) : api.planTableDesign(draft)
+      planned
         .then((value) => {
           if (cancelled) return
           setPlan(value)
@@ -149,11 +187,11 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
       window.clearTimeout(timer)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draftKey, section])
+  }, [creating, draftKey, section])
 
   const dirty = useMemo(
-    () => (draft && structure ? isDirty(draft, structure) : false),
-    [draft, structure],
+    () => (creating ? Boolean(draft) : draft && structure ? isDirty(draft, structure) : false),
+    [creating, draft, structure],
   )
 
   const reload = useCallback(() => setAttempt((n) => n + 1), [])
@@ -192,10 +230,11 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   const apply = useCallback(
     (statements: string[]) => {
       if (!draft) return
+      const name = draft.object.trim()
       modal.confirm({
-        title: 'Apply changes to this table?',
+        title: creating ? `Create table ${name}?` : 'Apply changes to this table?',
         width: 760,
-        okText: 'Apply',
+        okText: creating ? 'Create' : 'Apply',
         content: (
           <div>
             <pre className="dm-ddl" style={{ maxHeight: 280 }}>
@@ -210,7 +249,9 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
           setApplying(true)
           setApplyError(null)
           try {
-            const result = await api.applyTableDesign(draft)
+            const result = creating
+              ? await api.applyCreateTable(draft)
+              : await api.applyTableDesign(draft)
             if (result.error) {
               setApplyError(
                 `statement ${result.failedIndex + 1} of ${result.plan.statements.length} failed: ${result.error}`,
@@ -218,27 +259,49 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
               message.error(
                 `Applied ${result.executed.length} of ${result.plan.statements.length} statement(s)`,
               )
+            } else if (creating) {
+              message.success(`Table ${name} created`)
             } else {
               message.success(
                 `Table ${object} updated (${result.executed.length} statement(s))`,
               )
             }
+
+            const state = useAppStore.getState()
+            // The catalog moved either way, and after a partial CREATE the
+            // table may exist with only some of its indexes.
+            void state.loadObjects(tab.sessionId, database, schema)
+            void state.loadIndexes(tab.sessionId, database, schema)
+
+            if (creating) {
+              if (result.error) return
+              // The window has done its job, so it turns into the table it just
+              // made — which is where the user wanted to end up.
+              state.closeTab(tab.id)
+              state.openTableTab(
+                tab.sessionId,
+                database,
+                schema,
+                { name, kind: 'table', rowEstimate: 0, sizeBytes: 0 },
+                // The new table is empty, so its Structure tab is the useful
+                // place to land — it shows what the CREATE just produced.
+                'structure',
+              )
+              return
+            }
+            // The catalog may have moved: reload and rebase the draft.
+            rebase.current = true
+            setAttempt((n) => n + 1)
           } catch (err) {
             setApplyError(toMessage(err))
             message.error(toMessage(err))
           } finally {
             setApplying(false)
-            // Either way the catalog may have moved: reload and rebase the draft.
-            rebase.current = true
-            setAttempt((n) => n + 1)
-            const state = useAppStore.getState()
-            void state.loadObjects(tab.sessionId, database, schema)
-            void state.loadIndexes(tab.sessionId, database, schema)
           }
         },
       })
     },
-    [database, draft, message, modal, object, schema, tab.sessionId],
+    [creating, database, draft, message, modal, object, schema, tab.id, tab.sessionId],
   )
 
   if (loading && !structure) {
@@ -367,6 +430,20 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
   return (
     <div className="dm-pane-body dm-designer">
       <div className="dm-designer-toolbar">
+        {creating ? (
+          <Input
+            size="small"
+            className="mono"
+            style={{ width: 200 }}
+            placeholder="Table name"
+            value={draft?.object ?? ''}
+            disabled={readOnly}
+            onChange={(event) => {
+              if (!draft) return
+              updateDesign(tab.id, { ...draft, object: event.target.value })
+            }}
+          />
+        ) : null}
         <Tooltip title="Add a field at the end of the list">
           <Button
             size="small"
@@ -464,18 +541,22 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
             <Tag color="warning">read-only</Tag>
           ) : (
             <>
-              <Button
-                size="small"
-                icon={<ReloadOutlined />}
-                disabled={!dirty}
-                onClick={() => {
-                  ensureDesign(tab.id, structure, true)
-                  setSelectedField(null)
-                  setSelectedIndex(null)
-                }}
-              >
-                Revert
-              </Button>
+              {/* Reverting a new table would only throw the name away; closing
+                  the window is the way out of it. */}
+              {creating ? null : (
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  disabled={!dirty}
+                  onClick={() => {
+                    ensureDesign(tab.id, structure, true)
+                    setSelectedField(null)
+                    setSelectedIndex(null)
+                  }}
+                >
+                  Revert
+                </Button>
+              )}
               <Button
                 size="small"
                 type="primary"
@@ -483,7 +564,7 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
                 disabled={!hasChanges}
                 onClick={() => apply(statements)}
               >
-                Save
+                {creating ? 'Create' : 'Save'}
               </Button>
             </>
           )}
@@ -542,7 +623,9 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
             {planError
               ? 'the design cannot be rendered'
               : statements.length === 0
-                ? 'no changes'
+                ? creating
+                  ? 'nothing to create yet'
+                  : 'no changes'
                 : `${statements.length} statement${statements.length === 1 ? '' : 's'}`}
           </Typography.Text>
           {statements.length > 0 ? (
@@ -577,7 +660,9 @@ export function StructureView({ tab, section, reloadToken = 0 }: StructureViewPr
           ) : null}
           {statements.length === 0 && !planError ? (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              The table matches the design; nothing to run.
+              {creating
+                ? 'Name the table, then add the fields it should have.'
+                : 'The table matches the design; nothing to run.'}
             </Typography.Text>
           ) : (
             <pre className="dm-ddl" style={{ margin: 0 }}>

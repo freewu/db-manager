@@ -70,6 +70,7 @@ export function ConnectionSidebar() {
   const loadIndexes = useAppStore((s) => s.loadIndexes)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
   const openTableTab = useAppStore((s) => s.openTableTab)
+  const openNewTableTab = useAppStore((s) => s.openNewTableTab)
   const openObjectsTab = useAppStore((s) => s.openObjectsTab)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const openDdlTab = useAppStore((s) => s.openDdlTab)
@@ -304,6 +305,9 @@ export function ConnectionSidebar() {
       // A document store has no CREATE TABLE / ALTER TABLE to write, so its
       // object menus stop at the data and the sampled field list.
       const { relational, designable } = capabilitiesOf(driverOfSession(sessionId))
+      // Creating a table is a write, so a read-only session offers no menu item
+      // for it rather than one that fails after the whole definition is typed.
+      const canCreate = designable && !sessions.find((s) => s.id === sessionId)?.readOnly
 
       const groups = new Map<string, ObjectInfo[]>()
       for (const object of objects) {
@@ -327,6 +331,17 @@ export function ConnectionSidebar() {
                   label: 'Open object list',
                   onClick: () => openList(sessionId, database, schema, kind),
                 },
+                ...(kind === 'table'
+                  ? [
+                      {
+                        key: 'create',
+                        icon: <PlusOutlined />,
+                        label: 'New table…',
+                        disabled: !canCreate,
+                        onClick: () => openNewTableTab(sessionId, database, schema),
+                      },
+                    ]
+                  : []),
                 {
                   key: 'query',
                   icon: <EditOutlined />,
@@ -425,8 +440,10 @@ export function ConnectionSidebar() {
       loadObjects,
       openDdlTab,
       openList,
+      openNewTableTab,
       openObject,
       openQueryTab,
+      sessions,
       tree.objects,
     ],
   )

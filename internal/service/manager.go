@@ -735,26 +735,71 @@ func (m *Manager) ApplyDesign(design models.TableDesign) (*models.DesignResult, 
 	if err != nil {
 		return nil, err
 	}
+	return m.applyPlan(s, design.Database, plan), nil
+}
 
+// PlanCreateDesign renders the script that creates a table that does not exist
+// yet. Nothing is executed: the designer shows this next to the fields, the
+// same way PlanDesign does for a table that is already there.
+func (m *Manager) PlanCreateDesign(design models.TableDesign) (*models.DesignPlan, error) {
+	s, err := m.session(design.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(design.Object) == "" {
+		return nil, apperr.New(apperr.CodeInvalidConfig, "table name is required")
+	}
+
+	plan, err := sqlbase.PlanCreate(s.conn.Dialect(), design)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInvalidConfig, err, "cannot design table %s", design.Object)
+	}
+	return &plan, nil
+}
+
+// ApplyCreateDesign creates a table from a design, running the statements one by
+// one for the same reason ApplyDesign does: the engine may refuse the second
+// statement after the first one has already run, and the user has to be told
+// exactly how far it got.
+func (m *Manager) ApplyCreateDesign(design models.TableDesign) (*models.DesignResult, error) {
+	s, err := m.session(design.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if s.readOnly {
+		return nil, apperr.New(apperr.CodeReadOnly, "this connection is read-only")
+	}
+
+	plan, err := m.PlanCreateDesign(design)
+	if err != nil {
+		return nil, err
+	}
+	return m.applyPlan(s, design.Database, plan), nil
+}
+
+// applyPlan runs an already-planned script, one statement at a time, and reports
+// how far it got. A plan that is applied is always planned first, so this is the
+// only place where DDL is executed.
+func (m *Manager) applyPlan(s *session, database string, plan *models.DesignPlan) *models.DesignResult {
 	result := &models.DesignResult{Plan: *plan, Executed: []string{}, FailedIndex: -1}
 	for i, statement := range plan.Statements {
 		ctx, cancel := m.ctx(QueryTimeout(0))
 		res, err := s.conn.Execute(ctx, drivers.ExecRequest{
-			Database: design.Database,
+			Database: database,
 			SQL:      statement,
 		})
 		cancel()
 		if err != nil {
 			result.FailedIndex = i
 			result.Error = err.Error()
-			return result, nil
+			return result
 		}
 		result.Executed = append(result.Executed, statement)
 		if res != nil {
 			result.Messages = append(result.Messages, res.Messages...)
 		}
 	}
-	return result, nil
+	return result
 }
 
 // --- row edits -------------------------------------------------------------

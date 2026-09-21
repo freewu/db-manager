@@ -271,7 +271,7 @@ func (a *alterDiff) mysqlPlan() (models.DesignPlan, error) {
 		a.plan.Destructive = true
 	}
 	for _, c := range a.added {
-		a.add("ALTER TABLE " + a.table + " ADD COLUMN " + a.mysqlColumnDef(c))
+		a.add("ALTER TABLE " + a.table + " ADD COLUMN " + mysqlColumnDef(a.quote, c))
 	}
 	for _, ch := range a.changed {
 		if !a.mysqlColumnDiffers(ch) {
@@ -279,7 +279,7 @@ func (a *alterDiff) mysqlPlan() (models.DesignPlan, error) {
 		}
 		// CHANGE COLUMN carries the whole definition, which is also how a
 		// rename is spelled on every MySQL and MariaDB version.
-		a.add("ALTER TABLE " + a.table + " CHANGE COLUMN " + a.quote(ch.from.Name) + " " + a.mysqlColumnDef(ch.to))
+		a.add("ALTER TABLE " + a.table + " CHANGE COLUMN " + a.quote(ch.from.Name) + " " + mysqlColumnDef(a.quote, ch.to))
 	}
 	if a.primaryKeyChanged() && len(a.pkAfter) > 0 {
 		a.add("ALTER TABLE " + a.table + " ADD PRIMARY KEY (" + strings.Join(a.quoteAll(a.pkAfter), ", ") + ")")
@@ -300,10 +300,13 @@ func (a *alterDiff) mysqlPlan() (models.DesignPlan, error) {
 	return a.plan, nil
 }
 
-func (a *alterDiff) mysqlColumnDef(c models.DesignColumn) string {
+// mysqlColumnDef renders one column the way MySQL spells it, including the
+// comment, which MySQL keeps on the column itself. It takes the quoting
+// function instead of a diff so the create and alter paths share it.
+func mysqlColumnDef(quote func(string) string, c models.DesignColumn) string {
 	name := strings.TrimSpace(c.Name)
 	var b strings.Builder
-	b.WriteString(a.quote(name))
+	b.WriteString(quote(name))
 	b.WriteString(" ")
 	b.WriteString(strings.TrimSpace(c.DataType))
 	if c.Nullable && !c.PrimaryKey {
@@ -345,6 +348,21 @@ func (a *alterDiff) autoIncrementIsKeyed(name string) bool {
 	return false
 }
 
+// autoIncrementIsKeyed answers the same question for a table that is about to
+// be created: MySQL only accepts AUTO_INCREMENT on a column that starts a key,
+// and there it may be the primary key written at the end of the statement.
+func autoIncrementIsKeyed(want models.TableDesign, name string) bool {
+	if pk := primaryKeyFields(want); len(pk) > 0 && sameName(pk[0], name) {
+		return true
+	}
+	for _, ix := range want.Indexes {
+		if ix.Unique && len(ix.Columns) > 0 && sameName(strings.TrimSpace(ix.Columns[0]), name) {
+			return true
+		}
+	}
+	return false
+}
+
 // --- PostgreSQL ------------------------------------------------------------
 
 func (a *alterDiff) postgresPlan() (models.DesignPlan, error) {
@@ -366,7 +384,7 @@ func (a *alterDiff) postgresPlan() (models.DesignPlan, error) {
 		a.plan.Destructive = true
 	}
 	for _, c := range a.added {
-		a.add("ALTER TABLE " + a.table + " ADD COLUMN " + a.postgresColumnDef(c))
+		a.add("ALTER TABLE " + a.table + " ADD COLUMN " + postgresColumnDef(a.quote, c))
 	}
 	for _, ch := range a.changed {
 		a.postgresColumnChanges(ch)
@@ -388,9 +406,11 @@ func (a *alterDiff) postgresPlan() (models.DesignPlan, error) {
 	return a.plan, nil
 }
 
-func (a *alterDiff) postgresColumnDef(c models.DesignColumn) string {
+// postgresColumnDef renders one column the way PostgreSQL spells it. Comments
+// are not part of the column here; the caller emits a COMMENT ON statement.
+func postgresColumnDef(quote func(string) string, c models.DesignColumn) string {
 	var b strings.Builder
-	b.WriteString(a.quote(strings.TrimSpace(c.Name)))
+	b.WriteString(quote(strings.TrimSpace(c.Name)))
 	b.WriteString(" ")
 	b.WriteString(strings.TrimSpace(c.DataType))
 	if c.AutoIncrement {
@@ -480,7 +500,7 @@ func (a *alterDiff) sqlitePlan() (models.DesignPlan, error) {
 		a.plan.Destructive = true
 	}
 	for _, c := range a.added {
-		a.add("ALTER TABLE " + a.table + " ADD COLUMN " + a.sqliteColumnDef(c))
+		a.add("ALTER TABLE " + a.table + " ADD COLUMN " + sqliteColumnDef(a.quote, c))
 	}
 	for _, ch := range a.changed {
 		if !sameName(ch.from.Name, ch.to.Name) {
@@ -501,9 +521,12 @@ func (a *alterDiff) sqlitePlan() (models.DesignPlan, error) {
 	return a.plan, nil
 }
 
-func (a *alterDiff) sqliteColumnDef(c models.DesignColumn) string {
+// sqliteColumnDef renders one column the way SQLite spells it. SQLite has no
+// column comments and only auto-increments INTEGER PRIMARY KEY columns, so the
+// create path reports both rather than writing something the engine ignores.
+func sqliteColumnDef(quote func(string) string, c models.DesignColumn) string {
 	var b strings.Builder
-	b.WriteString(a.quote(strings.TrimSpace(c.Name)))
+	b.WriteString(quote(strings.TrimSpace(c.Name)))
 	b.WriteString(" ")
 	b.WriteString(strings.TrimSpace(c.DataType))
 	if !c.Nullable || c.PrimaryKey {
@@ -537,6 +560,123 @@ func (a *alterDiff) sqliteUnsupportedChange(ch columnChange) {
 		a.warn("SQLite cannot change %s of field %s; recreate the table and copy the data if you really need it",
 			strings.Join(changes, " and "), to.Name)
 	}
+}
+
+// --- create ----------------------------------------------------------------
+
+// PlanCreate renders the statements that create a table from a design.
+//
+// It is the alter path's mirror image: there is no catalog structure to compare
+// against, because the table does not exist yet, so every field is written out
+// and the engine's own CREATE TABLE form decides how. The preview the user
+// approves and the script that runs come out of this one function, exactly like
+// PlanAlter.
+func PlanCreate(d drivers.Dialect, want models.TableDesign) (models.DesignPlan, error) {
+	empty := models.DesignPlan{Statements: []string{}, Warnings: []string{}}
+	if strings.TrimSpace(want.Object) == "" {
+		return empty, fmt.Errorf("the new table needs a name")
+	}
+	if err := validateDesign(want); err != nil {
+		return empty, err
+	}
+
+	switch d.Name() {
+	case models.DriverMySQL, models.DriverTiDB:
+		return createPlan(d, mysqlColumnDef, want), nil
+	case models.DriverPostgres:
+		return createPlan(d, postgresColumnDef, want), nil
+	case models.DriverSQLite:
+		return createPlan(d, sqliteColumnDef, want), nil
+	default:
+		return empty, fmt.Errorf("the table designer cannot create %s tables yet", d.Name())
+	}
+}
+
+// createPlan renders the portable half of a CREATE: the columns, the primary
+// key and then one CREATE INDEX per index.
+//
+// Indexes are separate statements rather than inline clauses because that is
+// the only form PostgreSQL and SQLite share with MySQL; the table is therefore
+// momentarily unique-constraint-less between the two statements, which is why
+// the whole script must be run in order.
+func createPlan(
+	d drivers.Dialect,
+	columnDef func(quote func(string) string, c models.DesignColumn) string,
+	want models.TableDesign,
+) models.DesignPlan {
+	plan := models.DesignPlan{Statements: []string{}, Warnings: []string{}}
+	table := d.Qualify(want.Database, want.Schema, strings.TrimSpace(want.Object))
+
+	for _, c := range want.Columns {
+		name := strings.TrimSpace(c.Name)
+		if !c.AutoIncrement {
+			continue
+		}
+		switch d.Name() {
+		case models.DriverMySQL, models.DriverTiDB:
+			if !autoIncrementIsKeyed(want, name) {
+				plan.Warnings = append(plan.Warnings, fmt.Sprintf(
+					"AUTO_INCREMENT needs an index starting with %s; MySQL rejects the statement otherwise", name))
+			}
+		case models.DriverSQLite:
+			// SQLite only auto-increments an INTEGER PRIMARY KEY, which the
+			// definition above writes as a plain column: it is the rowid alias
+			// that does the work, so the flag is honoured without the keyword.
+			if !c.PrimaryKey {
+				plan.Warnings = append(plan.Warnings, fmt.Sprintf(
+					"SQLite only auto-increments INTEGER PRIMARY KEY columns; field %s is created without AUTOINCREMENT", name))
+			}
+		}
+	}
+
+	lines := make([]string, 0, len(want.Columns)+1)
+	for _, c := range want.Columns {
+		lines = append(lines, "  "+columnDef(d.Quote, c))
+	}
+	if pk := quoteAll(d, primaryKeyFields(want)); len(pk) > 0 {
+		lines = append(lines, "  PRIMARY KEY ("+strings.Join(pk, ", ")+")")
+	}
+	plan.Statements = append(plan.Statements, "CREATE TABLE "+table+" (\n"+strings.Join(lines, ",\n")+"\n)")
+
+	for _, c := range want.Columns {
+		comment := strings.TrimSpace(c.Comment)
+		if comment == "" {
+			continue
+		}
+		if d.Name() == models.DriverPostgres {
+			plan.Statements = append(plan.Statements, "COMMENT ON COLUMN "+table+"."+d.Quote(strings.TrimSpace(c.Name))+" IS '"+escapeString(comment)+"'")
+		} else if d.Name() == models.DriverSQLite {
+			plan.Warnings = append(plan.Warnings,
+				fmt.Sprintf("SQLite has no column comments; the comment on field %s is not written", strings.TrimSpace(c.Name)))
+		}
+	}
+
+	for _, ix := range want.Indexes {
+		name := strings.TrimSpace(ix.Name)
+		if name == "" || len(ix.Columns) == 0 {
+			continue
+		}
+		kind := "INDEX"
+		if ix.Unique {
+			kind = "UNIQUE INDEX"
+		}
+		plan.Statements = append(plan.Statements,
+			"CREATE "+kind+" "+qualifiedIndexName(d, want.Database, want.Schema, name)+
+				" ON "+table+" ("+strings.Join(quoteAll(d, ix.Columns), ", ")+")")
+	}
+
+	return plan
+}
+
+// primaryKeyFields lists the fields a draft marks as its primary key.
+func primaryKeyFields(want models.TableDesign) []string {
+	var out []string
+	for _, c := range want.Columns {
+		if c.PrimaryKey {
+			out = append(out, strings.TrimSpace(c.Name))
+		}
+	}
+	return out
 }
 
 // --- shared helpers --------------------------------------------------------
@@ -581,13 +721,19 @@ func (a *alterDiff) indexRenamedInPlace(ch indexChange) bool {
 // belong to their table, PostgreSQL indexes live in a schema and SQLite indexes
 // live in a database.
 func (a *alterDiff) qualifiedIndex(name string) string {
-	switch a.d.Name() {
+	return qualifiedIndexName(a.d, a.database, a.schema, name)
+}
+
+// qualifiedIndexName is the same rule without a diff behind it, so creating a
+// table scopes its indexes exactly like altering one does.
+func qualifiedIndexName(d drivers.Dialect, database, schema, name string) string {
+	switch d.Name() {
 	case models.DriverPostgres:
-		return a.d.Qualify(a.database, a.schema, name)
+		return d.Qualify(database, schema, name)
 	case models.DriverSQLite:
-		return a.d.Qualify(a.database, "", name)
+		return d.Qualify(database, "", name)
 	default:
-		return a.quote(name)
+		return d.Quote(name)
 	}
 }
 

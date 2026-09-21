@@ -178,6 +178,17 @@ func (a *App) ApplyTableDesign(design models.TableDesign) (*models.DesignResult,
 	return a.manager.ApplyDesign(design)
 }
 
+// PlanCreateTable returns the script that would create a table from a design,
+// without running it.
+func (a *App) PlanCreateTable(design models.TableDesign) (*models.DesignPlan, error) {
+	return a.manager.PlanCreateDesign(design)
+}
+
+// ApplyCreateTable creates a table from a design and reports how far it got.
+func (a *App) ApplyCreateTable(design models.TableDesign) (*models.DesignResult, error) {
+	return a.manager.ApplyCreateDesign(design)
+}
+
 // --- data ------------------------------------------------------------------
 
 // FetchRows returns one page of rows for the data grid.
