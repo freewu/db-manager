@@ -16,8 +16,13 @@ export interface Capabilities {
    * objects are collections with no schema to design.
    */
   relational: boolean
-  /** A server that holds several namespaces, so `CREATE DATABASE` makes sense. */
-  creatableDatabase: boolean
+  /**
+   * The server holds several namespaces, so "New database" is offered. This is
+   * *not* `relational`: MongoDB has no CREATE DATABASE and no tables, yet it
+   * holds databases, and its driver renders the `use <name>` that selects one.
+   * Engines whose databases are files (SQLite) say `supportsDatabase: false`.
+   */
+  createDatabase: boolean
   /** Objects live directly under the database (no schema level in between). */
   flatNamespace: boolean
   /**
@@ -35,9 +40,7 @@ export interface Capabilities {
 export function capabilitiesOf(driver: DriverInfo | undefined): Capabilities {
   return {
     relational: driver ? driver.relational : true,
-    creatableDatabase: driver
-      ? driver.supportsDatabase && !driver.requiresFile && driver.relational
-      : true,
+    createDatabase: driver ? driver.supportsDatabase : true,
     flatNamespace: !(driver?.supportsSchema ?? false),
     // A driver we ship no record for is treated as a plain SQL engine, which is
     // what every build so far has been.

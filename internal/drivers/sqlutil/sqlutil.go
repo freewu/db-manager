@@ -2,6 +2,7 @@
 package sqlutil
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"unicode"
@@ -51,6 +52,25 @@ func QuoteBacktick(ident string) string {
 // QuoteBracket quotes an identifier with `[]` (SQL Server).
 func QuoteBracket(ident string) string {
 	return "[" + strings.ReplaceAll(ident, "]", "]]") + "]"
+}
+
+// ValidateDatabaseName trims a database name and refuses the ones no engine
+// takes: it cannot be empty, and it has to be one line.
+//
+// This is not a naming rule check on purpose — every engine has its own limits
+// (PostgreSQL truncates at 63 bytes, MongoDB forbids `/\\. "$*<>:|?`) and its
+// own far better error message. What it catches is the shape that would make
+// the *statement* nonsense before the server ever sees it; quoting the name is
+// what keeps it safe, not this.
+func ValidateDatabaseName(name string) (string, error) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "", errors.New("the database needs a name")
+	}
+	if strings.ContainsAny(trimmed, "\n\r\t\x00") {
+		return "", errors.New("a database name cannot contain line breaks, tabs or null bytes")
+	}
+	return trimmed, nil
 }
 
 // Qualify joins non-empty, pre-quoted parts with a dot.

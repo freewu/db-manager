@@ -93,6 +93,10 @@ func spec() sqlbase.Spec {
 		},
 		// PostgreSQL has no SHOW CREATE TABLE; the generic renderer is used.
 		Overview: overview,
+		// CREATE DATABASE has its own shape here (encoding + locale + template0),
+		// so PostgreSQL renders it itself; see database.go.
+		DatabaseOptions: DatabaseOptions,
+		CreateDatabase:  CreateDatabase,
 	}
 }
 

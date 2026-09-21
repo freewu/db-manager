@@ -83,6 +83,16 @@ type Spec struct {
 	// engines that have nothing to report; Conn.Overview then says so instead
 	// of the UI inventing one.
 	Overview func(ctx context.Context, q Querier, cfg models.ConnectionConfig) (*models.ServerOverview, error)
+
+	// DatabaseOptions optionally reads what CREATE DATABASE accepts on this
+	// server. Nil for engines whose CREATE DATABASE has nothing to choose
+	// (Doris) and for engines that keep no databases at all (SQLite, where the
+	// whole capability is absent).
+	DatabaseOptions func(ctx context.Context, q Querier) (*models.DatabaseOptions, error)
+
+	// CreateDatabase optionally renders the CREATE DATABASE statement. Nil on
+	// SQLite, which has no such statement.
+	CreateDatabase func(req models.CreateDatabaseRequest) (models.DatabasePlan, error)
 }
 
 // Conn is the shared drivers.Conn implementation.
@@ -100,7 +110,12 @@ func NewConn(spec Spec, cfg models.ConnectionConfig) *Conn {
 	return &Conn{spec: spec, cfg: cfg, pools: map[string]*sql.DB{}}
 }
 
-var _ drivers.Conn = (*Conn)(nil)
+// Both are always implemented; whether the engine underneath can actually do
+// it is the spec hooks' business (see database.go).
+var (
+	_ drivers.Conn            = (*Conn)(nil)
+	_ drivers.DatabaseCreator = (*Conn)(nil)
+)
 
 // Spec exposes the driver spec (used by engine specific extras).
 func (c *Conn) Spec() Spec { return c.spec }

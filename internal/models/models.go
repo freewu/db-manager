@@ -293,6 +293,70 @@ type DesignResult struct {
 	Messages    []string `json:"messages,omitempty"`
 }
 
+// --- databases -------------------------------------------------------------
+
+// DatabaseCharset is one character set (MySQL family) or encoding (PostgreSQL)
+// a server accepts for a new database, together with the collations that go
+// with it.
+//
+type DatabaseCharset struct {
+	Name string `json:"name"`
+	// Default marks what the server itself would use, which is also what
+	// leaving the clause out means.
+	Default bool `json:"default"`
+	// Collation is that charset's own default collation (MySQL).
+	Collation string `json:"collation,omitempty"`
+	// Collations are the ones it can be paired with (MySQL). Empty when the
+	// engine pairs the two itself and has nothing to choose.
+	Collations []string `json:"collations,omitempty"`
+}
+
+// DatabaseOptions is what a driver knows about creating a database on a live
+// server: the choices its server offers for the new database's character
+// handling, and the sentences that explain the engine's own rules.
+//
+// It is read when the "New database" window opens, never guessed: MySQL answers
+// SHOW CHARACTER SET / SHOW COLLATION, PostgreSQL reports the encodings and
+// locales it can be created with. Every list may be empty — Doris has no
+// database level character set at all, and MongoDB creates databases by
+// naming them — and the window then simply asks for a name.
+type DatabaseOptions struct {
+	Charsets []DatabaseCharset `json:"charsets"`
+	// Collations are the choices that belong to no single charset, which is how
+	// PostgreSQL's locales arrive. MySQL pairs them and fills
+	// Charsets[].Collations instead.
+	Collations []string `json:"collations,omitempty"`
+	// CharsetLabel and CollationLabel name the two choices for this engine:
+	// PostgreSQL says "Encoding", MySQL says "Character set".
+	CharsetLabel   string `json:"charsetLabel,omitempty"`
+	CollationLabel string `json:"collationLabel,omitempty"`
+	// CollationEditable says the list cannot be complete, so the window also
+	// lets the user type a value: PostgreSQL locale names come from the
+	// operating system, not from a catalog.
+	CollationEditable bool `json:"collationEditable,omitempty"`
+	// Hint is the sentence the window shows under the form, for the part of the
+	// statement the engine's own rules decide.
+	Hint string `json:"hint,omitempty"`
+}
+
+// CreateDatabaseRequest is what the "New database" window collected before the
+// statement can be rendered.
+type CreateDatabaseRequest struct {
+	Name      string `json:"name"`
+	Charset   string `json:"charset,omitempty"`
+	Collation string `json:"collation,omitempty"`
+}
+
+// DatabasePlan is the statement that creates the database. Like the designer's
+// DesignPlan it is shown verbatim before it runs, so the window never assembles
+// SQL of its own.
+type DatabasePlan struct {
+	Statement string `json:"statement"`
+	// Warnings explain what the engine does beyond the statement itself (a
+	// MongoDB database comes into being with its first collection).
+	Warnings []string `json:"warnings,omitempty"`
+}
+
 // ColumnMeta describes one column of a result set.
 type ColumnMeta struct {
 	Name         string `json:"name"`

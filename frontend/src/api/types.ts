@@ -277,6 +277,48 @@ export interface DesignIndex {
   unique: boolean
 }
 
+/**
+ * What a server accepts for a new database (see `DatabaseOptions` in Go).
+ *
+ * The lists always come from the live server: which character sets a MySQL
+ * release has, and which locales a PostgreSQL installation was built with, are
+ * properties of the server, never of the driver.
+ */
+export interface DatabaseCharset {
+  name: string
+  /** What the server itself uses; the window preselects it. */
+  default: boolean
+  /** That charset's own default collation (MySQL family). */
+  collation?: string
+  /** The collations it can be paired with (MySQL family). */
+  collations?: string[]
+}
+
+export interface DatabaseOptions {
+  charsets: DatabaseCharset[]
+  /** Choices that belong to no single charset (PostgreSQL locales). */
+  collations?: string[]
+  /** “Character set” on MySQL, “Encoding” on PostgreSQL. */
+  charsetLabel?: string
+  collationLabel?: string
+  /** The list cannot be complete, so the window accepts a typed value. */
+  collationEditable?: boolean
+  /** What the engine's own rules decide about this statement. */
+  hint?: string
+}
+
+export interface CreateDatabaseRequest {
+  name: string
+  charset?: string
+  collation?: string
+}
+
+/** The statement that creates a database, shown before it runs. */
+export interface DatabasePlan {
+  statement: string
+  warnings?: string[]
+}
+
 /** What the designer would run, shown before anything is applied. */
 export interface DesignPlan {
   statements: string[]

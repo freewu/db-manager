@@ -494,6 +494,53 @@ func (m *Manager) Overview(sessionID string) (*models.ServerOverview, error) {
 	return page, nil
 }
 
+// --- creating databases ----------------------------------------------------
+
+// DatabaseOptions reports what this session's server accepts for a new
+// database: the character sets and collations (MySQL family), the encodings and
+// locales (PostgreSQL), or just the sentences that explain why there is nothing
+// to choose (Doris, MongoDB).
+//
+// The list is always read from the live server, never from a table in the UI:
+// which character sets exist is a property of the release and the
+// configuration, not of the driver.
+func (m *Manager) DatabaseOptions(sessionID string) (*models.DatabaseOptions, error) {
+	s, err := m.session(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	creator, ok := s.conn.(drivers.DatabaseCreator)
+	if !ok {
+		return nil, apperr.New(apperr.CodeUnsupported,
+			"%s does not create databases", s.driver.Info().DisplayName)
+	}
+
+	ctx, cancel := m.ctx(30 * time.Second)
+	defer cancel()
+	return creator.DatabaseOptions(ctx)
+}
+
+// PlanCreateDatabase renders the statement that creates a database. Nothing is
+// executed: the window shows this string and runs that exact string through
+// Execute, so the preview can never differ from what happens.
+func (m *Manager) PlanCreateDatabase(sessionID string, req models.CreateDatabaseRequest) (*models.DatabasePlan, error) {
+	s, err := m.session(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	creator, ok := s.conn.(drivers.DatabaseCreator)
+	if !ok {
+		return nil, apperr.New(apperr.CodeUnsupported,
+			"%s does not create databases", s.driver.Info().DisplayName)
+	}
+
+	plan, err := creator.CreateDatabase(req)
+	if err != nil {
+		return nil, err
+	}
+	return &plan, nil
+}
+
 // Graph describes a whole namespace for the ER diagram: objects, columns and
 // the foreign keys between them.
 //

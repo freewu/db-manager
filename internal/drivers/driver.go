@@ -106,6 +106,26 @@ type Analyzer interface {
 	AnalyzeScript(script string, readOnly bool) models.ScriptAnalysis
 }
 
+// DatabaseCreator is an optional Conn capability: how this engine creates a
+// database, and what its server accepts for the new one's character set.
+//
+// MySQL family and PostgreSQL answer it, MongoDB answers it with `use`, and
+// SQLite does not implement it at all — a file is not a server that holds
+// databases, so the UI has no "New database" item for it. Engines that have
+// databases but nothing to choose about them (Doris) implement it and return
+// options with a hint and no lists.
+type DatabaseCreator interface {
+	// DatabaseOptions reports what the driver knows about CREATE DATABASE on
+	// this server. Asking the server is the point: character sets and
+	// collations differ per engine and per version, so none of them may be
+	// hardcoded in the UI.
+	DatabaseOptions(ctx context.Context) (*models.DatabaseOptions, error)
+	// CreateDatabase renders the statement that creates the database. It never
+	// runs it: the window shows the statement first and executes that exact
+	// string through Execute.
+	CreateDatabase(req models.CreateDatabaseRequest) (models.DatabasePlan, error)
+}
+
 // FetchRequest is the driver-level page request (no session ids).
 type FetchRequest struct {
 	Database   string

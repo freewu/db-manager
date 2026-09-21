@@ -43,7 +43,8 @@ func TestRegistryListsImplementedDriversInMenuOrder(t *testing.T) {
 	}
 
 	// MongoDB is the first non-relational engine: the UI picks what to show
-	// from this flag, so it must not claim to have tables or a CREATE DATABASE.
+	// from this flag, so it must not claim to have tables or a SQL designer.
+	// Databases it does have, and its "New database" window renders `use`.
 	mongo := byType[models.DriverMongoDB]
 	if mongo.Relational || mongo.SupportsSchema || mongo.RequiresFile {
 		t.Errorf("mongodb advertised as a relational engine: %+v", mongo)

@@ -9,6 +9,9 @@ import type {
   BackendBridge,
   CellUpdate,
   ConnectionConfig,
+  CreateDatabaseRequest,
+  DatabaseOptions,
+  DatabasePlan,
   DesignPlan,
   DesignResult,
   DriverInfo,
@@ -111,6 +114,12 @@ export const api = {
 
   // --- metadata -----------------------------------------------------------
   listDatabases: (sessionId: string) => invoke<string[]>('ListDatabases', sessionId),
+  /** What this server accepts for a new database (charsets/encodings). */
+  databaseOptions: (sessionId: string) =>
+    invoke<DatabaseOptions>('DatabaseOptions', sessionId),
+  /** The CREATE DATABASE statement for the dialog, rendered by the driver. */
+  planCreateDatabase: (sessionId: string, req: CreateDatabaseRequest) =>
+    invoke<DatabasePlan>('PlanCreateDatabase', sessionId, req),
   listSchemas: (sessionId: string, database: string) =>
     invoke<string[]>('ListSchemas', sessionId, database),
   listObjects: (sessionId: string, database: string, schema: string) =>

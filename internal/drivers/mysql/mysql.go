@@ -87,5 +87,9 @@ func spec() sqlbase.Spec {
 		},
 		NativeDDL: mysqlcompat.NativeDDL,
 		Overview:  overview,
+		// The character sets and collations come from SHOW CHARACTER SET /
+		// SHOW COLLATION on this server; see mysqlcompat/database.go.
+		DatabaseOptions: mysqlcompat.DatabaseOptions,
+		CreateDatabase:  mysqlcompat.CreateDatabase,
 	}
 }

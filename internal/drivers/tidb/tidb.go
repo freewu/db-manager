@@ -98,5 +98,10 @@ func spec() sqlbase.Spec {
 		},
 		NativeDDL: mysqlcompat.NativeDDL,
 		Overview:  overview,
+		// TiDB answers SHOW CHARACTER SET / SHOW COLLATION with the set it
+		// supports and takes the same CREATE DATABASE clauses as MySQL, so the
+		// shared implementation is the whole story.
+		DatabaseOptions: mysqlcompat.DatabaseOptions,
+		CreateDatabase:  mysqlcompat.CreateDatabase,
 	}
 }

@@ -104,6 +104,10 @@ func spec() sqlbase.Spec {
 		},
 		NativeDDL: mysqlcompat.NativeDDL,
 		Overview:  overview,
+		// Doris creates databases but has nothing to choose about them; see
+		// database.go.
+		DatabaseOptions: DatabaseOptions,
+		CreateDatabase:  CreateDatabase,
 	}
 }
 

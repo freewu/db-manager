@@ -122,6 +122,18 @@ func (a *App) ListDatabases(sessionID string) ([]string, error) {
 	return a.manager.Databases(sessionID)
 }
 
+// DatabaseOptions returns what a session's server accepts for a new database
+// (character sets and collations, or encodings and locales).
+func (a *App) DatabaseOptions(sessionID string) (*models.DatabaseOptions, error) {
+	return a.manager.DatabaseOptions(sessionID)
+}
+
+// PlanCreateDatabase returns the statement that would create a database,
+// without running it.
+func (a *App) PlanCreateDatabase(sessionID string, req models.CreateDatabaseRequest) (*models.DatabasePlan, error) {
+	return a.manager.PlanCreateDatabase(sessionID, req)
+}
+
 // ListSchemas returns the schemas of a database.
 func (a *App) ListSchemas(sessionID, database string) ([]string, error) {
 	return a.manager.Schemas(sessionID, database)

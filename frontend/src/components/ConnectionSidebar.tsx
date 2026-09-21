@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { App as AntApp, Button, Dropdown, Empty, Input, Menu, Modal, Tooltip, Tree, Typography } from 'antd'
+import { App as AntApp, AutoComplete, Button, Dropdown, Empty, Input, Menu, Modal, Select, Tooltip, Tree, Typography } from 'antd'
 import type { MenuProps, TreeDataNode, TreeProps } from 'antd'
 import {
   AppstoreOutlined,
@@ -22,11 +22,10 @@ import {
 } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
-import type { ConnectionConfig, DriverInfo, IndexEntry, ObjectInfo, SessionInfo } from '../api/types'
+import type { ConnectionConfig, DatabaseOptions, DatabasePlan, DriverInfo, IndexEntry, ObjectInfo, SessionInfo } from '../api/types'
 import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
 import { capabilitiesOf, findDriver } from '../lib/capabilities'
-import { quoteIdent } from '../lib/format'
 import { useAppStore, type ListScope, type TableView } from '../store/appStore'
 import { ConnectionTypeDropdown, connectionTypeItems, driverFromKey } from './ConnectionTypeMenu'
 import { objectIcon } from './objectIcon'
@@ -621,9 +620,9 @@ export function ConnectionSidebar() {
                   emptyNode(
                     session.id,
                     'No databases on this server yet',
-                    capabilitiesOf(root.driver).creatableDatabase
-                      ? undefined
-                      : 'A database shows up here once something is written into it: insert a document with the new database selected, then reload the catalog.',
+                    capabilitiesOf(root.driver).relational
+                      ? 'Pick “New database…” in this connection’s menu: the window renders the CREATE DATABASE statement before running it, and the database shows up here afterwards.'
+                      : 'A database appears here once something is written into it — “New database…” selects one with `use`, and it exists after the first document.',
                   ),
                 ]
         }
@@ -1061,7 +1060,7 @@ export function ConnectionSidebar() {
           key: 'newDatabase',
           icon: <DatabaseOutlined />,
           label: 'New database…',
-          disabled: !capabilitiesOf(root.driver).creatableDatabase || session.readOnly,
+          disabled: !capabilitiesOf(root.driver).createDatabase || session.readOnly,
           onClick: () => setNewDatabase(session),
         },
         {
@@ -1232,9 +1231,13 @@ async function copyText(text: string): Promise<void> {
 /**
  * Creates a database on a live session.
  *
- * The name is the only input: the statement is rendered from it with the
- * session driver's quoting rules and shown verbatim before it runs, so there is
- * no hidden SQL and no hand-typed statement to get wrong.
+ * What the window asks for depends on the engine, and the engine is asked, not
+ * assumed: MySQL and TiDB answer with the character sets and collations their
+ * server supports, PostgreSQL with the encodings and locales it accepts, Doris
+ * and MongoDB with nothing to choose at all. The statement is rendered by the
+ * backend from the very same request — shown verbatim before it runs and then
+ * executed as that string — so the preview cannot disagree with what happens,
+ * and the frontend never assembles DDL of its own.
  */
 function NewDatabaseModal({
   session,
@@ -1246,27 +1249,122 @@ function NewDatabaseModal({
   const loadDatabases = useAppStore((s) => s.loadDatabases)
   const { message } = AntApp.useApp()
   const [name, setName] = useState('')
+  const [charset, setCharset] = useState<string | undefined>()
+  const [collation, setCollation] = useState<string | undefined>()
+  const [options, setOptions] = useState<DatabaseOptions | null>(null)
+  const [optionsError, setOptionsError] = useState<string | null>(null)
+  const [reading, setReading] = useState(false)
+  const [plan, setPlan] = useState<DatabasePlan | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const sessionId = session?.id
 
-  const sql = session && name.trim() ? `CREATE DATABASE ${quoteIdent(name.trim(), session.driver)}` : ''
-
-  // Every way out clears the dialog, so it never reopens on a stale name.
+  // Every way out clears the dialog, so it never reopens on a stale choice.
   const close = () => {
     setName('')
+    setCharset(undefined)
+    setCollation(undefined)
+    setOptions(null)
+    setOptionsError(null)
+    setPlan(null)
     setError(null)
     setBusy(false)
     onClose()
   }
 
-  const submit = async () => {
+  // What this server accepts, read once per opening. A failure here is not
+  // fatal — the statement is rendered by the backend anyway — so it is shown
+  // next to the form and the window keeps working with the name alone.
+  useEffect(() => {
+    if (!sessionId) return
+    let cancelled = false
+    setReading(true)
+    setOptionsError(null)
+    api
+      .databaseOptions(sessionId)
+      .then((next) => {
+        if (cancelled) return
+        setOptions(next)
+        const preferred = next.charsets.find((entry) => entry.default) ?? next.charsets[0]
+        if (preferred) {
+          setCharset(preferred.name)
+          setCollation(preferred.collation || next.collations?.[0])
+        } else {
+          setCollation(next.collations?.[0])
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setOptionsError(toMessage(err))
+      })
+      .finally(() => {
+        if (!cancelled) setReading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId])
+
+  // The preview is the backend's own statement, debounced so a name being typed
+  // does not turn into a call per keystroke.
+  useEffect(() => {
+    const database = name.trim()
+    if (!sessionId || !database) {
+      setPlan(null)
+      setError(null)
+      return
+    }
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      api
+        .planCreateDatabase(sessionId, { name: database, charset, collation })
+        .then((next) => {
+          if (cancelled) return
+          setPlan(next)
+          setError(null)
+        })
+        .catch((err) => {
+          if (cancelled) return
+          setPlan(null)
+          setError(toMessage(err))
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [sessionId, name, charset, collation])
+
+  const charsetEntry = options?.charsets.find((entry) => entry.name === charset)
+  const collations = charsetEntry?.collations?.length
+    ? charsetEntry.collations
+    : options?.collations ?? []
+  const showCollation = collations.length > 0 || options?.collationEditable
+
+  async function submit() {
     const database = name.trim()
     if (!session || !database || busy) return
     setBusy(true)
     setError(null)
     try {
-      await api.executeSql({ sessionId: session.id, sql, timeoutMs: 60000 })
-      message.success(`Database ${database} created`)
+      // Planned again on submit rather than reusing the debounced preview: what
+      // runs is always the statement rendered from the fields as they are now.
+      const rendered = await api.planCreateDatabase(session.id, {
+        name: database,
+        charset,
+        collation,
+      })
+      await api.executeSql({
+        sessionId: session.id,
+        sql: rendered.statement,
+        timeoutMs: 60000,
+      })
+      // An engine whose statement does not literally create the database
+      // (MongoDB's `use`) explains itself instead of claiming success.
+      if (rendered.warnings?.length) {
+        message.info(rendered.warnings.join(' '), 8)
+      } else {
+        message.success(`Database ${database} created`)
+      }
       // A new namespace invalidates nothing but the database list itself.
       void loadDatabases(session.id)
       close()
@@ -1282,7 +1380,7 @@ function NewDatabaseModal({
       title={session ? `New database on ${session.name}` : 'New database'}
       okText="Create"
       confirmLoading={busy}
-      okButtonProps={{ disabled: !sql }}
+      okButtonProps={{ disabled: !name.trim() || error !== null }}
       onOk={() => void submit()}
       onCancel={close}
       destroyOnHidden
@@ -1298,15 +1396,91 @@ function NewDatabaseModal({
         onChange={(event) => setName(event.target.value)}
         onPressEnter={() => void submit()}
       />
+
+      {reading || options?.charsets.length ? (
+        <>
+          <label className="dm-field-label" htmlFor="dm-new-database-charset" style={{ marginTop: 12 }}>
+            {options?.charsetLabel || 'Character set'}
+          </label>
+          <Select
+            id="dm-new-database-charset"
+            style={{ width: '100%' }}
+            value={charset}
+            loading={reading}
+            placeholder="Server default"
+            allowClear
+            onChange={(value: string | undefined) => {
+              setCharset(value)
+              // The collation belongs to the character set, so it follows it,
+              // falling back to the new charset's own default.
+              const entry = options?.charsets.find((item) => item.name === value)
+              setCollation(entry?.collation || entry?.collations?.[0])
+            }}
+            options={(options?.charsets ?? []).map((entry) => ({
+              value: entry.name,
+              label: entry.default ? `${entry.name} (server default)` : entry.name,
+            }))}
+          />
+        </>
+      ) : null}
+
+      {showCollation ? (
+        <>
+          <label className="dm-field-label" htmlFor="dm-new-database-collation" style={{ marginTop: 12 }}>
+            {options?.collationLabel || 'Collation'}
+          </label>
+          {options?.collationEditable ? (
+            // PostgreSQL locale names come from the server's operating system,
+            // so the list can only ever be a suggestion.
+            <AutoComplete
+              id="dm-new-database-collation"
+              style={{ width: '100%' }}
+              value={collation}
+              options={collations.map((entry) => ({ value: entry }))}
+              placeholder="en_US.UTF-8"
+              allowClear
+              onChange={(value: string) => setCollation(value || undefined)}
+            />
+          ) : (
+            <Select
+              id="dm-new-database-collation"
+              style={{ width: '100%' }}
+              value={collation}
+              placeholder="Server default"
+              allowClear
+              onChange={(value: string | undefined) => setCollation(value)}
+              options={collations.map((entry) => ({ value: entry, label: entry }))}
+            />
+          )}
+        </>
+      ) : null}
+
+      {optionsError ? (
+        <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
+          {optionsError} The name alone still works.
+        </Typography.Paragraph>
+      ) : null}
+
       {error ? (
-        <Typography.Paragraph type="danger" style={{ marginTop: 10, marginBottom: 0 }}>
+        <Typography.Paragraph type="danger" style={{ marginTop: 12, marginBottom: 0 }}>
           {error}
         </Typography.Paragraph>
       ) : (
-        <Typography.Paragraph type="secondary" style={{ marginTop: 10, marginBottom: 0 }}>
-          {sql ? <code>{sql}</code> : 'Name it and the statement appears here.'}
+        <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
+          {plan ? <code>{plan.statement}</code> : 'Name it and the statement appears here.'}
         </Typography.Paragraph>
       )}
+
+      {plan?.warnings?.map((warning) => (
+        <Typography.Paragraph key={warning} type="warning" style={{ marginTop: 8, marginBottom: 0 }}>
+          {warning}
+        </Typography.Paragraph>
+      ))}
+      {options?.hint ? (
+        <Typography.Paragraph type="secondary" style={{ marginTop: 8, marginBottom: 0, fontSize: 12 }}>
+          {options.hint}
+        </Typography.Paragraph>
+      ) : null}
     </Modal>
   )
 }

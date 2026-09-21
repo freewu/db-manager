@@ -10,6 +10,7 @@
 
 - **连接管理**：连接配置的增删改查、连通性测试、SQLite 文件选择、TLS（CA / 证书 / 私钥）、自定义 DSN 参数、只读标记、颜色标签、密码可选保存。新建连接先点出**驱动菜单**（命令条 `Connection`、连接树的 `+`、面板空白处右键，三处挂的是同一份列表，就展开在你刚点的那个东西下面），再落到**这个引擎自己的那一页** —— 走网络的要地址、端口、账号与 TLS，SQLite 只要一个文件加一个附加库别名，两边不会互相看到无关字段（保存下来的配置也照着这一页来，文件型连接不会混进 host / port / ssl）；编辑已有连接同样按它的驱动打开对应那页。
 - **对象浏览器**：会话 → 数据库 → Schema → 表 / 视图 / 索引 的懒加载树，右键菜单支持打开数据、新建查询、复制名称；文档型引擎这里是 database → Collections / Indexes，没有 schema 层，SQL 专属的入口（新建 DDL 脚本、ER 图、设计对象）自动不出现。
+- **新建数据库**：连接右键 `New database…`，问什么由**服务端**回答 —— MySQL / TiDB 给出字符集与可配的排序规则，PostgreSQL 给出编码与 locale（locale 名单不可能完整，那一栏可以手打），Doris 与 MongoDB 没有可选项、只有一句说明。语句由后端按引擎渲染后**先展示再执行**（MongoDB 下是 `use <db>`，并明说「第一条 collection 写进去之前它什么都不存」）；SQLite 这类文件型引擎不出现这个菜单项，只读会话里它是灰的。
 - **MongoDB**：连接（含副本集多主机、`mongodb+srv`、TLS、认证库）、集合浏览（文档数 / 体积 / 索引）、数据网格的过滤排序与分页、双击改标量字段、批量删文档、索引列表与定义脚本、运行情况页（serverStatus + 每库 dbStats）。查询窗口跑的是 **mongosh 风格的 shell**（`db.orders.find({...}).sort({ts: -1}).limit(20)`），不是 SQL。
 - **TiDB / Apache Doris**：两个引擎对客户端都讲 MySQL 线协议，但脾气各不相同。TiDB 默认端口 4000，有 TLS 页（`Security`），表单里的 `Database` 只是新标签页的默认库 —— 一个 TiDB 集群就是一份逻辑数据库，树里一次列全所有库，所以这一栏是可选的；运行情况是 MySQL 那一页再加一张 `information_schema.CLUSTER_INFO` 的集群成员表（tidb / tikv / tiflash / ticdc / pd）。Doris 默认端口 9030，前端（FE）与后端（BE）都在集群网内、MySQL 端也不做那套握手，于是**没有 TLS 页**；它是分析型引擎，本工具里**只读浏览** —— 表结构与索引照样能看（字段列表说的是引擎自己的类型拼写，如 `varchar(120)` / `decimal(10,2)`），但没有表设计器，改动走 DDL 编辑器。两者的连接、库表浏览、数据网格、SQL 查询与导出都复用 MySQL 那条代码路径。
 - **对象列表**：点击树里的表 / 视图 / 索引文件夹，在右侧开出 Navicat 风格的对象网格（名称 / 类型 / 行数 / 大小 / 引擎 / 注释，索引列还有所属表 / 列 / 唯一性 / 主键 / 方法），支持列排序、列筛选、底部关键字过滤，单击打开对象、双击进入设计视图。
@@ -141,6 +142,11 @@ wails build
 `sqlbase` 已经实现，没实现的驱动由 service 退化成逐个对象的 `Structure`，图照样能画；
 DDL 编辑器要的 `drivers.Analyzer`（脚本干跑）同理 —— SQL 引擎用 `sqlutil` 的关键字启发式，
 MongoDB 用自己的解析器回答，因为 `db.orders.drop()` 认不出任何 SQL 关键字。
+「建库」则是 `drivers.DatabaseCreator`：两种方法（`DatabaseOptions` 读出这台服务器接受什么、
+`CreateDatabase` 渲染语句）在所有 SQL 引擎上都存在，但**支不支持由 `Spec` 里的钩子决定** ——
+SQLite 两个钩子都是 nil，`DatabaseOptions` 于是明确回 `unsupported`，
+MySQL 一族换成 `SHOW CHARACTER SET` / `SHOW COLLATION` 的读法、PostgreSQL 换成自己的编码与 locale，
+Doris 与 MongoDB 只回一句 hint（前者没有库级字符集，后者根本没有 CREATE DATABASE）。
 
 **「引擎能不能做这件事」由后端说，前端只读结果**：`DriverInfo.relational` / `supportsDatabase` /
 `supportsSchema` 决定界面上出现什么，`supportsDesign` 说明这个引擎有没有表设计器（MongoDB、Doris 为
@@ -159,7 +165,8 @@ MySQL / PostgreSQL / SQLite 仅声明一份 `Spec`（`DSN` 构造函数、`Diale
 
 TiDB 与 Doris 对客户端而言都是 MySQL，于是 `internal/drivers/mysqlcompat` 收下了这一族的全部共用件：
 DSN（含 TLS 白名单与 `interpolateParams`）、一份 `sqlbase.Introspector` 实现（照 `information_schema`
-与 `SHOW` 拼目录）、原生 DDL、`SHOW` 输出解析，以及 overview 的公共外壳。引擎自己的包只回答差异：
+与 `SHOW` 拼目录）、原生 DDL、`SHOW` 输出解析（建库窗口的字符集 / 排序规则也读同一批 `SHOW`，见
+`mysqlcompat/database.go`），以及 overview 的公共外壳。引擎自己的包只回答差异：
 默认端口、要藏掉哪些系统库、有没有设计器，以及 overview 多给哪几张表 —— Doris 的 introspector 用
 `newIntrospector()` 构造，免得零值悄悄退回 MySQL 的默认系统库清单。`sqlbase.MySQLDialect` 带一个
 `Driver` 字段，`mysqlFamily()` 是「是不是这一族」的唯一判断；前端对应的是 `lib/sqlFlavor.ts` 的
@@ -260,7 +267,7 @@ MongoDB 不从 `sqlbase` 继承任何东西（那个包是 `database/sql` 专用
 | column | field | 没有 schema：`Structure()` 抽样最多 100 条文档推断字段与类型并集（`int32 \| string` 照实写） |
 | index | index | `listIndexes`，`_id_` 排最前，文本 / 地理索引各有类型标注 |
 | DDL | 定义脚本 | 可重放的 `db.createCollection(...)` + `createIndex(...)`，集合名不是普通标识符时用 `db.getCollection("…")` |
-| SQL | shell | `db.<coll>.<cmd>(...)`、`db.getCollection("…")`、`db.<cmd>(...)`、`show dbs\|collections` |
+| SQL | shell | `db.<coll>.<cmd>(...)`、`db.getCollection("…")`、`db.<cmd>(...)`、`show dbs\|collections`、`use <db>` |
 
 几条必须记住的取舍：
 
@@ -284,8 +291,8 @@ MongoDB 不从 `sqlbase` 继承任何东西（那个包是 `database/sql` 专用
   都不一样不是好事。
 - **`createIndex` 不写名字时按 shell 规则补名**（`{"sku": 1}` → `sku_1`，`{a: 1, b: -1}` → `a_1_b_-1`）：
   `createIndexes` 命令要求 `name`，而 shell 是自动推出来的。
-- **`Execute` 的库来自请求**，整段脚本共用一个库（shell 里没有 `use`），语句按顶层 `;` 与换行切分，
-  多条语句都进 `Messages`，返回的表格是最后一条产生结果集的语句。
+- **`Execute` 的库来自请求**，脚本里还可以用 **`use <name>`** 把后面的语句换到另一个库（就是 shell 里那条，写进脚本能跑，`New database…` 渲染的也是它）；`use` 不到服务端，它只改这段脚本的库，其余语句按顶层 `;` 与换行切分，多条语句都进 `Messages`，返回的表格是最后一条产生结果集的语句。
+- **MongoDB 没有 CREATE DATABASE**：库是个命名空间，第一条 collection 写进去时它才真的存在。所以「新建数据库」窗口渲染的是 `use <name>`，并在窗口里直说「此时还没有任何东西落盘」；库名在这一层就按 MongoDB 自己的规则校验（不能含 `/ \ . " $ * < > : | ?` 与空格）——这里的名字没有引号可以躲，`use a; db.dropDatabase()` 不能变成两条语句。
 - **只读会话**由驱动自己拦：写命令表（`insert*` / `update*` / `delete*` / `drop*` / `createIndex*` …）命中即拒，
   干跑面板也会提前说「这几条会被拒」。
 
@@ -323,8 +330,14 @@ MongoDB 不从 `sqlbase` 继承任何东西（那个包是 `database/sql` 专用
 已经有会话就直接切到那一页。一次点击（展开）保持原来的行为 —— 只连接、不开页面，
 所以「连上了」和「去看看它现在在干什么」是两件事，不会互相打扰。
 
-「New database…」只要一个库名，语句由 `quoteIdent` 按当前引擎拼好并**先展示再执行**
-（`CREATE DATABASE …`，同样走 `ExecuteSQL`），SQLite 这类文件型引擎与只读会话直接禁用。
+「New database…」问的是**这台服务器自己能接受什么**，而这份清单来自服务端：MySQL / TiDB 用 `SHOW CHARACTER SET` /
+`SHOW COLLATION` 报出字符集与它可配的排序规则（服务器自己的默认值排在最前并预选），PostgreSQL 报出
+编码与 locale（编码是一份引擎常量，locale 只能列出这个集群用过的几个，所以那一栏**可以手打**），
+Doris 没有库级字符集、MongoDB 根本没有 `CREATE DATABASE` —— 这两种弹框里就只有库名加一句说明。
+语句一律由后端按引擎渲染（MySQL 一族 `CREATE DATABASE … DEFAULT CHARACTER SET … COLLATE …`、
+PostgreSQL `… ENCODING '…' LOCALE '…' TEMPLATE template0`、MongoDB `use <name>`），
+**在窗口里先展示再执行**，前端只把请求递过去、不拼 SQL。SQLite 这类文件型引擎直接没有这个菜单项，
+只读会话里它是灰的。
 
 没有任何标签页时右侧就只有一页**项目信息**（`WelcomePane` 渲染 `AboutProject`），标题是应用名 + 版本
 （版本只出现在标题里，徽章里不再重复）—— 这一页不再放快捷入口、连接卡片与引擎清单，因为那些在命令条与
@@ -368,10 +381,12 @@ just test
 `internal/drivers/sqlutil` 则用纯函数盯住脚本干跑的分类与破坏性判定（注释里的 `drop` 不算，
 无 `WHERE` 的 `DELETE` 要算），不依赖任何数据库；ER 图在 SQLite 上端到端跑一遍
 （外键方向、主键/可空标记、跨命名空间的目标名），service 层再用一个只实现 `Conn`
-的包装验证「没有 `Grapher` 时退化成逐对象 `Structure`」这条路。
+的包装验证「没有 `Grapher` 时退化成逐对象 `Structure`」这条路；建库同一条路子：
+先用 SQLite 确认「没有这个能力就说 `unsupported`」，再加上 `drivers.DatabaseCreator` 的包装确认
+服务端给的选项与渲染好的语句原样透传。
 
 `internal/drivers/mongodb` 是纯单元测试加一组**默认跳过**的集成测试：连接串拼装、TLS 三档、
-索引信息、shell 的词法 / 参数解析（`SplitStatements` / `ParseStatement` / 各种 JSON 值）、
+索引信息、shell 的词法 / 参数解析（`SplitStatements` / `ParseStatement` / 各种 JSON 值，`use` 与库名规则在内）、
 BSON 值到单元格文本的映射、filter / sort 构造、定义脚本的往返、干跑分类都在不连库的情况下跑。
 要在真实实例上跑那组集成测试时：
 
@@ -386,7 +401,9 @@ DMB_TEST_MONGODB_HOST=127.0.0.1 go test ./internal/drivers/mongodb/ -run Integra
 
 `internal/drivers/mysqlcompat` 用自写的假 SQL driver（`internal/drivers/sqltest`，不引第三方 mock）
 盯住「照 `SHOW` / `information_schema` 的结果拼出结构」这类纯映射：列类型与长度、可空、索引列、
-系统库过滤、DSN 参数白名单与 `interpolateParams`、overview 取数。TiDB / Doris 各自的包还有表驱动
+系统库过滤、DSN 参数白名单与 `interpolateParams`、overview 取数，以及建库窗口的 `SHOW CHARACTER SET` /
+`SHOW COLLATION` 读数与语句渲染。PostgreSQL 那边用自己的单测盯住 `ENCODING … LOCALE … TEMPLATE template0`
+与编码 / locale 清单的组装。TiDB / Doris 各自的包还有表驱动
 单测（端口、系统 schema、集群成员标签），真实实例同样要显式给地址才跑：
 
 ```sh
@@ -450,6 +467,7 @@ just publish 0.2.0 "新增 Navicat 风格连接树；索引成为一等资源"
   - [x] 查询收藏：命名 SQL 片段，查询窗口里可载入 / 改名 / 删除
   - [x] DDL 编辑器：对象定义开成可编辑脚本，附逐条语句的干跑预警
   - [x] ER 图：命名空间的关系图，可搜索 / 缩放 / 导出 SVG，点节点开表
+  - [x] 新建数据库：字符集 / 排序规则（MySQL 一族）、编码与 locale（PostgreSQL）由服务端回答，语句先展示再执行
   - [x] 运行情况：双击连接看服务端现状，每个引擎一个视图
 - [x] Phase 2：MongoDB（连接、集合浏览、shell 查询、增删改、索引、运行情况）
 - [x] Phase 2.5：TiDB / Apache Doris（同一种线协议共用 `mysqlcompat`：TiDB 带 TLS 与集群成员概览，Doris 只读浏览 + DDL 编辑）
