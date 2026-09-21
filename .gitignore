@@ -60,3 +60,7 @@ build/windows/icon.ico
 # are somebody else's UI, so they stay out of the repository history.
 /1.png
 /2.png
+
+# Scratch file for a long commit message (`git commit -F`), written by hand
+# during a round of work. It is not part of the project.
+.git-commit-msg.txt
