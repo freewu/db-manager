@@ -511,6 +511,14 @@ export function ConnectionSidebar() {
             ),
             icon: <AppstoreOutlined />,
             isLeaf: false,
+            // The schema holds the folders, so they only show up once its object
+            // list has landed — this is the level PostgreSQL browses from, and
+            // without it the tree ended here.
+            children:
+              tree.loaded[namespaceKey(session.id, database, schema)] ||
+              tree.errors[namespaceKey(session.id, database, schema)]
+                ? buildNamespace(session.id, database, schema)
+                : undefined,
           }))
         }
 
