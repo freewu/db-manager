@@ -8,6 +8,7 @@ import {
   DeleteOutlined,
   DisconnectOutlined,
   EditOutlined,
+  FileTextOutlined,
   FolderAddOutlined,
   FolderOutlined,
   KeyOutlined,
@@ -30,6 +31,7 @@ import type {
   DriverInfo,
   IndexEntry,
   ObjectInfo,
+  QueryFile,
   SessionInfo,
 } from '../api/types'
 import { useConnect } from '../hooks/useConnect'
@@ -56,6 +58,7 @@ import {
   indexesKey,
   namespaceKey,
   objectsKey,
+  queriesKey,
   type NodeRef,
 } from '../lib/tree'
 
@@ -100,6 +103,11 @@ export function ConnectionSidebar() {
   const loadSchemas = useAppStore((s) => s.loadSchemas)
   const loadObjects = useAppStore((s) => s.loadObjects)
   const loadIndexes = useAppStore((s) => s.loadIndexes)
+  const loadQueryFiles = useAppStore((s) => s.loadQueryFiles)
+  const createQueryFile = useAppStore((s) => s.createQueryFile)
+  const renameQueryFile = useAppStore((s) => s.renameQueryFile)
+  const deleteQueryFile = useAppStore((s) => s.deleteQueryFile)
+  const openQueryFileTab = useAppStore((s) => s.openQueryFileTab)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
   const openTableTab = useAppStore((s) => s.openTableTab)
   const openNewTableTab = useAppStore((s) => s.openNewTableTab)
@@ -150,6 +158,13 @@ export function ConnectionSidebar() {
   const [groupDialog, setGroupDialog] = useState<{ group?: { id: string; name: string } } | null>(
     null,
   )
+  /**
+   * The query-name window: creating a script in a database, or renaming one.
+   * `rename` is the current name, which is what tells the two apart.
+   */
+  const [queryName, setQueryName] = useState<
+    { sessionId: string; database: string; rename?: string } | null
+  >(null)
   /** Where the user asked for the empty-area context menu, if anywhere. */
   const [blankMenu, setBlankMenu] = useState<{ x: number; y: number } | null>(null)
   const blankMenuRef = useRef<HTMLDivElement | null>(null)
@@ -209,6 +224,8 @@ export function ConnectionSidebar() {
           return Boolean(tree.loaded[namespaceKey(ref.sessionId, ref.database, ref.schema)])
         case 'indexFolder':
           return Boolean(tree.loaded[indexesKey(ref.sessionId, ref.database, ref.schema)])
+        case 'queries':
+          return Boolean(tree.loaded[queriesKey(ref.sessionId, ref.database)])
         default:
           return true
       }
@@ -622,6 +639,101 @@ export function ConnectionSidebar() {
     [buildNamespace, tree.errors, tree.loaded],
   )
 
+  /**
+   * The Queries folder of one database.
+   *
+   * It hangs off the *database* even on an engine whose objects live under
+   * schemas (PostgreSQL): a script is written for a database, and the same script
+   * has to be reachable from every schema in it. It is drawn for any session that
+   * has a saved connection profile, because that is what the folder on disk is
+   * named after — an ad-hoc session has nowhere to keep one.
+   */
+  const buildQueriesFolder = useCallback(
+    (session: SessionInfo, database: string): TreeDataNode | undefined => {
+      if (!session.connectionId) return undefined
+      const key = queriesKey(session.id, database)
+      const files = tree.queries[key]
+      let children: TreeDataNode[] | undefined
+      if (tree.loading[key]) children = [placeholderNode(key, 'Loading queries…')]
+      else if (tree.errors[key]) {
+        children = [
+          errorNode(key, tree.errors[key], () => void loadQueryFiles(session.id, database)),
+        ]
+      } else if (files) {
+        children = files.map((file) => {
+          const fileKey = encodeNode({
+            t: 'queryFile',
+            sessionId: session.id,
+            database,
+            name: file.name,
+          })
+          return {
+            key: fileKey,
+            isLeaf: true,
+            icon: <FileTextOutlined />,
+            title: (
+              <NodeMenu items={queryFileMenuItems(session, database, file)}>
+                <span data-tree-key={fileKey}>{file.name}</span>
+              </NodeMenu>
+            ),
+          }
+        })
+      }
+
+      return {
+        key: encodeNode({ t: 'queries', sessionId: session.id, database }),
+        title: (
+          <NodeMenu
+            items={[
+              {
+                key: 'new',
+                icon: <PlusOutlined />,
+                label: 'New query…',
+                onClick: () => setQueryName({ sessionId: session.id, database }),
+              },
+              { type: 'divider' as const },
+              {
+                key: 'refresh',
+                icon: <ReloadOutlined />,
+                label: 'Reload queries',
+                onClick: () => void loadQueryFiles(session.id, database),
+              },
+            ]}
+          >
+            <span data-tree-key={key}>{files ? `Queries (${files.length})` : 'Queries'}</span>
+          </NodeMenu>
+        ),
+        icon: <FolderOutlined />,
+        isLeaf: false,
+        children,
+      }
+    },
+    // The folder and its menu close over the current tree state on purpose.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [loadQueryFiles, tree.errors, tree.loading, tree.queries],
+  )
+
+  /**
+   * A database's children, with the Queries folder in front of them.
+   *
+   * The folder cannot simply be added while the object list is still on its way:
+   * rc-tree only calls `loadData` for a node that has no children, so a node that
+   * suddenly had one — the folder — would never load its tables. `undefined`
+   * therefore still means "ask me again once it is loaded".
+   */
+  const withQueries = useCallback(
+    (
+      session: SessionInfo,
+      database: string,
+      children?: TreeDataNode[],
+    ): TreeDataNode[] | undefined => {
+      if (!children) return undefined
+      const folder = buildQueriesFolder(session, database)
+      return folder ? [folder, ...children] : children
+    },
+    [buildQueriesFolder],
+  )
+
   const buildDatabaseNode = useCallback(
     (session: SessionInfo, database: string): TreeDataNode => {
       const driver = driverOfType(session.driver)
@@ -685,7 +797,7 @@ export function ConnectionSidebar() {
           title: database,
           icon: <DatabaseOutlined />,
           isLeaf: false,
-          children,
+          children: withQueries(session, database, children),
         }
       }
 
@@ -713,6 +825,16 @@ export function ConnectionSidebar() {
                   ]
                 : []),
               { type: 'divider' as const },
+              ...(session.connectionId
+                ? [
+                    {
+                      key: 'new-query',
+                      icon: <PlusOutlined />,
+                      label: 'New query…',
+                      onClick: () => setQueryName({ sessionId: session.id, database }),
+                    },
+                  ]
+                : []),
               {
                 key: 'refresh',
                 icon: <ReloadOutlined />,
@@ -726,7 +848,7 @@ export function ConnectionSidebar() {
         ),
         icon: <DatabaseOutlined />,
         isLeaf: false,
-        children: namespaceChildren(session.id, database, database),
+        children: withQueries(session, database, namespaceChildren(session.id, database, database)),
       }
     },
     [
@@ -741,6 +863,7 @@ export function ConnectionSidebar() {
       tree.loaded,
       tree.loading,
       tree.schemas,
+      withQueries,
     ],
   )
 
@@ -930,6 +1053,9 @@ export function ConnectionSidebar() {
         case 'schema':
           await loadNamespace(ref.sessionId, ref.database, ref.schema)
           break
+        case 'queries':
+          await loadQueryFiles(ref.sessionId, ref.database)
+          break
         case 'indexFolder': {
           // The namespace load already asked for this list, so an expand that
           // finds it cached (or on its way) does not ask twice. "Reload index
@@ -951,6 +1077,7 @@ export function ConnectionSidebar() {
       loadDatabases,
       loadIndexes,
       loadNamespace,
+      loadQueryFiles,
       loadSchemas,
       sessionForConnection,
       sessions,
@@ -1198,12 +1325,20 @@ export function ConnectionSidebar() {
             ? { sessionId: ref.sessionId, database: ref.database }
             : { sessionId: ref.sessionId, database: ref.database, schema: ref.database },
         )
-      } else {
+      } else if ('schema' in ref) {
         setActiveNamespace({
           sessionId: ref.sessionId,
           database: ref.database,
           schema: ref.schema,
         })
+      } else {
+        // The Queries folder and a saved script sit at the database level, the
+        // same way a database's own folders do on an engine without schemas.
+        setActiveNamespace(
+          driverOfSession(ref.sessionId)?.supportsSchema
+            ? { sessionId: ref.sessionId, database: ref.database }
+            : { sessionId: ref.sessionId, database: ref.database, schema: ref.database },
+        )
       }
       if (ref.t === 'folder' || ref.t === 'indexFolder') {
         // An empty folder is a leaf (the (0) in its title is the whole story),
@@ -1215,12 +1350,20 @@ export function ConnectionSidebar() {
             current.some((k) => String(k) === String(key)) ? current : [...current, key],
           )
         }
-        openList(
-          ref.sessionId,
-          ref.database,
-          ref.schema,
-          ref.t === 'folder' ? ref.kind : 'index',
-        )
+        openList(ref.sessionId, ref.database, ref.schema, ref.t === 'folder' ? ref.kind : 'index')
+      }
+      if (ref.t === 'queries') {
+        // There is no object list behind this folder — its contents are the rows
+        // below it — so selecting it only opens it.
+        if (!info.node.isLeaf) {
+          const key = info.node.key
+          setExpandedKeys((current) =>
+            current.some((k) => String(k) === String(key)) ? current : [...current, key],
+          )
+        }
+      }
+      if (ref.t === 'queryFile') {
+        openQueryFileTab(ref.sessionId, ref.database, ref.name)
       }
       if (ref.t === 'object') {
         const objects = tree.objects[objectsKey(ref.sessionId, ref.database, ref.schema)] ?? []
@@ -1237,6 +1380,7 @@ export function ConnectionSidebar() {
       driverOfSession,
       openList,
       openObject,
+      openQueryFileTab,
       sessionForConnection,
       setActiveConnection,
       setActiveNamespace,
@@ -1615,6 +1759,25 @@ export function ConnectionSidebar() {
 
       <GroupNameModal request={groupDialog} onClose={() => setGroupDialog(null)} />
 
+      <QueryNameModal
+        request={queryName}
+        onClose={() => setQueryName(null)}
+        onSubmit={async (name) => {
+          if (!queryName) return
+          const { sessionId, database, rename } = queryName
+          const connectionId = sessions.find((s) => s.id === sessionId)?.connectionId
+          if (!connectionId) throw new Error('This connection is no longer open.')
+          if (rename) {
+            await renameQueryFile({ connectionId, database, from: rename, to: name })
+          } else {
+            await createQueryFile(sessionId, database, name)
+          }
+          // Opening the window is the point of both: a new script is made to be
+          // written in, and a renamed one should not vanish from under the user.
+          openQueryFileTab(sessionId, database, name)
+        }}
+      />
+
       {blankMenu ? (
         <div
           ref={blankMenuRef}
@@ -1635,6 +1798,62 @@ export function ConnectionSidebar() {
   )
 
   /* --------------------------------------------------------------- menus */
+
+  /**
+   * A saved script's menu.
+   *
+   * Delete asks first and names what it is about to remove: it is the one item
+   * here that cannot be taken back from inside the app (the file is gone, and
+   * the editor that had it open would be editing nothing).
+   */
+  function queryFileMenuItems(
+    session: SessionInfo,
+    database: string,
+    file: QueryFile,
+  ): MenuProps['items'] {
+    return [
+      {
+        key: 'open',
+        icon: <EditOutlined />,
+        label: 'Open',
+        onClick: () => openQueryFileTab(session.id, database, file.name),
+      },
+      {
+        key: 'rename',
+        icon: <FileTextOutlined />,
+        label: 'Rename…',
+        onClick: () => setQueryName({ sessionId: session.id, database, rename: file.name }),
+      },
+      {
+        key: 'copy',
+        icon: <NumberOutlined />,
+        label: 'Copy name',
+        onClick: () => void copyText(file.name),
+      },
+      { type: 'divider' as const },
+      {
+        key: 'reveal',
+        icon: <FolderOutlined />,
+        label: 'Show in folder',
+        onClick: () => void api.revealInExplorer(file.path).catch(() => undefined),
+      },
+      {
+        key: 'delete',
+        icon: <DeleteOutlined />,
+        danger: true,
+        label: 'Delete',
+        onClick: () => {
+          modal.confirm({
+            title: `Delete “${file.name}”?`,
+            content: `The script is removed from ${database}. A window that has it open keeps the text that is in it, but there is no longer a file behind it — saving from there would write it again.`,
+            okText: 'Delete',
+            okButtonProps: { danger: true },
+            onOk: () => deleteQueryFile(session.id, database, file.name),
+          })
+        },
+      },
+    ]
+  }
 
   function indexMenuItems(
     sessionId: string,
@@ -2356,36 +2575,110 @@ function GroupNameModal({
 }) {
   const createConnectionGroup = useAppStore((s) => s.createConnectionGroup)
   const renameConnectionGroup = useAppStore((s) => s.renameConnectionGroup)
-  const { message } = AntApp.useApp()
-
-  const [name, setName] = useState('')
-  const [saving, setSaving] = useState(false)
   const renaming = request?.group
 
+  return (
+    <NamePromptModal
+      open={Boolean(request)}
+      title={renaming ? 'Rename group' : 'New group'}
+      okText={renaming ? 'Rename' : 'Create'}
+      placeholder="Group name"
+      initial={renaming?.name ?? ''}
+      onClose={onClose}
+      onSubmit={async (name) => {
+        if (renaming) await renameConnectionGroup(renaming.id, name)
+        else await createConnectionGroup(name)
+      }}
+    />
+  )
+}
+
+/**
+ * Names a saved script: a new one, or a rename of one that exists.
+ *
+ * The window is deliberately thin — it hands the name over and lets the caller
+ * decide what that means, because "new" and "rename" differ only in what happens
+ * to the name and both end by opening the file.
+ */
+function QueryNameModal({
+  request,
+  onSubmit,
+  onClose,
+}: {
+  request: { sessionId: string; database: string; rename?: string } | null
+  onSubmit: (name: string) => Promise<void>
+  onClose: () => void
+}) {
+  const renaming = request?.rename
+
+  return (
+    <NamePromptModal
+      open={Boolean(request)}
+      title={renaming ? 'Rename query' : `New query in ${request?.database ?? ''}`}
+      okText={renaming ? 'Rename' : 'Create'}
+      placeholder="Query name"
+      initial={renaming ?? ''}
+      hint="The script is saved as a .sql file inside the data folder, so a later rename keeps it in one piece."
+      onClose={onClose}
+      onSubmit={onSubmit}
+    />
+  )
+}
+
+/**
+ * A one-field name window.
+ *
+ * Create and rename look the same to a user, so they are the same window: the
+ * caller says what the title should read and what to do with the answer. A
+ * failed submit keeps the window open with the name still in it — losing a typed
+ * name to a refused save would be the second mistake in a row.
+ */
+function NamePromptModal({
+  open,
+  title,
+  okText,
+  placeholder,
+  initial,
+  hint,
+  onSubmit,
+  onClose,
+}: {
+  open: boolean
+  title: string
+  okText: string
+  placeholder: string
+  initial: string
+  hint?: string
+  onSubmit: (name: string) => Promise<void>
+  onClose: () => void
+}) {
+  const { message } = AntApp.useApp()
+  const [name, setName] = useState(initial)
+  const [saving, setSaving] = useState(false)
+
   useEffect(() => {
-    setName(request?.group?.name ?? '')
-  }, [request])
+    setName(initial)
+  }, [initial, open])
 
   const submit = useCallback(async () => {
     const trimmed = name.trim()
     if (!trimmed) return
     setSaving(true)
     try {
-      if (renaming) await renameConnectionGroup(renaming.id, trimmed)
-      else await createConnectionGroup(trimmed)
+      await onSubmit(trimmed)
       onClose()
     } catch (error) {
       message.error(toMessage(error))
     } finally {
       setSaving(false)
     }
-  }, [createConnectionGroup, message, name, onClose, renaming, renameConnectionGroup])
+  }, [message, name, onClose, onSubmit])
 
   return (
     <Modal
-      open={Boolean(request)}
-      title={renaming ? 'Rename group' : 'New group'}
-      okText={renaming ? 'Rename' : 'Create'}
+      open={open}
+      title={title}
+      okText={okText}
       confirmLoading={saving}
       okButtonProps={{ disabled: name.trim() === '' }}
       onOk={() => void submit()}
@@ -2394,10 +2687,15 @@ function GroupNameModal({
       <Input
         autoFocus
         value={name}
-        placeholder="Group name"
+        placeholder={placeholder}
         onChange={(event) => setName(event.target.value)}
         onPressEnter={() => void submit()}
       />
+      {hint ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
+          {hint}
+        </Typography.Text>
+      ) : null}
     </Modal>
   )
 }

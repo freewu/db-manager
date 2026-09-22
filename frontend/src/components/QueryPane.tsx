@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   App as AntApp,
@@ -17,10 +17,12 @@ import {
   ClearOutlined,
   CopyOutlined,
   DownloadOutlined,
+  FileTextOutlined,
   HistoryOutlined,
   LockOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
+  SaveOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons'
 
@@ -39,11 +41,20 @@ interface QueryPaneProps {
   tab: WorkspaceTab
 }
 
-/** SQL scratchpad for one tab: editor on top, results below. */
+/**
+ * SQL scratchpad for one tab: editor on top, results below.
+ *
+ * Two shapes share the pane. A scratchpad tab (`tab.queryFile` unset) holds text
+ * that nothing outside the window can see. A tab bound to a saved script edits
+ * that file: its text is read from it when the window opens, Save writes it back,
+ * and the tab is marked dirty until it has.
+ */
 export function QueryPane({ tab }: QueryPaneProps) {
   const session = useAppStore((s) => s.sessionOf(tab.sessionId))
   const drivers = useAppStore((s) => s.drivers)
   const theme = useAppStore((s) => s.resolvedTheme)
+  const saveQueryFile = useAppStore((s) => s.saveQueryFile)
+  const setTabDirty = useAppStore((s) => s.setTabDirty)
   const { message } = AntApp.useApp()
 
   const driver: DriverType | undefined = session?.driver
@@ -56,9 +67,80 @@ export function QueryPane({ tab }: QueryPaneProps) {
   const [maxRows, setMaxRows] = useState(1000)
   const [timeoutMs, setTimeoutMs] = useState(60000)
   const [history, setHistory] = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
+  /** Why the saved script could not be opened, if it could not. */
+  const [fileError, setFileError] = useState<string | null>(null)
   const viewRef = useRef<EditorView | null>(null)
 
   const database = tab.database ?? session?.database
+  const file = tab.queryFile
+
+  /**
+   * The window whose file has already been read into this pane.
+   *
+   * A rename moves the window onto a new name without touching the text in it,
+   * and reading again then would throw away edits that are not saved. Keying on
+   * the window (its id survives a rename) makes the read happen once per window,
+   * which is what a window over a file means; a window that is closed and opened
+   * again is a new pane and reads afresh.
+   */
+  const readFor = useRef<string | null>(null)
+
+  // A bound window opens onto its file. Reading it here rather than in the tree
+  // is what makes the file the truth: closing the tab and reopening it (or a
+  // restart) shows what is on disk, including an edit made in another editor.
+  useEffect(() => {
+    if (!file) return
+    if (readFor.current === tab.id) return
+    readFor.current = tab.id
+    let cancelled = false
+    api
+      .readQueryFile(file.connectionId, file.database, file.name)
+      .then((read) => {
+        if (cancelled) return
+        setSql(read.sql ?? '')
+        setFileError(null)
+        setTabDirty(tab.id, false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        // The window stays open — whatever the user had typed is still in it —
+        // but it says that there is no file behind it, because a Save would
+        // otherwise look like it had worked.
+        setFileError(toMessage(err))
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [file, setTabDirty, tab.id])
+
+  const changeSql = useCallback(
+    (next: string) => {
+      setSql(next)
+      if (file) setTabDirty(tab.id, true)
+    },
+    [file, setTabDirty, tab.id],
+  )
+
+  const save = useCallback(async () => {
+    if (!file) return
+    setSaving(true)
+    try {
+      await saveQueryFile({
+        connectionId: file.connectionId,
+        database: file.database,
+        name: file.name,
+        sql,
+      })
+      setFileError(null)
+      setTabDirty(tab.id, false)
+      message.success(`Saved ${file.name}`)
+    } catch (err) {
+      message.error(toMessage(err))
+    } finally {
+      setSaving(false)
+    }
+  }, [file, message, saveQueryFile, setTabDirty, sql, tab.id])
 
   // The only difference between the two script exports is the language, and
   // the label and the file extension are the only places that shows.
@@ -185,10 +267,10 @@ export function QueryPane({ tab }: QueryPaneProps) {
                   {entry.replace(/\s+/g, ' ').slice(0, 120)}
                 </span>
               ),
-              onClick: () => setSql(entry),
+              onClick: () => changeSql(entry),
             })),
     }),
-    [history],
+    [changeSql, history],
   )
 
   const exportMenu: MenuProps = {
@@ -229,11 +311,23 @@ export function QueryPane({ tab }: QueryPaneProps) {
           sql={sql}
           driver={driver}
           database={database}
-          onLoad={setSql}
+          onLoad={changeSql}
         />
         <Tooltip title="Clear editor">
           <Button size="small" icon={<ClearOutlined />} onClick={() => setSql('')} />
         </Tooltip>
+        {file ? (
+          <Tooltip title="Ctrl/Cmd+S">
+            <Button
+              size="small"
+              icon={tab.dirty ? <FileTextOutlined /> : <SaveOutlined />}
+              loading={saving}
+              onClick={() => void save()}
+            >
+              {tab.dirty ? 'Save *' : 'Save'}
+            </Button>
+          </Tooltip>
+        ) : null}
 
         <span style={{ opacity: 0.35 }}>|</span>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -284,6 +378,20 @@ export function QueryPane({ tab }: QueryPaneProps) {
         </div>
       </div>
 
+      {file && fileError ? (
+        <Alert
+          type="warning"
+          showIcon
+          banner
+          title={`${file.name} could not be read`}
+          description={
+            <span className="mono" style={{ fontSize: 12 }}>
+              {fileError}
+            </span>
+          }
+        />
+      ) : null}
+
       <Splitter orientation="vertical" style={{ flex: '1 1 auto', minHeight: 0 }}>
         <Splitter.Panel defaultSize="42%" min={100}>
           <SqlEditor
@@ -291,9 +399,10 @@ export function QueryPane({ tab }: QueryPaneProps) {
             driver={driver}
             theme={theme}
             height="100%"
-            onChange={setSql}
+            onChange={changeSql}
             onRun={runAll}
             onRunSelection={runSelection}
+            onSave={file ? () => void save() : undefined}
             onReady={(view) => {
               viewRef.current = view
             }}

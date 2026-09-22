@@ -29,6 +29,9 @@ import type {
   RowDelete,
   SaveFileRequest,
   SavedQuery,
+  QueryFile,
+  QueryFileSave,
+  QueryFileRename,
   SchemaGraph,
   ScriptAnalysis,
   ServerOverview,
@@ -111,6 +114,22 @@ export const api = {
   listSavedQueries: () => invoke<SavedQuery[]>('ListSavedQueries'),
   saveSavedQuery: (query: SavedQuery) => invoke<SavedQuery>('SaveSavedQuery', query),
   deleteSavedQuery: (id: string) => invoke<void>('DeleteSavedQuery', id),
+
+  // --- saved query files --------------------------------------------------
+  /** The scripts saved for one connection and database, without their text. */
+  listQueryFiles: (connectionId: string, database: string) =>
+    invoke<QueryFile[]>('ListQueryFiles', connectionId, database),
+  readQueryFile: (connectionId: string, database: string, name: string) =>
+    invoke<QueryFile>('ReadQueryFile', connectionId, database, name),
+  saveQueryFile: (save: QueryFileSave) => invoke<QueryFile>('SaveQueryFile', save),
+  /** Creates an empty script; refuses a name that is already taken. */
+  createQueryFile: (connectionId: string, database: string, name: string) =>
+    invoke<QueryFile>('CreateQueryFile', connectionId, database, name),
+  /** Moves a script to another name without touching the script itself. */
+  renameQueryFile: (rename: QueryFileRename) =>
+    invoke<QueryFile>('RenameQueryFile', rename),
+  deleteQueryFile: (connectionId: string, database: string, name: string) =>
+    invoke<void>('DeleteQueryFile', connectionId, database, name),
 
   // --- profiles -----------------------------------------------------------
   listConnections: () => invoke<ConnectionConfig[]>('ListConnections'),

@@ -721,6 +721,50 @@ type SavedQuery struct {
 	UpdatedAt int64 `json:"updatedAt"`
 }
 
+// --- query files -----------------------------------------------------------
+
+// QueryFile is one named script saved next to the connection it belongs to.
+//
+// Unlike a favourite, which can be loaded anywhere, a query file is bound to a
+// connection and a database: it is the file the query window edits, and its
+// folder is derived from those two names. SQL is only filled in when the file is
+// read; the tree lists names and sizes without pulling every script into memory.
+type QueryFile struct {
+	ConnectionID string `json:"connectionId"`
+	Database     string `json:"database"`
+	Name         string `json:"name"`
+	// Path is where the file ended up. Shown in the UI (and handed to the file
+	// manager) so a user can find the script without trusting our layout.
+	Path string `json:"path"`
+	// SQL is the script itself, only set by ReadQueryFile.
+	SQL string `json:"sql,omitempty"`
+
+	Size      int64 `json:"size"`
+	UpdatedAt int64 `json:"updatedAt"`
+}
+
+// QueryFileSave is a query window asking for its script to be written.
+//
+// The name is part of the request because the file it goes to is named after it;
+// renaming is a separate call (QueryFileRename), so a save can never move a
+// script somewhere a user did not point at.
+type QueryFileSave struct {
+	ConnectionID string `json:"connectionId"`
+	Database     string `json:"database"`
+	Name         string `json:"name"`
+	SQL          string `json:"sql"`
+}
+
+// QueryFileRename moves a script to another name without touching its contents.
+// "Rename" here is a move of the file, not a read-and-write: the script on disk
+// is the truth, and a rename from the tree must not need to know what is in it.
+type QueryFileRename struct {
+	ConnectionID string `json:"connectionId"`
+	Database     string `json:"database"`
+	From         string `json:"from"`
+	To           string `json:"to"`
+}
+
 // AppInfo is static metadata rendered on the welcome screen.
 type AppInfo struct {
 	Name       string `json:"name"`
@@ -732,10 +776,16 @@ type AppInfo struct {
 
 // --- data directory --------------------------------------------------------
 
-// DataFileInfo is one file in the data directory, as the settings page lists it.
+// DataFileInfo is one entry in the data directory, as the settings page lists it.
 type DataFileInfo struct {
 	Name  string `json:"name"`
 	Bytes int64  `json:"bytes"`
+	// Dir marks a folder this build owns rather than a file it wrote. The query
+	// files are a tree (one folder per connection and database), so the settings
+	// page has to be able to say "3 queries" instead of showing a size.
+	Dir bool `json:"dir,omitempty"`
+	// Count is how many files the folder holds. Zero for a plain file.
+	Count int `json:"count,omitempty"`
 }
 
 // DataDirInfo describes where the application keeps its data, so the settings

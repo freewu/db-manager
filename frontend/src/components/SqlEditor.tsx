@@ -26,6 +26,12 @@ interface SqlEditorProps {
   onRun: () => void
   /** Invoked by Ctrl/Cmd-Shift-Enter (run the selection). */
   onRunSelection: () => void
+  /**
+   * Invoked by Ctrl/Cmd-S. Left out when there is nowhere to save to (a query
+   * scratchpad, a DDL preview), in which case the shortcut does nothing rather
+   * than pretending a save happened.
+   */
+  onSave?: () => void
   /** Receives the EditorView so callers can read the current selection. */
   onReady?: (view: EditorView) => void
 }
@@ -65,6 +71,7 @@ export function SqlEditor({
   onChange,
   onRun,
   onRunSelection,
+  onSave,
   onReady,
 }: SqlEditorProps) {
   const extensions = useMemo(
@@ -90,10 +97,22 @@ export function SqlEditor({
               return true
             },
           },
+          ...(onSave
+            ? [
+                {
+                  key: 'Mod-s',
+                  preventDefault: true,
+                  run: () => {
+                    onSave()
+                    return true
+                  },
+                },
+              ]
+            : []),
         ]),
       ),
     ],
-    [driver, onRun, onRunSelection],
+    [driver, onRun, onRunSelection, onSave],
   )
 
   return (

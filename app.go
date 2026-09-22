@@ -211,6 +211,43 @@ func (a *App) SaveSavedQuery(query models.SavedQuery) (models.SavedQuery, error)
 // DeleteSavedQuery removes a saved SQL snippet.
 func (a *App) DeleteSavedQuery(id string) error { return a.manager.DeleteSavedQuery(id) }
 
+// --- saved query files -----------------------------------------------------
+//
+// These are the scripts a query window owns, one file per name under the data
+// directory. They are bound to a connection and a database, unlike the
+// favourites above, which can be loaded anywhere.
+
+// ListQueryFiles returns the scripts saved for one connection and database.
+func (a *App) ListQueryFiles(connectionID, database string) ([]models.QueryFile, error) {
+	return a.manager.ListQueryFiles(connectionID, database)
+}
+
+// ReadQueryFile returns one script with its text.
+func (a *App) ReadQueryFile(connectionID, database, name string) (models.QueryFile, error) {
+	return a.manager.ReadQueryFile(connectionID, database, name)
+}
+
+// SaveQueryFile writes one script, creating it when it does not exist yet.
+func (a *App) SaveQueryFile(save models.QueryFileSave) (models.QueryFile, error) {
+	return a.manager.SaveQueryFile(save)
+}
+
+// RenameQueryFile moves one script to another name, leaving the script itself
+// untouched.
+func (a *App) RenameQueryFile(rename models.QueryFileRename) (models.QueryFile, error) {
+	return a.manager.RenameQueryFile(rename)
+}
+
+// CreateQueryFile creates an empty script, refusing a name that is taken.
+func (a *App) CreateQueryFile(connectionID, database, name string) (models.QueryFile, error) {
+	return a.manager.CreateQueryFile(connectionID, database, name)
+}
+
+// DeleteQueryFile removes one script.
+func (a *App) DeleteQueryFile(connectionID, database, name string) error {
+	return a.manager.DeleteQueryFile(connectionID, database, name)
+}
+
 // --- metadata --------------------------------------------------------------
 
 // ListDatabases returns the catalogs of a session.

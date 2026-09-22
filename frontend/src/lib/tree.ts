@@ -43,6 +43,16 @@ export type NodeRef =
       object: string
       kind: ObjectKind
     }
+  /**
+   * The folder of saved scripts, under a *database*.
+   *
+   * A script is scoped to the database it was written for, not to a schema
+   * inside it, so this folder hangs off the database node even where the object
+   * folders live under schemas (PostgreSQL) — that deviation is deliberate, and
+   * is what makes the same script reachable from both schemas of one database.
+   */
+  | { t: 'queries'; sessionId: string; database: string }
+  | { t: 'queryFile'; sessionId: string; database: string; name: string }
 
 export function encodeNode(ref: NodeRef): string {
   return JSON.stringify(ref)
@@ -72,6 +82,10 @@ export const objectsKey = (sessionId: string, database: string, schema: string) 
 
 export const indexesKey = (sessionId: string, database: string, schema: string) =>
   [sessionId, database, schema, 'indexes'].join(SEP)
+
+/** The saved scripts of one database; they have no schema of their own. */
+export const queriesKey = (sessionId: string, database: string) =>
+  [sessionId, database, 'queries'].join(SEP)
 
 /** Object kinds the explorer groups into folders. */
 export const FOLDER_ORDER: ObjectKind[] = [

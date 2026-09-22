@@ -552,6 +552,41 @@ export interface SavedQuery {
   updatedAt: number
 }
 
+/**
+ * One named script saved as a file of its own, under the data directory.
+ *
+ * Unlike a favourite these are bound to a connection and a database — the folder
+ * on disk is derived from those two — so the tree shows them per database and the
+ * query window edits the file rather than a copy of it.
+ */
+export interface QueryFile {
+  connectionId: string
+  database: string
+  name: string
+  /** Where the file is, so a user can find it without trusting our layout. */
+  path: string
+  /** The script itself. Only a read fills this in; a listing leaves it out. */
+  sql?: string
+  size: number
+  updatedAt: number
+}
+
+/** A query window asking for its script to be written. */
+export interface QueryFileSave {
+  connectionId: string
+  database: string
+  name: string
+  sql: string
+}
+
+/** A rename: a move of the file, so the contents are never read or rewritten. */
+export interface QueryFileRename {
+  connectionId: string
+  database: string
+  from: string
+  to: string
+}
+
 /** One labelled number on a runtime status page. */
 export interface OverviewMetric {
   label: string

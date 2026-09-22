@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,6 +49,13 @@ var dataFiles = []string{
 	stateName,
 	secret.KeyFileName,
 }
+
+// dataDirs are the folders this build keeps in the data directory, next to the
+// files above. They travel with a move exactly like the files do. The query tree
+// is one folder per connection and database, so it is copied by walking it — but
+// only *these* folders are ever walked, never the whole data directory, which is
+// what keeps "one directory may hold another" true (see MoveData).
+var dataDirs = []string{queryDirName}
 
 type locationFormat struct {
 	Version int    `json:"version"`
@@ -182,7 +190,43 @@ func describe(dir, def string) models.DataDirInfo {
 		info.Files = append(info.Files, models.DataFileInfo{Name: name, Bytes: stat.Size()})
 		info.TotalBytes += stat.Size()
 	}
+	for _, name := range dataDirs {
+		files, bytes, err := describeTree(filepath.Join(dir, name))
+		if err != nil || files == 0 {
+			// A folder with nothing in it (or one that is not there yet) is not
+			// worth a row: the settings page lists what the app has actually
+			// written, and an empty tree is nothing.
+			continue
+		}
+		info.Files = append(info.Files, models.DataFileInfo{Name: name, Bytes: bytes, Dir: true, Count: files})
+		info.TotalBytes += bytes
+	}
 	return info
+}
+
+// describeTree counts the files in one tree and adds up their sizes.
+func describeTree(dir string) (int, int64, error) {
+	var files int
+	var bytes int64
+	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		files++
+		bytes += info.Size()
+		return nil
+	})
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, 0, nil
+	}
+	return files, bytes, err
 }
 
 // MoveData moves everything this build keeps in the active data directory into
@@ -242,6 +286,12 @@ func MoveData(target string) (models.DataDirMoveResult, error) {
 	}
 
 	result := models.DataDirMoveResult{Moved: []string{}, LeftBehind: []string{}, Remaining: []string{}}
+	// What to delete once the pointer has moved, in the same order as Moved, so
+	// the report can name an entry the way the user sees it. The two cannot be
+	// derived from one another: a folder is copied as a tree but reported as one
+	// line.
+	type moved struct{ display, path string }
+	sources := make([]moved, 0, len(dataFiles)+len(dataDirs))
 	for _, name := range dataFiles {
 		from := filepath.Join(source, name)
 		if _, err := os.Stat(from); err != nil {
@@ -253,6 +303,25 @@ func MoveData(target string) (models.DataDirMoveResult, error) {
 			return models.DataDirMoveResult{}, err
 		}
 		result.Moved = append(result.Moved, name)
+		sources = append(sources, moved{display: name, path: from})
+	}
+	for _, name := range dataDirs {
+		from := filepath.Join(source, name)
+		count, _, err := describeTree(from)
+		if err != nil {
+			return models.DataDirMoveResult{}, err
+		}
+		if count == 0 {
+			continue
+		}
+		if err := copyTree(from, filepath.Join(dest, name)); err != nil {
+			return models.DataDirMoveResult{}, err
+		}
+		// One entry for the whole tree: a user with forty saved queries should
+		// not have to read forty lines to learn that they all came along.
+		label := fmt.Sprintf("%s (%s)", name, plural(count, "file"))
+		result.Moved = append(result.Moved, label)
+		sources = append(sources, moved{display: label, path: from})
 	}
 
 	// Everything in the old directory that is not ours stays where it is, and is
@@ -281,9 +350,9 @@ func MoveData(target string) (models.DataDirMoveResult, error) {
 		return models.DataDirMoveResult{}, fmt.Errorf("record %s as the data directory: %w", dest, err)
 	}
 
-	for _, name := range result.Moved {
-		if err := os.Remove(filepath.Join(source, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
-			result.Remaining = append(result.Remaining, name)
+	for _, entry := range sources {
+		if err := removePath(entry.path); err != nil {
+			result.Remaining = append(result.Remaining, entry.display)
 		}
 	}
 
@@ -291,10 +360,10 @@ func MoveData(target string) (models.DataDirMoveResult, error) {
 	return result, nil
 }
 
-// existingData lists the recognised data files already present in dir, so a
-// move can refuse a directory that is in use.
+// existingData lists the recognised data files (and the folders this build owns)
+// already present in dir, so a move can refuse a directory that is in use.
 func existingData(dir string) ([]string, error) {
-	found := make([]string, 0, len(dataFiles))
+	found := make([]string, 0, len(dataFiles)+len(dataDirs))
 	for _, name := range dataFiles {
 		stat, err := os.Stat(filepath.Join(dir, name))
 		if err != nil {
@@ -310,12 +379,21 @@ func existingData(dir string) ([]string, error) {
 		}
 		found = append(found, name)
 	}
+	for _, name := range dataDirs {
+		count, _, err := describeTree(filepath.Join(dir, name))
+		if err != nil {
+			return nil, fmt.Errorf("inspect %s: %w", filepath.Join(dir, name), err)
+		}
+		if count > 0 {
+			found = append(found, fmt.Sprintf("%s (%s)", name, plural(count, "file")))
+		}
+	}
 	return found, nil
 }
 
-// otherEntries lists what a data directory holds besides this app's files: the
-// pointer file itself (it belongs to the default directory), temp files left by
-// an interrupted write, and anything the user dropped there.
+// otherEntries lists what a data directory holds besides this app's files and
+// folders: the pointer file itself (it belongs to the default directory), temp
+// files left by an interrupted write, and anything the user dropped there.
 func otherEntries(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -324,8 +402,11 @@ func otherEntries(dir string) ([]string, error) {
 		}
 		return nil, err
 	}
-	known := make(map[string]bool, len(dataFiles)+1)
+	known := make(map[string]bool, len(dataFiles)+len(dataDirs)+1)
 	for _, name := range dataFiles {
+		known[name] = true
+	}
+	for _, name := range dataDirs {
 		known[name] = true
 	}
 	known[locationFile] = true
@@ -343,6 +424,55 @@ func otherEntries(dir string) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// plural renders a count with its noun, because the move report is read by a
+// person and "1 files" reads like a bug.
+func plural(count int, noun string) string {
+	if count == 1 {
+		return fmt.Sprintf("%d %s", count, noun)
+	}
+	return fmt.Sprintf("%d %ss", count, noun)
+}
+
+// copyTree copies a folder this build owns (the query files) and verifies every
+// file on the way, the same way copyVerified proves a single file arrived.
+//
+// Nothing outside src is read: only the folders listed in dataDirs are ever
+// walked, which is what makes a nested data directory safe.
+func copyTree(src, dst string) error {
+	return filepath.WalkDir(src, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(target, dirMode)
+		}
+		// A leftover temp file is our own rubbish; copying it would resurrect a
+		// half-written query in the new directory.
+		if strings.HasSuffix(entry.Name(), ".tmp") {
+			return nil
+		}
+		return copyVerified(path, target)
+	})
+}
+
+// removePath deletes a file or a folder this build wrote. It is best effort by
+// contract — the caller reports what it could not remove rather than failing a
+// move that has already happened.
+func removePath(path string) error {
+	err := os.RemoveAll(path)
+	if err == nil {
+		return nil
+	}
+	// os.RemoveAll answers nil for a path that is already gone, so reaching this
+	// point means something is really in the way (a lock, a read-only folder).
+	return err
 }
 
 // copyVerified copies src to dst and reads the copy back, so "the data is in the

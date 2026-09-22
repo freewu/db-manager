@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Button, Space, Tabs, Tag, Tooltip, Typography } from 'antd'
+import { App as AntApp, Button, Space, Tabs, Tag, Tooltip, Typography } from 'antd'
 import type { TabsProps } from 'antd'
 import { CodeOutlined, DashboardOutlined, FileTextOutlined, FolderOutlined, PartitionOutlined, PlusOutlined, TableOutlined } from '@ant-design/icons'
 
@@ -22,6 +22,30 @@ export function Workspace() {
   const closeTab = useAppStore((s) => s.closeTab)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const activeSessionId = useAppStore((s) => s.activeSessionId)
+  const { modal } = AntApp.useApp()
+
+  /**
+   * Closing a window, asking first when it holds edits that are not in its file.
+   *
+   * Only a saved script can be dirty: a scratchpad tab is not written anywhere,
+   * so there is nothing to lose except the text on screen, which the user can
+   * see is about to go.
+   */
+  const requestClose = (id: string) => {
+    const tab = tabs.find((t) => t.id === id)
+    if (!tab?.dirty || !tab.queryFile) {
+      closeTab(id)
+      return
+    }
+    modal.confirm({
+      title: `Close “${tab.queryFile.name}” without saving?`,
+      content:
+        'The window has edits that were never written to its file. Closing it drops them; there is no copy of them anywhere else.',
+      okText: 'Close without saving',
+      okButtonProps: { danger: true },
+      onOk: () => closeTab(id),
+    })
+  }
 
   const items = useMemo<TabsProps['items']>(
     () =>
@@ -63,7 +87,7 @@ export function Workspace() {
         items={items}
         onChange={setActiveTab}
         onEdit={(target, action) => {
-          if (action === 'remove' && typeof target === 'string') closeTab(target)
+          if (action === 'remove' && typeof target === 'string') requestClose(target)
         }}
         tabBarExtraContent={{
           right: (
@@ -94,7 +118,14 @@ function TabLabel({ tab, sessionName }: { tab: WorkspaceTab; sessionName?: strin
   return (
     <Space size={6} className="dm-tab-label">
       {tab.kind === 'query' ? (
-        <CodeOutlined style={{ opacity: 0.7 }} />
+        // A saved script is a file, so it gets the file icon; a scratchpad stays
+        // the code glyph. The two read differently at a glance, which matters
+        // when only one of them is written anywhere.
+        tab.queryFile ? (
+          <FileTextOutlined style={{ opacity: 0.7 }} />
+        ) : (
+          <CodeOutlined style={{ opacity: 0.7 }} />
+        )
       ) : tab.kind === 'newtable' ? (
         <PlusOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'objects' ? (
@@ -108,7 +139,10 @@ function TabLabel({ tab, sessionName }: { tab: WorkspaceTab; sessionName?: strin
       ) : (
         <TableOutlined style={{ opacity: 0.7 }} />
       )}
-      <span>{title}</span>
+      <span>
+        {title}
+        {tab.dirty ? ' *' : ''}
+      </span>
       {sessionName ? (
         <Typography.Text type="secondary" style={{ fontSize: 11 }}>
           {sessionName}

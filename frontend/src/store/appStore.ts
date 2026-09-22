@@ -23,6 +23,9 @@ import type {
   ObjectInfo,
   ObjectKind,
   OpenRequest,
+  QueryFile,
+  QueryFileRename,
+  QueryFileSave,
   SavedQuery,
   SessionInfo,
   TableDesign,
@@ -30,7 +33,14 @@ import type {
 } from '../api/types'
 import type { ConnectionDraft } from '../connection/shared'
 import { arrangementOf, layoutOf, moveEntry, type DropTarget } from '../lib/explorer'
-import { databaseKey, FOLDER_LABEL, indexesKey, namespaceKey, objectsKey } from '../lib/tree'
+import {
+  databaseKey,
+  FOLDER_LABEL,
+  indexesKey,
+  namespaceKey,
+  objectsKey,
+  queriesKey,
+} from '../lib/tree'
 import { designFrom, emptyStructure, newTableDesign } from '../lib/design'
 import {
   parseThemeMode,
@@ -43,6 +53,28 @@ import {
 export type { ResolvedTheme, ThemeMode } from '../lib/theme'
 
 export type TabKind = 'query' | 'table' | 'newtable' | 'objects' | 'ddl' | 'er' | 'runtime'
+
+/**
+ * The id of a saved-script window.
+ *
+ * Derived from the file rather than random, unlike a scratchpad query tab: a
+ * script is one thing, and opening it twice has to bring back the window that is
+ * already editing it. The parts cannot collide because the separator cannot
+ * appear in a connection id (a UUID) or in a name the backend accepted.
+ *
+ * A rename deliberately leaves this key alone. It is the identity of the *window*
+ * — which must survive a rename, or the pane would be torn down and its unsaved
+ * text with it — while the file it points at is carried in `tab.queryFile`.
+ */
+const queryFileId = (connectionId: string, database: string, name: string) =>
+  `queryFile:${connectionId}:${database}:${name}`
+
+/** Whether a tab is the window over one particular saved script. */
+const isQueryFileTab = (tab: WorkspaceTab, connectionId: string, database: string, name: string) =>
+  tab.kind === 'query' &&
+  tab.queryFile?.connectionId === connectionId &&
+  tab.queryFile.database === database &&
+  tab.queryFile.name === name
 
 /** Sub-views of a table/view window (Navicat-style bottom tab strip). */
 export type TableView = 'data' | 'structure' | 'indexes' | 'foreignKeys' | 'ddl'
@@ -93,6 +125,16 @@ export interface WorkspaceTab {
   view?: TableView
   /** Object-list windows only: which folder the list is scoped to. */
   list?: ListScope
+  /**
+   * A query window that is bound to a saved script rather than being a
+   * scratchpad: the tab edits that file, and saving writes it back.
+   */
+  queryFile?: { connectionId: string; database: string; name: string }
+  /**
+   * Whether a query window holds edits that are not on disk yet. Kept on the tab
+   * because the tab label is what shows it, and the label is drawn by the store.
+   */
+  dirty?: boolean
 }
 
 /**
@@ -111,6 +153,11 @@ interface TreeCache {
   schemas: Record<string, string[]>
   objects: Record<string, ObjectInfo[]>
   indexes: Record<string, IndexEntry[]>
+  /**
+   * Saved scripts, per database. An empty array means "read, and there are
+   * none", which is a different answer from "not read yet" (absent).
+   */
+  queries: Record<string, QueryFile[]>
   loaded: Record<string, boolean>
   loading: Record<string, boolean>
   errors: Record<string, string>
@@ -121,6 +168,7 @@ const emptyTree = (): TreeCache => ({
   schemas: {},
   objects: {},
   indexes: {},
+  queries: {},
   loaded: {},
   loading: {},
   errors: {},
@@ -236,9 +284,37 @@ interface AppState {
   loadSchemas: (sessionId: string, database: string) => Promise<void>
   loadObjects: (sessionId: string, database: string, schema: string) => Promise<void>
   loadIndexes: (sessionId: string, database: string, schema: string) => Promise<void>
+  /** Reads the saved scripts of one database (the tree's Queries folder). */
+  loadQueryFiles: (sessionId: string, database: string) => Promise<QueryFile[]>
+  /**
+   * Writes a script through to its file and refreshes the folder it lives in.
+   * Returns the file as it now is on disk.
+   */
+  saveQueryFile: (save: QueryFileSave) => Promise<QueryFile>
+  /** Moves a script to another name, and re-points an open tab at it. */
+  renameQueryFile: (rename: QueryFileRename) => Promise<QueryFile>
+  /** Creates an empty script. Refuses (through the backend) a taken name. */
+  createQueryFile: (sessionId: string, database: string, name: string) => Promise<QueryFile>
+  /**
+   * Re-reads one database's script folder by the connection it belongs to.
+   *
+   * Saving and renaming answer with the *connection*, not the session, and the
+   * tree cache is keyed by session — this is the one place that has to translate
+   * between the two.
+   */
+  reloadQueryFolder: (connectionId: string, database: string) => Promise<void>
+  deleteQueryFile: (sessionId: string, database: string, name: string) => Promise<void>
+  /** Marks a query window's edits as saved, or not saved. */
+  setTabDirty: (tabId: string, dirty: boolean) => void
   invalidateSession: (sessionId: string) => void
 
   openQueryTab: (sessionId: string, database?: string) => void
+  /**
+   * Opens a saved script, or brings its window back to the front when it is
+   * already open. One tab per file: the file is the thing being edited, and two
+   * windows over one file would fight over it.
+   */
+  openQueryFileTab: (sessionId: string, database: string, name: string) => void
   openObjectsTab: (
     sessionId: string,
     database: string,
@@ -700,6 +776,114 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  async loadQueryFiles(sessionId, database) {
+    const key = queriesKey(sessionId, database)
+    const connectionId = get().sessions.find((s) => s.id === sessionId)?.connectionId
+    if (!connectionId) {
+      // An ad-hoc session has no profile, so it has no folder to keep scripts
+      // in. The tree does not draw the folder in that case either; this is the
+      // guard for a request that raced the session going away.
+      set((state) => ({
+        tree: {
+          ...state.tree,
+          queries: { ...state.tree.queries, [key]: [] },
+          loaded: { ...state.tree.loaded, [key]: true },
+          errors: { ...state.tree.errors, [key]: '' },
+        },
+      }))
+      return []
+    }
+    set((state) => ({
+      tree: {
+        ...state.tree,
+        loading: { ...state.tree.loading, [key]: true },
+        errors: { ...state.tree.errors, [key]: '' },
+      },
+    }))
+    try {
+      const files = await api.listQueryFiles(connectionId, database)
+      set((state) => ({
+        tree: {
+          ...state.tree,
+          queries: { ...state.tree.queries, [key]: files },
+          loaded: { ...state.tree.loaded, [key]: true },
+          loading: { ...state.tree.loading, [key]: false },
+        },
+      }))
+      return files
+    } catch (error) {
+      const message = toMessage(error)
+      set((state) => ({
+        tree: {
+          ...state.tree,
+          loading: { ...state.tree.loading, [key]: false },
+          errors: { ...state.tree.errors, [key]: message },
+        },
+      }))
+      throw error
+    }
+  },
+
+  async saveQueryFile(save) {
+    const file = await api.saveQueryFile(save)
+    // The folder's listing is what the tree draws, so it is re-read rather than
+    // patched by hand: the backend is the one that decides what the name on disk
+    // ended up being.
+    await get().reloadQueryFolder(save.connectionId, save.database)
+    return file
+  },
+
+  async renameQueryFile(rename) {
+    const file = await api.renameQueryFile(rename)
+    await get().reloadQueryFolder(rename.connectionId, rename.database)
+    set((state) => ({
+      // An open window follows its file: it keeps what is typed in it (the key is
+      // untouched, so the pane is not rebuilt) and its next save lands on the new
+      // name. A window that holds nothing yet is left alone — reopening the tree
+      // row reads the file under its new name anyway.
+      tabs: state.tabs.map((tab) =>
+        isQueryFileTab(tab, rename.connectionId, rename.database, rename.from)
+          ? { ...tab, title: rename.to, queryFile: { ...tab.queryFile!, name: rename.to } }
+          : tab,
+      ),
+    }))
+    return file
+  },
+
+  async createQueryFile(sessionId, database, name) {
+    const connectionId = get().sessions.find((s) => s.id === sessionId)?.connectionId
+    if (!connectionId) throw new Error('This session has no saved connection profile.')
+    const file = await api.createQueryFile(connectionId, database, name)
+    await get().reloadQueryFolder(connectionId, database)
+    return file
+  },
+
+  async deleteQueryFile(sessionId, database, name) {
+    const connectionId = get().sessions.find((s) => s.id === sessionId)?.connectionId
+    if (!connectionId) return
+    await api.deleteQueryFile(connectionId, database, name)
+    await get().reloadQueryFolder(connectionId, database)
+    // Closing the window is the caller's business: the tree menu asks first, and
+    // a delete that was refused must not have closed anything already.
+  },
+
+  async reloadQueryFolder(connectionId, database) {
+    const sessionId = get().sessions.find((s) => s.connectionId === connectionId)?.id
+    if (!sessionId) {
+      // The session is gone (disconnected while the window was open): there is
+      // no folder left to refresh, and inventing a key would leave a cache entry
+      // nothing can ever read or clear.
+      return
+    }
+    await get().loadQueryFiles(sessionId, database)
+  },
+
+  setTabDirty(tabId, dirty) {
+    set((state) => ({
+      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, dirty } : tab)),
+    }))
+  },
+
   invalidateSession(sessionId) {
     // Every cache key starts with the session id, so a prefix match is enough.
     const belongs = (key: string) =>
@@ -717,6 +901,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         schemas: filter(state.tree.schemas),
         objects: filter(state.tree.objects),
         indexes: filter(state.tree.indexes),
+        queries: filter(state.tree.queries),
         loaded: filter(state.tree.loaded),
         loading: filter(state.tree.loading),
         errors: filter(state.tree.errors),
@@ -738,6 +923,30 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeTabId: id,
       ...focused(state, sessionId),
     }))
+  },
+
+  openQueryFileTab(sessionId, database, name) {
+    const connectionId = get().sessions.find((s) => s.id === sessionId)?.connectionId
+    if (!connectionId) return
+    const tab: WorkspaceTab = {
+      id: queryFileId(connectionId, database, name),
+      kind: 'query',
+      sessionId,
+      title: name,
+      database,
+      queryFile: { connectionId, database, name },
+    }
+    set((state) => {
+      // Already open — under this name now, or under the name it had before a
+      // rename: the window that is there is the file, so it comes back to the
+      // front instead of a second one being opened over it.
+      const existing = state.tabs.find((t) => isQueryFileTab(t, connectionId, database, name))
+      return {
+        tabs: existing ? state.tabs : [...state.tabs, tab],
+        activeTabId: existing ? existing.id : tab.id,
+        ...focused(state, sessionId),
+      }
+    })
   },
 
   openObjectsTab(sessionId, database, schema, list) {
