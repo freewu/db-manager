@@ -95,3 +95,16 @@ func TestMySQLDialectReportsTheEngineItWasBuiltFor(t *testing.T) {
 		t.Errorf("MySQLDialect.Quote() = %q, want backticks", got)
 	}
 }
+
+// The query window hides its plan view based on DriverInfo, so the flag has to
+// agree with the spec that would carry the statement: a mismatch either draws a
+// button whose call always fails or hides one that would have worked.
+func TestExplainCapabilityMatchesTheSpec(t *testing.T) {
+	hasWrapper := spec().ExplainSQL != nil
+	if info := (Driver{}).Info(); info.SupportsExplain != hasWrapper {
+		t.Fatalf("SupportsExplain = %v but the spec's wrapper is %v", info.SupportsExplain, hasWrapper)
+	}
+	if got := spec().ExplainSQL("SELECT 1"); got != "EXPLAIN SELECT 1" {
+		t.Fatalf("ExplainSQL = %q", got)
+	}
+}

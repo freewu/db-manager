@@ -93,6 +93,16 @@ type Spec struct {
 	// CreateDatabase optionally renders the CREATE DATABASE statement. Nil on
 	// SQLite, which has no such statement.
 	CreateDatabase func(req models.CreateDatabaseRequest) (models.DatabasePlan, error)
+
+	// ExplainSQL optionally wraps a statement in this engine's "how would you
+	// run this?" form — "EXPLAIN ", "EXPLAIN QUERY PLAN ", ... Nil on an
+	// engine whose plan cannot be read back as rows, which is also what makes
+	// Conn.Explain report CodeUnsupported instead of sending something the
+	// server would reject.
+	//
+	// The wrapper must never run the statement: measuring forms such as
+	// EXPLAIN ANALYZE do execute it, so they do not belong here.
+	ExplainSQL func(sql string) string
 }
 
 // Conn is the shared drivers.Conn implementation.
@@ -115,6 +125,9 @@ func NewConn(spec Spec, cfg models.ConnectionConfig) *Conn {
 var (
 	_ drivers.Conn            = (*Conn)(nil)
 	_ drivers.DatabaseCreator = (*Conn)(nil)
+	// Every spec is asked about statements through Explain; a spec that cannot
+	// answer says so (see explain.go).
+	_ drivers.Explainer = (*Conn)(nil)
 )
 
 // Spec exposes the driver spec (used by engine specific extras).

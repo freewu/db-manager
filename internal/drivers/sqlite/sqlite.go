@@ -39,6 +39,10 @@ func (Driver) Info() models.DriverInfo {
 		SupportsSchema:   false,
 		RequiresFile:     true,
 		SupportsDesign:   true,
+		// EXPLAIN QUERY PLAN answers with the plan it would follow, and does
+		// not run the statement to find out. The bare `EXPLAIN` opcode listing
+		// is a different (and much less readable) thing.
+		SupportsExplain: true,
 		// A SQLite file holds tables and views; its indexes hang off the tables,
 		// so the explorer keeps them in the namespace-wide index folder.
 		ObjectKinds:     []models.ObjectKind{models.KindTable, models.KindView},
@@ -98,6 +102,7 @@ func spec() sqlbase.Spec {
 		BootstrapDatabase: func(models.ConnectionConfig) string { return "main" },
 		NativeDDL:         nativeDDL,
 		Overview:          overview,
+		ExplainSQL:        func(sql string) string { return "EXPLAIN QUERY PLAN " + sql },
 	}
 }
 

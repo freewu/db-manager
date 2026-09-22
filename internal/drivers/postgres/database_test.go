@@ -150,3 +150,20 @@ func TestDatabaseOptionsKeepAnEncodingTheCuratedListForgot(t *testing.T) {
 			len(blind.Charsets), len(blind.Collations))
 	}
 }
+
+// The plan the query window shows comes from an unmeasured EXPLAIN. The
+// measured form (EXPLAIN ANALYZE) runs the statement, which the feature
+// promises never to do, so the wrapper is asserted here rather than trusted.
+func TestExplainCapabilityMatchesTheSpec(t *testing.T) {
+	hasWrapper := spec().ExplainSQL != nil
+	if info := (Driver{}).Info(); info.SupportsExplain != hasWrapper {
+		t.Fatalf("SupportsExplain = %v but the spec's wrapper is %v", info.SupportsExplain, hasWrapper)
+	}
+	got := spec().ExplainSQL("SELECT 1")
+	if got != "EXPLAIN SELECT 1" {
+		t.Fatalf("ExplainSQL = %q", got)
+	}
+	if strings.Contains(strings.ToUpper(got), "ANALYZE") {
+		t.Fatalf("the measured form runs the statement: %q", got)
+	}
+}

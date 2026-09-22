@@ -47,3 +47,11 @@ func (i Introspector) FilterDatabases(all []string) []string {
 	}
 	return out
 }
+
+// ExplainSQL wraps a statement in the EXPLAIN this family understands.
+//
+// MySQL, TiDB and Doris all answer a plain `EXPLAIN <statement>` — TiDB with
+// its own operator tree, Doris with its plan-format rows — and none of them
+// runs the statement to produce it. MariaDB also accepts `ANALYZE`, which does
+// run the statement; that form is deliberately not used here.
+func ExplainSQL(sql string) string { return "EXPLAIN " + sql }

@@ -261,3 +261,19 @@ func containsString(values []string, want string) bool {
 	}
 	return false
 }
+
+// The designer is closed on Doris but the plan is not: EXPLAIN works over the
+// MySQL protocol here too, so the two flags differ on purpose.
+func TestExplainCapabilityMatchesTheSpec(t *testing.T) {
+	info := (Driver{}).Info()
+	hasWrapper := spec().ExplainSQL != nil
+	if info.SupportsExplain != hasWrapper {
+		t.Fatalf("SupportsExplain = %v but the spec's wrapper is %v", info.SupportsExplain, hasWrapper)
+	}
+	if info.SupportsDesign {
+		t.Fatal("Doris DDL needs clauses the designer does not model; the designer stays closed")
+	}
+	if got := spec().ExplainSQL("SELECT 1"); got != "EXPLAIN SELECT 1" {
+		t.Fatalf("ExplainSQL = %q", got)
+	}
+}

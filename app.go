@@ -346,6 +346,11 @@ func (a *App) ExecuteSQL(req models.ExecRequest) (*models.QueryResult, error) {
 	return a.manager.Execute(req)
 }
 
+// ExplainSQL asks the engine how it would run one statement. Nothing is run.
+func (a *App) ExplainSQL(req models.ExplainRequest) (*models.ExplainResult, error) {
+	return a.manager.Explain(req)
+}
+
 // UpdateCell applies an inline edit from the data grid.
 func (a *App) UpdateCell(req models.CellUpdate) (int64, error) {
 	return a.manager.UpdateCell(req)

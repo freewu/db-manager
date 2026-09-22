@@ -20,6 +20,8 @@ import type {
   DesignResult,
   DriverInfo,
   ExecRequest,
+  ExplainRequest,
+  ExplainResult,
   FetchRequest,
   FetchResult,
   IndexEntry,
@@ -183,6 +185,11 @@ export const api = {
   // --- data ---------------------------------------------------------------
   fetchRows: (req: FetchRequest) => invoke<FetchResult>('FetchRows', req),
   executeSql: (req: ExecRequest) => invoke<QueryResult>('ExecuteSQL', req),
+  /**
+   * How the engine would run one statement. Nothing is executed, which is why
+   * this is safe on a read-only session and on a statement that writes.
+   */
+  explainSql: (req: ExplainRequest) => invoke<ExplainResult>('ExplainSQL', req),
   /** Objects, columns and foreign keys of a namespace, for the ER diagram. */
   getSchemaGraph: (sessionId: string, database: string, schema: string) =>
     invoke<SchemaGraph>('GetSchemaGraph', sessionId, database, schema),

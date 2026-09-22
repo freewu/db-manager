@@ -34,6 +34,9 @@ func (Driver) Info() models.DriverInfo {
 		SupportsDatabase: true,
 		SupportsSchema:   false,
 		SupportsDesign:   true,
+		// A plain EXPLAIN is answered by this whole family (see
+		// mysqlcompat.ExplainSQL) and never runs the statement.
+		SupportsExplain: true,
 		// MySQL keeps views next to tables in the catalog; there is no third
 		// object kind the explorer would be honest about drawing.
 		ObjectKinds:     []models.ObjectKind{models.KindTable, models.KindView},
@@ -93,6 +96,7 @@ func spec() sqlbase.Spec {
 		// The character sets and collations come from SHOW CHARACTER SET /
 		// SHOW COLLATION on this server; see mysqlcompat/database.go.
 		DatabaseOptions: mysqlcompat.DatabaseOptions,
+		ExplainSQL:      mysqlcompat.ExplainSQL,
 		CreateDatabase:  mysqlcompat.CreateDatabase,
 	}
 }

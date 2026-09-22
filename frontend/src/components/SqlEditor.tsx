@@ -32,6 +32,12 @@ interface SqlEditorProps {
    * than pretending a save happened.
    */
   onSave?: () => void
+  /**
+   * Invoked by Ctrl/Cmd-Shift-F. Left out by callers that have nothing to
+   * format with (a document store's shell), which is also how the toolbar
+   * decides to disable its Format button.
+   */
+  onFormat?: () => void
   /** Receives the EditorView so callers can read the current selection. */
   onReady?: (view: EditorView) => void
 }
@@ -72,6 +78,7 @@ export function SqlEditor({
   onRun,
   onRunSelection,
   onSave,
+  onFormat,
   onReady,
 }: SqlEditorProps) {
   const extensions = useMemo(
@@ -109,10 +116,22 @@ export function SqlEditor({
                 },
               ]
             : []),
+          ...(onFormat
+            ? [
+                {
+                  key: 'Mod-Shift-f',
+                  preventDefault: true,
+                  run: () => {
+                    onFormat()
+                    return true
+                  },
+                },
+              ]
+            : []),
         ]),
       ),
     ],
-    [driver, onRun, onRunSelection, onSave],
+    [driver, onRun, onRunSelection, onSave, onFormat],
   )
 
   return (

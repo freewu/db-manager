@@ -50,7 +50,11 @@ func (Driver) Info() models.DriverInfo {
 		// (DUPLICATE/UNIQUE/AGGREGATE KEY, DISTRIBUTED BY, ...), which the
 		// designer does not model. Tables are still browsable and editable
 		// through the DDL editor, including CREATE TABLE.
-		SupportsDesign:  false,
+		SupportsDesign: false,
+		// Doris has a plain EXPLAIN like the rest of this family, so its plan
+		// can be read in the query window even though its tables cannot be
+		// designed here.
+		SupportsExplain: true,
 		ObjectKinds:     []models.ObjectKind{models.KindTable, models.KindView},
 		SortOrder:       46,
 		DefaultDatabase: "",
@@ -108,6 +112,7 @@ func spec() sqlbase.Spec {
 		// Doris creates databases but has nothing to choose about them; see
 		// database.go.
 		DatabaseOptions: DatabaseOptions,
+		ExplainSQL:      mysqlcompat.ExplainSQL,
 		CreateDatabase:  CreateDatabase,
 	}
 }

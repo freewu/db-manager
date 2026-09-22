@@ -240,3 +240,15 @@ func TestTLSConfigNameMapsOurModes(t *testing.T) {
 		}
 	})
 }
+
+// One wrapper for the whole family. MariaDB's ANALYZE form runs the statement,
+// so it must not be the one used here.
+func TestExplainSQLOnlyPlans(t *testing.T) {
+	got := ExplainSQL("SELECT 1")
+	if got != "EXPLAIN SELECT 1" {
+		t.Fatalf("ExplainSQL = %q", got)
+	}
+	if strings.Contains(strings.ToUpper(got), "ANALYZE") {
+		t.Fatalf("the measured form runs the statement: %q", got)
+	}
+}

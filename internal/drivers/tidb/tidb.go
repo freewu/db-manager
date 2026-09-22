@@ -45,10 +45,13 @@ func (Driver) Info() models.DriverInfo {
 		SupportsDatabase: true,
 		SupportsSchema:   false,
 		SupportsDesign:   true,
-		ObjectKinds:      []models.ObjectKind{models.KindTable, models.KindView},
-		SortOrder:        45,
-		DefaultDatabase:  "",
-		Notes:            "MySQL-compatible distributed SQL: the explorer reads the MySQL catalog, the status page adds the cluster topology.",
+		// A plain EXPLAIN is answered by this whole family (see
+		// mysqlcompat.ExplainSQL) and never runs the statement.
+		SupportsExplain: true,
+		ObjectKinds:     []models.ObjectKind{models.KindTable, models.KindView},
+		SortOrder:       45,
+		DefaultDatabase: "",
+		Notes:           "MySQL-compatible distributed SQL: the explorer reads the MySQL catalog, the status page adds the cluster topology.",
 	}
 }
 
@@ -103,6 +106,7 @@ func spec() sqlbase.Spec {
 		// supports and takes the same CREATE DATABASE clauses as MySQL, so the
 		// shared implementation is the whole story.
 		DatabaseOptions: mysqlcompat.DatabaseOptions,
+		ExplainSQL:      mysqlcompat.ExplainSQL,
 		CreateDatabase:  mysqlcompat.CreateDatabase,
 	}
 }

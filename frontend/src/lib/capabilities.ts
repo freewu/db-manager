@@ -30,6 +30,12 @@ export interface Capabilities {
    * DDL needs more than the designer models, which then stays read-only.
    */
   designable: boolean
+  /**
+   * The engine can say how it would run a statement without running it, so the
+   * query window offers a plan view. False for a document store, whose
+   * statements are shell calls there is no plan for.
+   */
+  explainable: boolean
 }
 
 /**
@@ -45,6 +51,7 @@ export function capabilitiesOf(driver: DriverInfo | undefined): Capabilities {
     // A driver we ship no record for is treated as a plain SQL engine, which is
     // what every build so far has been.
     designable: driver ? driver.supportsDesign : true,
+    explainable: driver ? driver.supportsExplain : true,
   }
 }
 

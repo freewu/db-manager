@@ -359,7 +359,7 @@ func TestPlanAlterRejectsDraftsNoEngineWouldAccept(t *testing.T) {
 	}
 
 	cases := []struct {
-		name  string
+		name   string
 		mutate func(*models.TableDesign)
 		want   string
 	}{

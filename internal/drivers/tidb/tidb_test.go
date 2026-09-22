@@ -214,3 +214,15 @@ func containsString(values []string, want string) bool {
 	}
 	return false
 }
+
+// Same guard as the MySQL package: TiDB shares that family's EXPLAIN, so the
+// flag the UI reads has to match the wrapper the spec carries.
+func TestExplainCapabilityMatchesTheSpec(t *testing.T) {
+	hasWrapper := spec().ExplainSQL != nil
+	if info := (Driver{}).Info(); info.SupportsExplain != hasWrapper {
+		t.Fatalf("SupportsExplain = %v but the spec's wrapper is %v", info.SupportsExplain, hasWrapper)
+	}
+	if got := spec().ExplainSQL("SELECT 1"); got != "EXPLAIN SELECT 1" {
+		t.Fatalf("ExplainSQL = %q", got)
+	}
+}

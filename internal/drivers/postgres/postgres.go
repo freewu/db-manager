@@ -36,6 +36,9 @@ func (Driver) Info() models.DriverInfo {
 		SupportsDatabase: true,
 		SupportsSchema:   true,
 		SupportsDesign:   true,
+		// EXPLAIN without ANALYZE only plans the statement; the reason the
+		// measured form is not used is that it would run it.
+		SupportsExplain: true,
 		// Materialized views exist here, so the explorer draws their folder too.
 		// Sequences and procedures do not have an introspector, and a folder that
 		// could never fill up is worse than no folder.
@@ -101,6 +104,9 @@ func spec() sqlbase.Spec {
 		// so PostgreSQL renders it itself; see database.go.
 		DatabaseOptions: DatabaseOptions,
 		CreateDatabase:  CreateDatabase,
+		// Unmeasured EXPLAIN. The plan comes back as one text column with one
+		// row per line, which is exactly what psql shows.
+		ExplainSQL: func(sql string) string { return "EXPLAIN " + sql },
 	}
 }
 

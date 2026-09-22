@@ -5,6 +5,7 @@ import {
   Button,
   Dropdown,
   InputNumber,
+  Segmented,
   Select,
   Space,
   Splitter,
@@ -14,12 +15,14 @@ import {
 import type { MenuProps } from 'antd'
 import type { EditorView } from '@codemirror/view'
 import {
+  AlignLeftOutlined,
   ClearOutlined,
   CopyOutlined,
   DownloadOutlined,
   FileTextOutlined,
   HistoryOutlined,
   LockOutlined,
+  NodeIndexOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
   SaveOutlined,
@@ -27,9 +30,11 @@ import {
 } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
-import type { DriverType, QueryResult } from '../api/types'
+import type { DriverType, ExplainResult, QueryResult } from '../api/types'
+import { capabilitiesOf, findDriver } from '../lib/capabilities'
 import { downloadText, resultToCSV, resultToJSON, toInsertScript } from '../lib/export'
 import { formatDuration } from '../lib/format'
+import { formatSql, formatterDialect } from '../lib/sqlFormat'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { DataGrid } from './DataGrid'
 import { QueryFavorites } from './QueryFavorites'
@@ -58,11 +63,20 @@ export function QueryPane({ tab }: QueryPaneProps) {
   const { message } = AntApp.useApp()
 
   const driver: DriverType | undefined = session?.driver
-  const driverInfo = drivers.find((d) => d.type === driver)
+  const driverInfo = findDriver(drivers, driver)
+  const capabilities = capabilitiesOf(driverInfo)
+  // The formatter is the one place that needs a *grammar* rather than a
+  // capability, so the button asks for the grammar (see lib/sqlFormat.ts).
+  const canFormat = formatterDialect(driver) !== undefined
 
   const [sql, setSql] = useState('')
   const [running, setRunning] = useState(false)
   const [result, setResult] = useState<QueryResult | null>(null)
+  /** The plan of the last statement that was explained, if any. */
+  const [plan, setPlan] = useState<ExplainResult | null>(null)
+  /** Which of the two answers the lower half shows. */
+  const [answer, setAnswer] = useState<'results' | 'plan'>('results')
+  const [explaining, setExplaining] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [maxRows, setMaxRows] = useState(1000)
   const [timeoutMs, setTimeoutMs] = useState(60000)
@@ -161,6 +175,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
       }
       setRunning(true)
       setError(null)
+      setAnswer('results')
       try {
         const res = await api.executeSql({
           sessionId: tab.sessionId,
@@ -198,6 +213,91 @@ export function QueryPane({ tab }: QueryPaneProps) {
     const selected = view.state.sliceDoc(from, to)
     void execute(selected.trim() ? selected : sql)
   }, [execute, sql])
+
+  /**
+   * What the editor would run: the selection when there is one, the whole
+   * script otherwise. Explaining and formatting both act on the same text the
+   * Run buttons would, so the three can never disagree about what is "current".
+   */
+  const targetText = useCallback(() => {
+    const view = viewRef.current
+    if (!view) return sql
+    const { from, to } = view.state.selection.main
+    const selected = view.state.sliceDoc(from, to)
+    return selected.trim() ? selected : sql
+  }, [sql])
+
+  /**
+   * Reads the plan of the current statement without running it.
+   *
+   * The engine is asked, not the user's text: a plan describes one statement,
+   * and the service refuses a script rather than silently picking one out of it.
+   */
+  const explain = useCallback(async () => {
+    const text = targetText().trim()
+    if (!text) {
+      message.info('Nothing to explain')
+      return
+    }
+    setExplaining(true)
+    setError(null)
+    try {
+      const res = await api.explainSql({
+        sessionId: tab.sessionId,
+        database,
+        sql: text,
+        timeoutMs,
+      })
+      setPlan(res)
+      setAnswer('plan')
+    } catch (err) {
+      // A statement the engine cannot plan (a typo, a missing table) is the
+      // same kind of failure as one it cannot run, and is reported in the same
+      // place — the results half, which is where the eye already is.
+      setError(toMessage(err))
+      setPlan(null)
+      setAnswer('results')
+    } finally {
+      setExplaining(false)
+    }
+  }, [database, message, tab.sessionId, targetText, timeoutMs])
+
+  /**
+   * Re-indents the current statement in place.
+   *
+   * A selection is replaced where it stands (a long script is formatted piece
+   * by piece, which is why the selection is what gets formatted when there is
+   * one); otherwise the whole text is replaced. A statement the grammar cannot
+   * parse leaves the editor untouched and says why.
+   */
+  const reformat = useCallback(() => {
+    const view = viewRef.current
+    const whole = !view || !view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to).trim()
+    const text = whole ? sql : targetText()
+    if (!text.trim()) {
+      message.info('Nothing to format')
+      return
+    }
+
+    const outcome = formatSql(text, driver)
+    if (outcome.unsupported) {
+      message.info('This engine\u2019s statements are not SQL, so there is no SQL formatting for them')
+      return
+    }
+    if (outcome.error) {
+      message.error(`Could not format: ${outcome.error}`)
+      return
+    }
+    const formatted = outcome.formatted ?? text
+    if (formatted === text) return
+
+    if (!view || whole) {
+      changeSql(formatted)
+      return
+    }
+    const { from, to } = view.state.selection.main
+    view.dispatch({ changes: { from, to, insert: formatted } })
+  }, [changeSql, driver, message, sql, targetText])
 
   const exportResult = useCallback(
     async (format: 'csv' | 'json' | 'sql') => {
@@ -273,6 +373,32 @@ export function QueryPane({ tab }: QueryPaneProps) {
     [changeSql, history],
   )
 
+  /**
+   * The plan, dressed as a result set.
+   *
+   * Every engine describes its plan differently and the driver is the one that
+   * knows how (see internal/drivers/sqlbase/explain.go), so by the time it gets
+   * here it is already columns and rows: the grid needs no new code and a plan
+   * can be copied out exactly like a result.
+   */
+  const planResult: QueryResult | null = useMemo(
+    () =>
+      plan && {
+        columns: plan.columns,
+        rows: plan.rows,
+        rowCount: plan.rows.length,
+        affectedRows: 0,
+        lastInsertId: 0,
+        durationMs: plan.durationMs,
+        truncated: plan.truncated,
+        hasResultSet: plan.rows.length > 0,
+        sql: plan.statement,
+        statementIndex: 0,
+        statementCount: 1,
+      },
+    [plan],
+  )
+
   const exportMenu: MenuProps = {
     items: [
       { key: 'csv', label: 'Export CSV', onClick: () => void exportResult('csv') },
@@ -302,6 +428,27 @@ export function QueryPane({ tab }: QueryPaneProps) {
             Run selection
           </Button>
         </Tooltip>
+        <Tooltip
+          title={
+            capabilities.explainable
+              ? 'Plan the current statement without running it'
+              : `${driverInfo?.displayName ?? 'This engine'} has no plan to read`
+          }
+        >
+          {/* A disabled antd button swallows the hover event, so the tooltip
+              that explains *why* it is disabled needs a wrapper to hang on. */}
+          <span>
+            <Button
+              size="small"
+              icon={<NodeIndexOutlined />}
+              disabled={!capabilities.explainable}
+              loading={explaining}
+              onClick={() => void explain()}
+            >
+              Explain
+            </Button>
+          </span>
+        </Tooltip>
         <Dropdown menu={historyMenu} trigger={['click']}>
           <Button size="small" icon={<HistoryOutlined />}>
             History
@@ -313,6 +460,24 @@ export function QueryPane({ tab }: QueryPaneProps) {
           database={database}
           onLoad={changeSql}
         />
+        <Tooltip
+          title={
+            !canFormat
+              ? 'This engine\u2019s statements are not SQL'
+              : 'Re-indent the selection, or the whole script (Ctrl/Cmd+Shift+F)'
+          }
+        >
+          <span>
+            <Button
+              size="small"
+              icon={<AlignLeftOutlined />}
+              disabled={!canFormat}
+              onClick={reformat}
+            >
+              Format
+            </Button>
+          </span>
+        </Tooltip>
         <Tooltip title="Clear editor">
           <Button size="small" icon={<ClearOutlined />} onClick={() => setSql('')} />
         </Tooltip>
@@ -403,6 +568,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
             onRun={runAll}
             onRunSelection={runSelection}
             onSave={file ? () => void save() : undefined}
+            onFormat={canFormat ? reformat : undefined}
             onReady={(view) => {
               viewRef.current = view
             }}
@@ -428,7 +594,34 @@ export function QueryPane({ tab }: QueryPaneProps) {
               </div>
             ) : null}
 
-            {result && !result.hasResultSet ? (
+            {capabilities.explainable ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '6px 10px',
+                  flex: '0 0 auto',
+                }}
+              >
+                <Segmented
+                  size="small"
+                  value={answer}
+                  options={[
+                    { label: 'Results', value: 'results' },
+                    { label: 'Plan', value: 'plan' },
+                  ]}
+                  onChange={(value) => setAnswer(value as 'results' | 'plan')}
+                />
+                {answer === 'plan' && plan ? (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    estimated, not measured
+                  </Typography.Text>
+                ) : null}
+              </div>
+            ) : null}
+
+            {answer === 'results' && result && !result.hasResultSet ? (
               <div style={{ padding: 12, flex: '0 0 auto' }}>
                 <Alert
                   type="success"
@@ -438,7 +631,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
               </div>
             ) : null}
 
-            {result?.truncated ? (
+            {answer === 'results' && result?.truncated ? (
               <div style={{ padding: '0 12px 8px', flex: '0 0 auto' }}>
                 <Alert
                   type="warning"
@@ -448,9 +641,11 @@ export function QueryPane({ tab }: QueryPaneProps) {
               </div>
             ) : null}
 
-            {result?.hasResultSet ? (
+            {answer === 'results' && result?.hasResultSet ? (
               <DataGrid result={result} loading={running} primaryKey={undefined} />
-            ) : (
+            ) : null}
+
+            {answer === 'results' && !result?.hasResultSet ? (
               <div
                 className="dm-pane-body"
                 style={{
@@ -485,9 +680,9 @@ export function QueryPane({ tab }: QueryPaneProps) {
                   </Typography.Text>
                 )}
               </div>
-            )}
+            ) : null}
 
-            {result?.messages && result.messages.length > 0 ? (
+            {answer === 'results' && result?.messages && result.messages.length > 0 ? (
               <div className="dm-messages">
                 {result.messages.map((entry, index) => (
                   <div key={index}>{entry}</div>
@@ -495,7 +690,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
               </div>
             ) : null}
 
-            {result?.hasResultSet ? (
+            {answer === 'results' && result?.hasResultSet ? (
               <div
                 className="dm-statusbar"
                 style={{ borderTop: '1px solid var(--dm-border)', background: 'transparent' }}
@@ -512,6 +707,87 @@ export function QueryPane({ tab }: QueryPaneProps) {
                 <span className="dm-spacer" />
                 <Space size={4} />
               </div>
+            ) : null}
+
+            {answer === 'plan' ? (
+              plan && planResult ? (
+                <>
+                  <div style={{ padding: '8px 12px 0', flex: '0 0 auto' }}>
+                    {/* The text that was sent, verbatim: the wrapper is the
+                        engine's own and hiding it would make the plan below
+                        impossible to reproduce by hand. */}
+                    <div
+                      className="mono"
+                      style={{ fontSize: 12, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                    >
+                      {plan.statement}
+                    </div>
+                    {plan.notes?.length ? (
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        {plan.notes.join(' ')}
+                      </Typography.Text>
+                    ) : null}
+                  </div>
+
+                  {plan.rows.length > 0 ? (
+                    <>
+                      <DataGrid
+                        result={planResult}
+                        loading={explaining}
+                        primaryKey={undefined}
+                      />
+                      <div
+                        className="dm-statusbar"
+                        style={{
+                          borderTop: '1px solid var(--dm-border)',
+                          background: 'transparent',
+                        }}
+                      >
+                        <span className="dm-statusbar-item">
+                          {plan.rows.length.toLocaleString()} plan step(s)
+                        </span>
+                        <span className="dm-statusbar-item">{formatDuration(plan.durationMs)}</span>
+                        <span className="dm-spacer" />
+                        <Space size={4} />
+                      </div>
+                    </>
+                  ) : (
+                    <div
+                      className="dm-pane-body"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flex: '1 1 auto',
+                      }}
+                    >
+                      <Typography.Text type="secondary">
+                        The engine returned no plan steps for this statement.
+                      </Typography.Text>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div
+                  className="dm-pane-body"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column',
+                    gap: 8,
+                    opacity: 0.55,
+                    flex: '1 1 auto',
+                  }}
+                >
+                  <Typography.Text type="secondary">
+                    Press Explain to see how the engine would run the current statement.
+                  </Typography.Text>
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                    Nothing is executed. Explaining a statement that writes is safe.
+                  </Typography.Text>
+                </div>
+              )
             ) : null}
           </div>
         </Splitter.Panel>

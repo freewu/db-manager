@@ -18,6 +18,8 @@
 - **数据网格**：分页、服务端排序、服务端过滤（14 种操作符）、列宽自适应、长文本悬浮预览、多选、行详情抽屉（JSON / INSERT 预览）。
 - **行编辑**：双击单元格内联编辑、批量删除选中行；所有写操作都以主键为条件并**全部使用参数绑定**。
 - **SQL 编辑器**：基于 CodeMirror 6，按驱动切换语言（MongoDB 用 JavaScript，其余用各自方言）、语法高亮与补全、多语句执行、执行历史、`Ctrl/Cmd+Enter` 执行全部、`Ctrl/Cmd+Shift+Enter` 执行选中。
+- **查询计划（Explain）**：查询窗口工具条上的 **Explain** 不去执行，而是问引擎「这一条你打算怎么跑」—— 后端按 `Spec.ExplainSQL` 套上各自的包装（MySQL 一族的 `EXPLAIN`、PostgreSQL 的 `EXPLAIN`、SQLite 的 `EXPLAIN QUERY PLAN`），结果铺进和数据网格同一个表格，下半区用 `Results` / `Plan` 两档切换，正文上方原样印出真正发出去的那条语句；包装**永远不带 `ANALYZE`**，所以什么都没被执行 —— 只读连接能解释，`DELETE` / `UPDATE` 也能先看计划再决定跑不跑，面板上同时写明「这是估算、不是实测」。一次只解释**一条**语句：脚本会被回绝并说明找到几条（要解释哪一条就选中哪一条）；`DriverInfo.supportsExplain` 为假的引擎（MongoDB，它的语句是 shell 调用）按钮是灰的并说明原因，而不是点了才报错。
+- **SQL 格式化**：工具条上的 **Format**（`Ctrl/Cmd+Shift+F`）按引擎的 SQL 文法重新缩进当前语句 —— 只有「关键字大写」这一个主张，其余只是空白；有选中就只格式化选中、没有就整篇，文法读不出来的脚本**原样不动**并说出错在哪（半格式化的脚本比不格式化更糟）。文法名与高亮一样由驱动决定（`frontend/src/lib/sqlFormat.ts`，走 `sql-formatter` 的文法表）；MongoDB 没有 SQL 可格式化，按钮是灰的。
 - **结构查看器**：列、索引、外键、原始 DDL（优先使用引擎原生 DDL），DDL 可复制或导出；这份 DDL 是**带语法高亮的**（关键字 / 类型 / 字符串 / 数字 / 注释 / 引号里的名字各一色），高亮由前端自己扫一遍字符得到，不引第三方词法库，也不把脚本拼成 HTML —— 字符串字面量里的 `<img>` 就只是那几个字符；同一套读法还用在该语句出现的其它只读场合（保存前的语句清单、设计器右侧的预览、新建数据库的语句预览），并按引擎分别处理：PostgreSQL 的 `"…"` 是名字而 MySQL 的是字符串、`$tag$…$tag$` 整段算一个字符串（函数体就这么活下来）、MongoDB 的 shell 按 JavaScript 读（`--` 在那里是自减而不是注释）。文档型引擎的「结构」页是**抽样得到的字段表**（字段名 / 类型 / 是否可能缺失），并说明集合本身没有 schema。
 - **表设计器**：表格窗口的「结构」页就是编辑器 —— 直接改字段名 / 类型 / NULL / 默认值 / 主键 / 自增 / 注释，增删索引，右侧实时渲染将要执行的 SQL（同样带语法高亮）与引擎限制警告；保存前无需联网猜测，保存时逐条执行并如实报告「第几条失败」（MySQL / PostgreSQL / SQLite 各自的限制都写在警告里）。**建表走同一条路**：连接树里「表」文件夹右键的 `New table…` 开一个空设计（一个主键字段起步，表名就在工具条上敲），预览与保存用的还是同一个规划器 —— 只是把实时目录换成空基线，`ALTER` 换成 `CREATE`；建完这个窗口会变成刚建好的那张表，停在「结构」页。引擎给不出设计器的（MongoDB、Doris）这一页退化成**只读字段列表**并直说「这个引擎没有表设计器」，不摆一个按下去会失败的按钮。
 - **查询收藏**：查询窗口工具条上的「Favourites」可以把当前 SQL 命名保存（默认用第一行非注释文本作名），下拉里一键载入、重命名或删除；收藏存在 `queries.json` 里，与连接配置互不影响，换窗口、换连接都能用。
@@ -152,6 +154,9 @@ wails build
 `sqlbase` 已经实现，没实现的驱动由 service 退化成逐个对象的 `Structure`，图照样能画；
 DDL 编辑器要的 `drivers.Analyzer`（脚本干跑）同理 —— SQL 引擎用 `sqlutil` 的关键字启发式，
 MongoDB 用自己的解析器回答，因为 `db.orders.drop()` 认不出任何 SQL 关键字。
+查询窗口的 Plan 视图问的是 `drivers.Explainer`：`sqlbase.Conn` 统一实现，**具体发哪句由 `Spec.ExplainSQL`
+决定**（没有这个钩子的 spec 直接回 `unsupported`，不必连一次服务器才知道），而它只允许带上不执行语句的
+包装（`EXPLAIN` / `EXPLAIN QUERY PLAN` 这些），`EXPLAIN ANALYZE` 那种会真跑一遍的形式不在这里出现。
 「建库」则是 `drivers.DatabaseCreator`：两种方法（`DatabaseOptions` 读出这台服务器接受什么、
 `CreateDatabase` 渲染语句）在所有 SQL 引擎上都存在，但**支不支持由 `Spec` 里的钩子决定** ——
 SQLite 两个钩子都是 nil，`DatabaseOptions` 于是明确回 `unsupported`，
@@ -161,7 +166,9 @@ Doris 与 MongoDB 只回一句 hint（前者没有库级字符集，后者根本
 **「引擎能不能做这件事」由后端说，前端只读结果**：`DriverInfo.relational` / `supportsDatabase` /
 `supportsSchema` 决定界面上出现什么，`supportsDesign` 说明这个引擎有没有表设计器（MongoDB、Doris 为
 `false`）——「结构」页据此换成只读字段列表：有列不等于这个引擎能被这个设计器编辑，如实说「没有设计器」
-比给一个点了会失败的按钮好。`objectKinds` 是同一类事实的第四项：这个引擎装得下哪几种对象
+比给一个点了会失败的按钮好。`supportsExplain` 说的是同一类事实的另一面：它的语句能不能被问出一份计划
+（MongoDB 同样为 `false`，`db.orders.find()` 是 shell 调用，没有计划可读），查询窗口据此决定 Plan 那一档
+要不要出现。`objectKinds` 是同一类事实的第四项：这个引擎装得下哪几种对象
 （MySQL / TiDB / Doris / SQLite 是表与视图，PostgreSQL 多一个物化视图，MongoDB 是集合加视图），
 浏览器的文件夹就照着它画。前端读的是同一份结果（`frontend/src/lib/capabilities.ts`），不按引擎名写 if ——
 `driver !== 'mongodb'` 这种判断只对一次，再加一个文档型引擎就全是洞。
@@ -553,7 +560,10 @@ just test
 
 `internal/drivers/sqlite` 的测试覆盖了完整链路：目录查询、结构 + DDL、
 主键顺序分页、`COUNT(*)`、`contains` / `isNull` 过滤、内联更新（含写入 `NULL`）、
-过期主键返回 0 行、按主键删除。`internal/config` 与 `internal/service` 还分别盯住了
+过期主键返回 0 行、按主键删除。查询计划那一组测试更较真：它解释完 `INSERT` / `UPDATE` / `DELETE` 之后
+**再数一遍行数、比一次字段值**，确认「Explain 只出计划、不执行」是真的，写错的语句按要求报
+`query_failed`、没有包装的 spec 不去连服务器就回 `unsupported`；service 层再验证多语句脚本会被回绝
+并说出找到几条，以及 `Analyzer` / `Grapher` 之外这道可选的 `Explainer` 拿不到时如实报 `unsupported`。`internal/config` 与 `internal/service` 还分别盯住了
 查询收藏的磁盘往返（更新不重复、删不掉别人的文件）与校验/排序/保留 `createdAt`；
 `internal/drivers/sqlutil` 则用纯函数盯住脚本干跑的分类与破坏性判定（注释里的 `drop` 不算，
 无 `WHERE` 的 `DELETE` 要算），不依赖任何数据库；ER 图在 SQLite 上端到端跑一遍
@@ -657,6 +667,7 @@ just publish 0.2.0 "新增 Navicat 风格连接树；索引成为一等资源"
   - [x] 表设计器：字段与索引的可视化编辑 + 实时 SQL 预览（Navicat 的「结构」页）
   - [x] 查询收藏：命名 SQL 片段，查询窗口里可载入 / 改名 / 删除
   - [x] DDL 编辑器：对象定义开成可编辑脚本，附逐条语句的干跑预警
+  - [x] 查询计划与格式化：Explain 只看不跑（Results / Plan 两档切换），Format 按文法重新缩进
   - [x] ER 图：命名空间的关系图，可搜索 / 缩放 / 导出 SVG，点节点开表
   - [x] 新建数据库：字符集 / 排序规则（MySQL 一族）、编码与 locale（PostgreSQL）由服务端回答，语句先展示再执行
   - [x] 运行情况：双击连接看服务端现状，每个引擎一个视图

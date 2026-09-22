@@ -104,6 +104,12 @@ export interface DriverInfo {
    */
   supportsDesign: boolean
   /**
+   * Whether the engine can be asked how it would run a statement without
+   * running it, which is what the query window's Plan view shows. False for a
+   * document store, whose statements are shell calls with no plan to read.
+   */
+  supportsExplain: boolean
+  /**
    * The kinds of object this engine can hold, in the order the explorer draws
    * their folders. Every one gets a folder whether or not it holds anything,
    * so an empty database still shows "Tables (0)" instead of nothing. The
@@ -461,6 +467,35 @@ export interface ExecRequest {
   maxRows?: number
   timeoutMs?: number
   readOnly?: boolean
+}
+
+/**
+ * A query plan: what the engine would do with one statement, not what it did.
+ *
+ * The plan is poured into the same grid shape a result set uses, because every
+ * engine describes it differently (MySQL answers with a table of columns,
+ * PostgreSQL with a column of indented text, SQLite with one row per step) and
+ * the driver is the only place that knows which.
+ */
+export interface ExplainResult {
+  /** The exact text that was sent, wrapper included. */
+  statement: string
+  /** The statement being explained, without the wrapper. */
+  sql: string
+  columns: ColumnMeta[]
+  rows: CellValue[][]
+  /** What the plan itself does not say — that it is an estimate, mainly. */
+  notes?: string[]
+  durationMs: number
+  truncated: boolean
+}
+
+/** Asks about one statement: a plan describes one, so this is not `ExecRequest`. */
+export interface ExplainRequest {
+  sessionId: string
+  database?: string
+  sql: string
+  timeoutMs?: number
 }
 
 /** One component of a row identity (a primary key column and its value). */

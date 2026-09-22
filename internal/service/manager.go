@@ -746,6 +746,50 @@ func (m *Manager) AnalyzeScript(sessionID, sql string) (*models.ScriptAnalysis, 
 	return &analysis, nil
 }
 
+// Explain asks the engine how it would run a statement, without running it.
+//
+// One statement only: a plan describes one statement, and an engine handed a
+// script would either explain the first one silently or answer with several
+// plans the window has no place for side by side. Nothing is measured (no
+// EXPLAIN ANALYZE anywhere), so this is safe on a read-only session and safe on
+// a statement that writes — which is the point: a plan is what you look at
+// before deciding whether to run something.
+func (m *Manager) Explain(req models.ExplainRequest) (*models.ExplainResult, error) {
+	s, err := m.session(req.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.SQL) == "" {
+		return nil, apperr.New(apperr.CodeInvalidConfig, "there is nothing to explain yet")
+	}
+
+	// The driver is asked first, so a document store says "this engine has no
+	// plan" rather than being told about its statement count.
+	explainer, ok := s.conn.(drivers.Explainer)
+	if !ok {
+		return nil, apperr.New(apperr.CodeUnsupported, "this driver cannot explain a statement")
+	}
+
+	statements := sqlutil.SplitStatements(req.SQL)
+	if len(statements) != 1 {
+		if len(statements) == 0 {
+			return nil, apperr.New(apperr.CodeInvalidConfig, "there is nothing to explain yet")
+		}
+		return nil, apperr.New(apperr.CodeInvalidConfig,
+			"a plan describes one statement, but this editor holds %d — run the selection instead",
+			len(statements))
+	}
+
+	ctx, cancel := m.ctx(QueryTimeout(req.TimeoutMS))
+	defer cancel()
+
+	return explainer.Explain(ctx, drivers.ExplainRequest{
+		Database:  req.Database,
+		SQL:       statements[0],
+		TimeoutMS: req.TimeoutMS,
+	})
+}
+
 // --- table designer --------------------------------------------------------
 
 // PlanDesign renders the script that turns the live table into the designer's

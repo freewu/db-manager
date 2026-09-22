@@ -139,6 +139,14 @@ type DriverInfo struct {
 	// list in place of the designer.
 	SupportsDesign bool `json:"supportsDesign"`
 
+	// SupportsExplain says the engine can be asked how it would run a statement
+	// without running it, which is what the query window's plan view shows. It
+	// is deliberately not `relational`: the flag is set where the driver
+	// implements drivers.Explainer, so the window can hide the button instead of
+	// offering an action that always fails (a document store has no such
+	// statement to send).
+	SupportsExplain bool `json:"supportsExplain"`
+
 	// ObjectKinds are the kinds of object this engine can hold, in the order the
 	// explorer draws their folders. Every one of them gets a folder whether or
 	// not it holds anything: "Tables (0)" tells the user the database exists and
@@ -428,6 +436,45 @@ type QueryResult struct {
 	StatementIndex int      `json:"statementIndex"`
 	StatementCount int      `json:"statementCount"`
 	Messages       []string `json:"messages,omitempty"`
+}
+
+// --- query plans -----------------------------------------------------------
+
+// ExplainResult is what an engine answers when it is asked how it *would* run a
+// statement.
+//
+// The plan is poured into the same grid shape a result set uses (Columns/Rows)
+// because every engine describes it differently: MySQL answers with a table of
+// id/select_type/table/rows/Extra, PostgreSQL with a column of indented text,
+// SQLite with one row per step of a plan tree. Teaching the window each of
+// those shapes would mean the next engine needs a new view; mapping them in the
+// driver means the answer is already readable.
+type ExplainResult struct {
+	// Statement is the exact text that was sent, so a plan can never be read as
+	// if it were about other SQL than the one in the editor.
+	Statement string `json:"statement"`
+	// SQL is the statement being explained, without the EXPLAIN wrapper.
+	SQL string `json:"sql"`
+
+	Columns []ColumnMeta `json:"columns"`
+	Rows    [][]any      `json:"rows"`
+
+	// Notes say what the plan itself does not: that it is an estimate rather
+	// than a measurement, and anything engine specific that would otherwise be
+	// misread as a fact about the query.
+	Notes      []string `json:"notes,omitempty"`
+	DurationMS int64    `json:"durationMs"`
+	Truncated  bool     `json:"truncated"`
+}
+
+// ExplainRequest asks about one statement. It lives here rather than reusing
+// ExecRequest because a plan request has one statement, no row limit and no
+// read-only flag: explaining changes nothing, so a read-only session may do it.
+type ExplainRequest struct {
+	SessionID string `json:"sessionId"`
+	Database  string `json:"database,omitempty"`
+	SQL       string `json:"sql"`
+	TimeoutMS int    `json:"timeoutMs,omitempty"`
 }
 
 // --- scripts (DDL editor) --------------------------------------------------

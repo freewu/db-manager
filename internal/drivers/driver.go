@@ -106,6 +106,27 @@ type Analyzer interface {
 	AnalyzeScript(script string, readOnly bool) models.ScriptAnalysis
 }
 
+// Explainer is an optional Conn capability: how the engine would run a
+// statement, without running it.
+//
+// The query window's "Plan" view calls this. Keeping it apart from Execute is
+// what lets the promise in its name be kept literally — no driver is ever asked
+// to execute anything in order to produce a plan, so PostgreSQL's EXPLAIN
+// ANALYZE (which *does* run the statement and then throws the rows away) is
+// never emitted. An engine whose statements cannot be described in one generic
+// SQL statement does not implement this, and the window says so instead of
+// showing an empty grid.
+type Explainer interface {
+	Explain(ctx context.Context, req ExplainRequest) (*models.ExplainResult, error)
+}
+
+// ExplainRequest is the driver-level explain request (no session ids).
+type ExplainRequest struct {
+	Database  string
+	SQL       string
+	TimeoutMS int
+}
+
 // DatabaseCreator is an optional Conn capability: how this engine creates a
 // database, and what its server accepts for the new one's character set.
 //
