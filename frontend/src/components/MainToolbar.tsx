@@ -28,9 +28,9 @@ import { FOLDER_LABEL } from '../lib/tree'
  * The ribbon keeps its shape so the layout still reads like the main window,
  * but only the commands that act on what the explorer is focused on are live:
  * creating a connection, opening the picked profile, closing the picked
- * session, refreshing its catalog, and listing the objects of the picked
- * namespace. The handlers are left wired so putting a group back in service is
- * a one-line change.
+ * session, refreshing its catalog, opening a query window on the picked
+ * database, and listing the objects of the picked namespace. The handlers are
+ * left wired so putting a group back in service is a one-line change.
  */
 const PARKED = 'Temporarily unavailable'
 
@@ -38,16 +38,15 @@ const PARKED = 'Temporarily unavailable'
  * Navicat-style ribbon: flat, grouped, icon-over-label buttons.
  *
  * The button set mirrors Navicat's main window one-for-one so the layout reads
- * the same, but only *Connection*, *Open*, *Close*, *Refresh*, *Table*, *View*
- * and *Settings* are live. Everything else is disabled and says why — a dead
- * button is worse than an honest gap, but an empty toolbar is not the layout we
- * are after.
+ * the same, but only *Connection*, *Open*, *Close*, *New Query*, *Refresh*,
+ * *Table*, *View* and *Settings* are live. Everything else is disabled and says
+ * why — a dead button is worse than an honest gap, but an empty toolbar is not
+ * the layout we are after.
  */
 export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const connections = useAppStore((s) => s.connections)
   const drivers = useAppStore((s) => s.drivers)
   const sessions = useAppStore((s) => s.sessions)
-  const activeSessionId = useAppStore((s) => s.activeSessionId)
   const activeConnectionId = useAppStore((s) => s.activeConnectionId)
   const activeNamespace = useAppStore((s) => s.activeNamespace)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
@@ -59,7 +58,6 @@ export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) 
   const { connect, pending } = useConnect()
   const [refreshing, setRefreshing] = useState(false)
 
-  const activeSession = sessions.find((s) => s.id === activeSessionId)
   // What the ribbon acts on: the connection the explorer is focused on. It is
   // either a profile nobody has opened yet (Open lights up) or one with a live
   // session behind it (Close and Refresh do).
@@ -177,9 +175,24 @@ export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) 
       <RibbonButton
         icon={<CodeOutlined />}
         label="New Query"
-        hint={PARKED}
-        disabled
-        onClick={() => activeSession && openQueryTab(activeSession.id, activeSession.database)}
+        // Lights up while the explorer is inside a database, the same way
+        // *Table* and *View* do, and opens a window on that very database —
+        // carrying the schema it was picked in, which is what the window
+        // completes table names from.
+        hint={
+          focusedNamespace
+            ? `New query in ${focusedNamespace.database}`
+            : 'Pick a database in the tree first'
+        }
+        disabled={!focusedNamespace}
+        onClick={() =>
+          focusedNamespace &&
+          openQueryTab(
+            focusedNamespace.sessionId,
+            focusedNamespace.database,
+            focusedNamespace.schema,
+          )
+        }
       />
       <RibbonButton
         icon={<ReloadOutlined />}

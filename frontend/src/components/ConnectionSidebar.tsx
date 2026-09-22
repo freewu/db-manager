@@ -500,7 +500,7 @@ export function ConnectionSidebar() {
                   key: 'query',
                   icon: <EditOutlined />,
                   label: 'New query',
-                  onClick: () => openQueryTab(sessionId, database),
+                  onClick: () => openQueryTab(sessionId, database, schema),
                 },
                 ...(relational
                   ? [
@@ -558,7 +558,7 @@ export function ConnectionSidebar() {
                     key: 'query',
                     icon: <EditOutlined />,
                     label: 'New query',
-                    onClick: () => openQueryTab(sessionId, database),
+                    onClick: () => openQueryTab(sessionId, database, schema),
                   },
                   ...(relational
                     ? [

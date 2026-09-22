@@ -9,12 +9,14 @@ import {
   SQLite,
   StandardSQL,
   sql,
+  type SQLNamespace,
 } from '@codemirror/lang-sql'
 import { Prec, type Extension } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 
-import type { DriverType } from '../api/types'
+import type { DriverType, ObjectInfo } from '../api/types'
 import { isMySQLFamily } from '../lib/sqlFlavor'
+import { KIND_SINGULAR } from '../lib/tree'
 
 interface SqlEditorProps {
   value: string
@@ -40,6 +42,38 @@ interface SqlEditorProps {
   onFormat?: () => void
   /** Receives the EditorView so callers can read the current selection. */
   onReady?: (view: EditorView) => void
+  /**
+   * The tables and views the window is about, completed by name.
+   *
+   * The list is the namespace's catalog, so it carries names and kinds but no
+   * columns: a name completes, and `table.` then has nothing to offer. Left out
+   * (or empty) the editor completes keywords only.
+   */
+  catalog?: readonly ObjectInfo[]
+}
+
+/**
+ * The completion list for a window's namespace.
+ *
+ * lang-sql's `schema` is a namespace: each key is a table and its value is that
+ * table's columns. The `{self, children}` form is what lets an entry say it is
+ * a table or a view — the default entry is typed `type`, which says nothing —
+ * while an empty child list still completes the name itself.
+ */
+function namespaceOf(catalog: readonly ObjectInfo[] | undefined): SQLNamespace | undefined {
+  if (!catalog || catalog.length === 0) return undefined
+  const namespace: Record<string, SQLNamespace> = {}
+  for (const object of catalog) {
+    namespace[object.name] = {
+      self: {
+        label: object.name,
+        type: 'type',
+        detail: KIND_SINGULAR[object.kind].toLowerCase(),
+      },
+      children: [],
+    }
+  }
+  return namespace
 }
 
 /**
@@ -50,21 +84,21 @@ interface SqlEditorProps {
  * would mark every call and every brace as a mistake. Everything else is SQL,
  * with the engine's own dialect.
  */
-function languageFor(driver: DriverType | undefined): Extension {
-  if (isMySQLFamily(driver)) return sql({ dialect: MySQL, upperCaseKeywords: true })
+function languageFor(driver: DriverType | undefined, schema: SQLNamespace | undefined): Extension {
+  if (isMySQLFamily(driver)) return sql({ dialect: MySQL, upperCaseKeywords: true, schema })
   switch (driver) {
     case 'mongodb':
       return javascript()
     case 'postgres':
-      return sql({ dialect: PostgreSQL, upperCaseKeywords: true })
+      return sql({ dialect: PostgreSQL, upperCaseKeywords: true, schema })
     case 'sqlite':
-      return sql({ dialect: SQLite, upperCaseKeywords: true })
+      return sql({ dialect: SQLite, upperCaseKeywords: true, schema })
     case 'sqlserver':
-      return sql({ dialect: MSSQL, upperCaseKeywords: true })
+      return sql({ dialect: MSSQL, upperCaseKeywords: true, schema })
     case 'oracle':
-      return sql({ dialect: PLSQL, upperCaseKeywords: true })
+      return sql({ dialect: PLSQL, upperCaseKeywords: true, schema })
     default:
-      return sql({ dialect: StandardSQL, upperCaseKeywords: true })
+      return sql({ dialect: StandardSQL, upperCaseKeywords: true, schema })
   }
 }
 
@@ -80,10 +114,11 @@ export function SqlEditor({
   onSave,
   onFormat,
   onReady,
+  catalog,
 }: SqlEditorProps) {
   const extensions = useMemo(
     () => [
-      languageFor(driver),
+      languageFor(driver, namespaceOf(catalog)),
       EditorView.lineWrapping,
       // Highest precedence so the shortcuts win over CodeMirror defaults.
       Prec.highest(
@@ -131,7 +166,7 @@ export function SqlEditor({
         ]),
       ),
     ],
-    [driver, onRun, onRunSelection, onSave, onFormat],
+    [catalog, driver, onRun, onRunSelection, onSave, onFormat],
   )
 
   return (

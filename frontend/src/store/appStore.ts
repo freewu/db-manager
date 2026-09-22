@@ -308,7 +308,15 @@ interface AppState {
   setTabDirty: (tabId: string, dirty: boolean) => void
   invalidateSession: (sessionId: string) => void
 
-  openQueryTab: (sessionId: string, database?: string) => void
+  /**
+   * Opens a query window over one database.
+   *
+   * `schema` is the namespace inside that database whose table names the window
+   * completes; it is left out where the caller only knows the database (a
+   * connection node, the tab strip), and the window then falls back to what the
+   * explorer has already loaded (see `catalogOf` in lib/tree.ts).
+   */
+  openQueryTab: (sessionId: string, database?: string, schema?: string) => void
   /**
    * Opens a saved script, or brings its window back to the front when it is
    * already open. One tab per file: the file is the thing being edited, and two
@@ -909,7 +917,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }))
   },
 
-  openQueryTab(sessionId, database) {
+  openQueryTab(sessionId, database, schema) {
     const id = `query:${sessionId}:${Math.random().toString(36).slice(2, 10)}`
     const tab: WorkspaceTab = {
       id,
@@ -917,6 +925,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       sessionId,
       title: 'Query',
       database,
+      schema,
     }
     set((state) => ({
       tabs: [...state.tabs, tab],

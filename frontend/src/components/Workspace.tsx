@@ -22,6 +22,7 @@ export function Workspace() {
   const closeTab = useAppStore((s) => s.closeTab)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const activeSessionId = useAppStore((s) => s.activeSessionId)
+  const activeNamespace = useAppStore((s) => s.activeNamespace)
   const { modal } = AntApp.useApp()
 
   /**
@@ -98,7 +99,15 @@ export function Workspace() {
                   type="text"
                   icon={<PlusOutlined />}
                   disabled={!activeSessionId}
-                  onClick={() => activeSessionId && openQueryTab(activeSessionId)}
+                  onClick={() => {
+                    if (!activeSessionId) return
+                    // The same rule as the ribbon's *New Query*: the window opens
+                    // on the database the explorer is standing in, when it is
+                    // standing in one of this session's.
+                    const scope =
+                      activeNamespace?.sessionId === activeSessionId ? activeNamespace : undefined
+                    openQueryTab(activeSessionId, scope?.database, scope?.schema)
+                  }}
                 />
               </Tooltip>
             </Space>

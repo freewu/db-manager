@@ -35,6 +35,7 @@ import { capabilitiesOf, findDriver } from '../lib/capabilities'
 import { downloadText, resultToCSV, resultToJSON, toInsertScript } from '../lib/export'
 import { formatDuration } from '../lib/format'
 import { formatSql, formatterDialect } from '../lib/sqlFormat'
+import { catalogOf, objectsKey } from '../lib/tree'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { DataGrid } from './DataGrid'
 import { QueryFavorites } from './QueryFavorites'
@@ -58,6 +59,9 @@ export function QueryPane({ tab }: QueryPaneProps) {
   const session = useAppStore((s) => s.sessionOf(tab.sessionId))
   const drivers = useAppStore((s) => s.drivers)
   const theme = useAppStore((s) => s.resolvedTheme)
+  const treeObjects = useAppStore((s) => s.tree.objects)
+  const treeSchemas = useAppStore((s) => s.tree.schemas)
+  const loadObjects = useAppStore((s) => s.loadObjects)
   const saveQueryFile = useAppStore((s) => s.saveQueryFile)
   const setTabDirty = useAppStore((s) => s.setTabDirty)
   const { message } = AntApp.useApp()
@@ -88,6 +92,37 @@ export function QueryPane({ tab }: QueryPaneProps) {
 
   const database = tab.database ?? session?.database
   const file = tab.queryFile
+
+  /**
+   * The namespace whose objects the editor completes table names from.
+   *
+   * Where the caller knew the schema the window was opened from, that schema is
+   * the namespace; on an engine whose namespaces *are* its databases, the
+   * database is. A window that knows only its database (opened from the database
+   * node, from a saved script, or from the tab strip on PostgreSQL) leaves this
+   * out and completes from whatever the explorer has already loaded.
+   */
+  const scopeSchema = tab.schema ?? (driverInfo?.supportsSchema ? undefined : database)
+  const catalog = useMemo(
+    () =>
+      catalogOf(
+        { objects: treeObjects, schemas: treeSchemas },
+        { sessionId: tab.sessionId, database, schema: scopeSchema },
+        Boolean(driverInfo?.supportsSchema),
+      ),
+    [database, driverInfo?.supportsSchema, scopeSchema, tab.sessionId, treeObjects, treeSchemas],
+  )
+
+  // A window that knows its namespace asks for its object list the way the tree
+  // does when a folder is expanded: what the editor completes should not depend
+  // on somebody having opened the folder first. A window that knows only its
+  // database asks for nothing — there is no single namespace to name there, and
+  // `catalogOf` says why.
+  useEffect(() => {
+    if (!database || !scopeSchema) return
+    if (treeObjects[objectsKey(tab.sessionId, database, scopeSchema)]) return
+    void loadObjects(tab.sessionId, database, scopeSchema)
+  }, [database, loadObjects, scopeSchema, tab.sessionId, treeObjects])
 
   /**
    * The window whose file has already been read into this pane.
@@ -564,6 +599,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
             driver={driver}
             theme={theme}
             height="100%"
+            catalog={catalog}
             onChange={changeSql}
             onRun={runAll}
             onRunSelection={runSelection}

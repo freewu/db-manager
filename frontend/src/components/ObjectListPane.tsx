@@ -151,7 +151,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
           key: 'query',
           icon: <EditOutlined />,
           label: 'New query',
-          onClick: () => openQueryTab(tab.sessionId, database),
+          onClick: () => openQueryTab(tab.sessionId, database, schema),
         },
         { type: 'divider' as const },
         {
@@ -162,7 +162,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         },
       ],
     }),
-    [copyName, database, openObject, openQueryTab, tab.sessionId],
+    [copyName, database, openObject, openQueryTab, schema, tab.sessionId],
   )
 
   const objectColumns = useMemo<TableColumnsType<ObjectInfo>>(

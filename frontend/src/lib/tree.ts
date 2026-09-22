@@ -5,7 +5,7 @@
  * the key back in its callbacks. JSON keeps arbitrary identifiers (dots,
  * spaces, unicode) unambiguous.
  */
-import type { ObjectKind } from '../api/types'
+import type { ObjectInfo, ObjectKind } from '../api/types'
 
 export type NodeRef =
   | { t: 'connection'; connectionId: string }
@@ -114,4 +114,45 @@ export const KIND_SINGULAR: Record<ObjectKind, string> = {
   collection: 'Collection',
   sequence: 'Sequence',
   procedure: 'Procedure',
+}
+
+/**
+ * The slice of the explorer's cache the catalog lookup reads.
+ *
+ * Named structurally rather than as the store's `TreeCache`, so this module
+ * does not have to know what else the cache holds.
+ */
+export interface TreeCatalog {
+  objects: Record<string, ObjectInfo[]>
+  schemas: Record<string, string[]>
+}
+
+/**
+ * The objects a query window should complete table names from.
+ *
+ * A window is scoped to one database, and to a schema inside it when the engine
+ * has schemas and the caller knew which one — that one namespace is the whole
+ * answer. Without a schema (a window opened from a database node, from a saved
+ * script, or from the tab strip on PostgreSQL) the objects live in the schemas,
+ * so every schema whose list the explorer already holds counts. Opening a
+ * window is not a reason to run a catalog query per schema, so the schemas
+ * nobody has browsed are left out rather than fetched; the one namespace the
+ * window *does* name is fetched by the window itself (see QueryPane).
+ */
+export function catalogOf(
+  tree: TreeCatalog,
+  scope: { sessionId: string; database?: string; schema?: string },
+  hasSchemas: boolean,
+): ObjectInfo[] {
+  const { sessionId, database } = scope
+  if (!database) return []
+  // An engine without schemas puts its objects straight in the database, which
+  // is the namespace the tree keys them under as well.
+  const namespace = scope.schema ?? (hasSchemas ? undefined : database)
+  const schemas = namespace ? [namespace] : (tree.schemas[databaseKey(sessionId, database)] ?? [])
+  const objects: ObjectInfo[] = []
+  for (const schema of schemas) {
+    objects.push(...(tree.objects[objectsKey(sessionId, database, schema)] ?? []))
+  }
+  return objects
 }
