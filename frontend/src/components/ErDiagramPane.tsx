@@ -91,6 +91,7 @@ interface Placed {
   node: GraphNode
   /** Synthetic box for a foreign key that points outside the namespace. */
   external: boolean
+  /** Foreign-key depth: what orders the boxes inside one row. */
   layer: number
   x: number
   y: number
@@ -120,11 +121,58 @@ function boxHeight(rows: number, hidden: number): number {
 }
 
 /**
- * Deterministic layered layout.
+ * A name cut into lowercase words: `t_user_favorite` → `['t', 'user', 'favorite']`.
  *
- * Children (the table holding the foreign key) sit in lower layers than their
- * parents, so arrows generally point rightwards. The relaxation runs at most
- * once per node, which also keeps it finite when the schema has a cycle.
+ * Names are compared word by word rather than letter by letter, so `t_orders`
+ * is not treated as a relative of `t_order_payment` just because the letters
+ * happen to line up. Words are alphanumeric, so `' '` joins them back without
+ * ever colliding.
+ */
+function nameWords(name: string): string[] {
+  return name
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word !== '')
+}
+
+/**
+ * The row a table is drawn in: the name family it belongs to.
+ *
+ * Tables are remembered by name — `t_user`, `t_user_favorite` and
+ * `t_user_profile` are read together, not scattered through the diagram — so a
+ * table's row is its shortest leading word sequence that is also the *whole*
+ * name of some table. That is exactly "the table this one is a variation of":
+ *
+ *   - `t_user_favorite` → `t_user`, because a table is called that;
+ *   - `t_user` → `t_user`, it is its own root;
+ *   - `t_product` → `t_product`, a row of its own: in a schema of `t_…` tables
+ *     the bare `t` is a prefix of all of them and the whole name of none, so it
+ *     never becomes a row key.
+ *
+ * That last case is what keeps this from putting every table sharing a common
+ * leading `t_` on one endless line; only names somebody is a variation of are
+ * grouped, and an unrelated table keeps its row to itself.
+ */
+function rowKeyOf(name: string, wholeNames: Set<string>): string {
+  const words = nameWords(name)
+  for (let end = 1; end <= words.length; end++) {
+    const key = words.slice(0, end).join(' ')
+    if (wholeNames.has(key)) return key
+  }
+  return words.join(' ')
+}
+
+/**
+ * Deterministic layout, in two steps.
+ *
+ * The row is the name family (`rowKeyOf`) and the column is the foreign-key
+ * layer: variations of one name are read side by side on one line, and inside
+ * a row arrows still point rightwards, from the table being referenced to the
+ * one holding the key. Across rows there is no such promise — a foreign key
+ * between two families is drawn as it falls.
+ *
+ * The relaxation of the layers runs at most once per node, which also keeps it
+ * finite when the schema has a cycle.
  */
 function computeLayout(graph: SchemaGraph, showColumns: boolean): Layout {
   // Sequences and procedures have no relationships: they only show up when
@@ -160,44 +208,51 @@ function computeLayout(graph: SchemaGraph, showColumns: boolean): Layout {
   const externalLayer = Math.max(0, ...[...layer.values()]) + (visible.length > 0 ? 1 : 0)
   for (const name of externalNames) layer.set(name, externalLayer)
 
-  const groups = new Map<number, string[]>()
-  const all = [...visible.map((node) => node.name), ...externalNames].sort((a, b) =>
-    a.localeCompare(b),
-  )
+  const all = [...visible.map((node) => node.name), ...externalNames]
+  const wholeNames = new Set(all.map((name) => nameWords(name).join(' ')))
+
+  const rows = new Map<string, string[]>()
   for (const name of all) {
-    const index = layer.get(name) ?? 0
-    const list = groups.get(index) ?? []
+    const key = rowKeyOf(name, wholeNames)
+    const list = rows.get(key) ?? []
+    if (list.length === 0) rows.set(key, list)
     list.push(name)
-    groups.set(index, list)
   }
 
   const nodeByName = new Map(graph.nodes.map((node) => [node.name, node]))
   const placed: Placed[] = []
-  for (const index of [...groups.keys()].sort((a, b) => a - b)) {
-    let y = 0
-    for (const name of groups.get(index) ?? []) {
+  let y = 0
+  for (const key of [...rows.keys()].sort((a, b) => a.localeCompare(b))) {
+    const members = [...(rows.get(key) ?? [])].sort(
+      (a, b) => (layer.get(a) ?? 0) - (layer.get(b) ?? 0) || a.localeCompare(b),
+    )
+    let x = 0
+    let rowHeight = 0
+    for (const name of members) {
       const node = nodeByName.get(name)
       const external = !node
-      const { rows, hidden: hiddenColumns } = node
+      const { rows: columnRows, hidden: hiddenColumns } = node
         ? rowCount(node, showColumns)
         : { rows: 0, hidden: 0 }
-      const h = boxHeight(rows, hiddenColumns)
+      const h = boxHeight(columnRows, hiddenColumns)
       placed.push({
         name,
         node:
           node ??
           ({ name, kind: 'table', columns: [] } as GraphNode),
         external,
-        layer: index,
-        x: index * (BOX_W + GAP_X),
+        layer: layer.get(name) ?? 0,
+        x,
         y,
         w: BOX_W,
         h,
-        rows,
+        rows: columnRows,
         hidden: hiddenColumns,
       })
-      y += h + GAP_Y
+      x += BOX_W + GAP_X
+      rowHeight = Math.max(rowHeight, h)
     }
+    y += rowHeight + GAP_Y
   }
 
   const width = placed.reduce((max, item) => Math.max(max, item.x + item.w), 0)
@@ -770,15 +825,27 @@ function EdgePath({
 }) {
   const y1 = source.y + columnOffset(source, edge.fromColumns)
   const y2 = target.y + columnOffset(target, edge.toColumns)
-  const x1 = source.x + source.w
-  const x2 = target.x
+  const right = source.x + source.w
   const stroke = active ? palette.accent : palette.edge
 
   // A self-reference loops out of the right edge and back into the left one.
+  const selfLoop = `M ${right} ${y1 - 6} C ${right + 46} ${y1 - 46}, ${right + 46} ${y1 + 46}, ${right} ${y1 + 6}`
+
+  // Otherwise the arrow leaves the edge that faces the other box. Rows are name
+  // families, so a foreign key can point at a table drawn further left than the
+  // one holding it: then the arrow leaves the source's left edge and comes into
+  // the target's right one, looping around instead of crossing the box it
+  // starts at. Boxes that share a column keep the plain facing-edge curve.
+  const leftward = target.x + target.w <= source.x
+  const x1 = leftward ? source.x : right
+  const x2 = leftward ? target.x + target.w : target.x
+  const bow = Math.max(40, Math.abs(x2 - x1) / 2)
   const path =
     edge.from === edge.to
-      ? `M ${x1} ${y1 - 6} C ${x1 + 46} ${y1 - 46}, ${x1 + 46} ${y1 + 46}, ${x1} ${y1 + 6}`
-      : `M ${x1} ${y1} C ${x1 + Math.max(40, (x2 - x1) / 2)} ${y1}, ${x2 - Math.max(40, (x2 - x1) / 2)} ${y2}, ${x2} ${y2}`
+      ? selfLoop
+      : leftward
+        ? `M ${x1} ${y1} C ${x1 - bow} ${y1}, ${x2 + bow} ${y2}, ${x2} ${y2}`
+        : `M ${x1} ${y1} C ${x1 + bow} ${y1}, ${x2 - bow} ${y2}, ${x2} ${y2}`
 
   return (
     <g opacity={faded ? 0.15 : 1}>
