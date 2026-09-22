@@ -54,7 +54,7 @@ just install     # 安装前端依赖 + 下载 Go 模块
 just icons       # 同步品牌素材：asserts/ → 前端 favicon + build/appicon.png
 just dev         # 开发模式：Vite 热更新 + Go 热重载
 just build       # 生产构建，产物在 build/bin/db-manager.exe
-just release     # 本地打包：构建 + 归档到 dist/（带校验和），不碰 git
+just release     # 本地打包：构建 + 归档到 release/（带校验和），不碰 git
 just doctor      # 打印各个工具链版本
 just publish 0.2.0 "本版总结"   # 发版：同步版本号 + 提交 + 打 tag + push
 just --list      # 查看全部任务
@@ -102,12 +102,12 @@ wails build
 ├── asserts/                  # 品牌素材的唯一来源：logo.png、icon/<引擎>.png
 ├── scripts/
 │   ├── version.mjs           # 版本号同步与一致性校验
-│   ├── package.mjs           # 本地打包：归档到 dist/ 并生成 checksums.txt
+│   ├── package.mjs           # 本地打包：归档到 release/ 并生成 checksums.txt
 │   └── release-notes.sh      # 渲染 GitHub Release message
 ├── .github/workflows/
 │   ├── ci.yml                # main / PR：go vet+test、tsc+vite build、素材一致性
 │   └── release.yml           # tag v*：三平台可执行文件 + GitHub Release
-├── dist/                     # `just release` 的产物（已 gitignore）
+├── release/                  # `just release` 的产物（已 gitignore）
 ├── build/                    # 图标、清单、安装包脚本（appicon.png 由 `just icons` 同步）
 ├── internal/
 │   ├── apperr/               # 错误码 + 脱敏（打码 password=... 与 URI userinfo）
@@ -624,11 +624,11 @@ DMB_TEST_DORIS_HOST=127.0.0.1 go test ./internal/drivers/doris/ -run Integration
 just release
 ```
 
-编译当前平台并把产物归档到 `dist/`，附 `checksums.txt`：
+编译当前平台并把产物归档到 `release/`，附 `checksums.txt`：
 
 ```
-dist/db-manager-0.1.0-windows-amd64.exe
- dist/checksums.txt
+release/db-manager-0.1.0-windows-amd64.exe
+ release/checksums.txt
 ```
 
 只在本机产出文件，**不做任何 git 操作**，脏工作区也能跑。前端资源已 `embed` 进可执行文件，

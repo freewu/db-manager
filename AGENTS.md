@@ -58,15 +58,15 @@ git 操作要在 **Windows 侧**跑（或在 Windows 终端里执行）：WSL �
 
 | 命令 | 做什么 | 碰 git 吗 |
 | --- | --- | --- |
-| `just release` | **本地打包**：编译当前平台，产物归档到 `dist/` + `checksums.txt` | 不碰 |
+| `just release` | **本地打包**：编译当前平台，产物归档到 `release/` + `checksums.txt` | 不碰 |
 | `just publish <x.y.z> "总结"` | 发版：同步版本号、提交、打 tag、push，触发 GitHub Action 出三平台产物并发布 Release | 会 |
 
 ### 本地打包
 
 ```sh
 just release
-# → dist/db-manager-<版本>-<os>-<arch>[.exe]   （macOS 为 .tar.gz）
-# → dist/checksums.txt
+# → release/db-manager-<版本>-<os>-<arch>[.exe]   （macOS 为 .tar.gz）
+# → release/checksums.txt
 ```
 
 只在本机产出文件，**不做任何 git 操作**，脏工作区也能跑。版本号取自 `wails.json`；
@@ -200,11 +200,11 @@ cmd.exe /c "cd /d E:\work\github\db-manager && C:\Users\24358\go\bin\wails.exe b
 app.go                  Wails 绑定层（前端调用的入口就是这里的方法名）
 main.go                 入口：embed frontend/dist、窗口参数
 scripts/version.mjs     版本号同步 / 校验（wails.json 是权威值）
-scripts/package.mjs     本地打包：把 build/bin 的产物归档到 dist/ + checksums.txt
+scripts/package.mjs     本地打包：把 build/bin 的产物归档到 release/ + checksums.txt
 scripts/release-notes.sh 生成 GitHub Release message
 asserts/                品牌素材唯一来源（logo.png、icon/*.png）
 build/                  appicon.png、windows/darwin 打包资源（icon.ico 已 gitignore）
-dist/                   本地打包产物（just release，已 gitignore）
+release/                本地打包产物（just release，已 gitignore）
 internal/               后端：驱动契约、sqlbase、服务层
 frontend/src/           React 前端（api 手写、store 用 zustand、样式在 styles/global.css）
 .github/workflows/      ci.yml（main/PR）、release.yml（tag → 三平台产物 + Release）

@@ -55,14 +55,14 @@ build: icons
 build-fast: icons
     wails build -platform windows/amd64
 
-# Package the app for this machine: build, then archive the result into dist/
-# next to a checksum file. Purely local — it never touches git, so it is safe to
-# run on a dirty tree. Releasing to GitHub is `just publish`.
+# Package the app for this machine: build, then archive the result into
+# release/ next to a checksum file. Purely local — it never touches git, so it is
+# safe to run on a dirty tree. Releasing to GitHub is `just publish`.
 #
 # The version stamped into the binary comes from wails.json; run
 # `node scripts/version.mjs <x.y.z>` first if you want it to match something.
 #
-# Package this machine's build into dist/ (no git involved).
+# Package this machine's build into release/ (no git involved).
 release: icons
     wails build -clean -ldflags "-X main.Version={{version}}"
     node scripts/package.mjs
@@ -116,13 +116,13 @@ doctor:
 # Remove every build artefact.
 [unix]
 clean:
-    rm -rf {{bin}} {{web}}/dist dist
+    rm -rf {{bin}} {{web}}/dist release
 
 [windows]
 clean:
     if (Test-Path {{bin}}) { Remove-Item -Recurse -Force {{bin}} }
     if (Test-Path {{web}}/dist) { Remove-Item -Recurse -Force {{web}}/dist }
-    if (Test-Path dist) { Remove-Item -Recurse -Force dist }
+    if (Test-Path release) { Remove-Item -Recurse -Force release }
 
 # ------------------------------------------------------- version / release ---
 

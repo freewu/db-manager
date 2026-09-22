@@ -41,7 +41,7 @@ const version = (() => {
 })()
 
 const binDir = path.join(root, 'build', 'bin')
-const distDir = path.join(root, 'dist')
+const releaseDir = path.join(root, 'release')
 
 /** sha256 of a file, hex encoded — the same format `sha256sum -c` expects. */
 function sha256(file) {
@@ -50,8 +50,8 @@ function sha256(file) {
 
 const humanSize = (file) => `${(statSync(file).size / 1024 / 1024).toFixed(1)} MB`
 
-rmSync(distDir, { recursive: true, force: true })
-mkdirSync(distDir, { recursive: true })
+rmSync(releaseDir, { recursive: true, force: true })
+mkdirSync(releaseDir, { recursive: true })
 
 const artefacts = []
 
@@ -60,7 +60,7 @@ if (process.platform === 'darwin') {
   if (!existsSync(path.join(binDir, bundle))) {
     fail(`build/bin/${bundle} is missing — run \`just release\`, not this script, on its own`)
   }
-  const target = path.join(distDir, `db-manager-${version}-${flavour}.tar.gz`)
+  const target = path.join(releaseDir, `db-manager-${version}-${flavour}.tar.gz`)
   // macOS ships bsdtar, and so does Windows 10+; no npm dependency needed.
   const tar = spawnSync('tar', ['-czf', target, '-C', binDir, bundle], { stdio: 'inherit' })
   if (tar.status !== 0) fail('tar failed')
@@ -70,16 +70,16 @@ if (process.platform === 'darwin') {
   if (!existsSync(source)) {
     fail(`build/bin/db-manager${exeSuffix} is missing — run \`just release\`, not this script, on its own`)
   }
-  const target = path.join(distDir, `db-manager-${version}-${flavour}${exeSuffix}`)
+  const target = path.join(releaseDir, `db-manager-${version}-${flavour}${exeSuffix}`)
   cpSync(source, target)
   artefacts.push(target)
 }
 
 const checksumLines = artefacts.map((file) => `${sha256(file)}  ${path.basename(file)}`)
-writeFileSync(path.join(distDir, 'checksums.txt'), `${checksumLines.join('\n')}\n`)
+writeFileSync(path.join(releaseDir, 'checksums.txt'), `${checksumLines.join('\n')}\n`)
 
 console.log(`\npackage.mjs: db-manager ${version} for ${flavour}`)
 for (const file of artefacts) {
-  console.log(`  dist/${path.basename(file)}  (${humanSize(file)})`)
+  console.log(`  release/${path.basename(file)}  (${humanSize(file)})`)
 }
-console.log('  dist/checksums.txt')
+console.log('  release/checksums.txt')
