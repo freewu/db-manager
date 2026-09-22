@@ -18,6 +18,8 @@ import { CODE_LANGUAGES } from './languages'
 import { ident, type CodeLanguage, type CodegenField, type CodegenInput, type ColumnKind, type RenderContext, type RenderedField } from './types'
 
 export { CODE_LANGUAGES }
+export { tokenizeCode } from './highlight'
+export type { CodeToken, CodeTokenKind } from './highlight'
 export type { CodegenField, CodegenInput, CodeLanguage, ColumnKind } from './types'
 
 /**

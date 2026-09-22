@@ -25,17 +25,22 @@
   --dm-toolbar-border: var(--dm-chrome-border);
   --dm-tree-row-height: 22px;
 
-  /* Syntax highlighting for the read-only scripts (DDL, SQL preview). The
-     editor next door draws the same script with CodeMirror's own palette; these
-     are tuned to sit next to it without either one looking wrong on the other
-     surface. `--dm-sql-comment` is the existing muted grey and
-     `--dm-sql-ident` the existing link blue, so only four colours are new. */
-  --dm-sql-keyword: #8250df;
-  --dm-sql-type: #0b7285;
-  --dm-sql-string: #b23a48;
-  --dm-sql-number: #0b6e4f;
-  --dm-sql-comment: var(--dm-null);
-  --dm-sql-ident: var(--dm-hot-text);
+  /* Syntax highlighting for the read-only code: the SQL scripts (DDL, SQL
+     preview) and the generated object code. The editor next door draws the
+     same script with CodeMirror's own palette; these are tuned to sit next to
+     it without either one looking wrong on the other surface.
+     `--dm-syntax-comment` is the existing muted grey and `--dm-syntax-ident`
+     the existing link blue, so only five colours are new. Two tokenisers read
+     into this one palette (`lib/sqlHighlight.ts` and
+     `lib/codegen/highlight.ts`), which is why the names say syntax rather
+     than SQL. */
+  --dm-syntax-keyword: #8250df;
+  --dm-syntax-type: #0b7285;
+  --dm-syntax-string: #b23a48;
+  --dm-syntax-number: #0b6e4f;
+  --dm-syntax-comment: var(--dm-null);
+  --dm-syntax-ident: var(--dm-hot-text);
+  --dm-syntax-annotation: #a05a00;
 }
 
 [data-theme='dark'] {
@@ -62,12 +67,13 @@
      are unreadable on #191b22. The two aliases are repeated here on purpose: a
      custom property is substituted where it is declared, so a `var()` left in
      `:root` would keep resolving against the light values. */
-  --dm-sql-keyword: #c792ea;
-  --dm-sql-type: #63d4c8;
-  --dm-sql-string: #e79aa4;
-  --dm-sql-number: #7fd9a1;
-  --dm-sql-comment: var(--dm-null);
-  --dm-sql-ident: var(--dm-hot-text);
+  --dm-syntax-keyword: #c792ea;
+  --dm-syntax-type: #63d4c8;
+  --dm-syntax-string: #e79aa4;
+  --dm-syntax-number: #7fd9a1;
+  --dm-syntax-comment: var(--dm-null);
+  --dm-syntax-ident: var(--dm-hot-text);
+  --dm-syntax-annotation: #e0b36a;
 }
 
 html,
@@ -544,38 +550,46 @@ body {
 }
 
 /* --- syntax highlighting -------------------------------------------------
-   The token kinds come from `lib/sqlHighlight.ts`; the colours are the
-   `--dm-sql-*` variables next to the other theme tokens. Quoted names are the
-   only kind drawn without a colour of their own — they are already set off by
-   their quotes — and functions share the type colour, which is what makes
-   `VARCHAR(120)` and `COUNT(` read the same way in a preview. */
-.dm-sql-keyword {
-  color: var(--dm-sql-keyword);
+   The token kinds come from `lib/sqlHighlight.ts` for a script and from
+   `lib/codegen/highlight.ts` for generated code; the colours are the
+   `--dm-syntax-*` variables next to the other theme tokens, so a keyword is the
+   same purple wherever it is drawn. Quoted names are the only kind drawn
+   without a colour of their own — they are already set off by their quotes —
+   and functions share the type colour, which is what makes `VARCHAR(120)` and
+   `COUNT(` read the same way in a preview. Only the code window draws an
+   annotation, which is a decorator or a directive and not a word of the
+   language. */
+.dm-syntax-keyword {
+  color: var(--dm-syntax-keyword);
 }
 
-.dm-sql-type {
-  color: var(--dm-sql-type);
+.dm-syntax-type {
+  color: var(--dm-syntax-type);
 }
 
-.dm-sql-string {
-  color: var(--dm-sql-string);
+.dm-syntax-string {
+  color: var(--dm-syntax-string);
 }
 
-.dm-sql-number {
-  color: var(--dm-sql-number);
+.dm-syntax-number {
+  color: var(--dm-syntax-number);
 }
 
-.dm-sql-comment {
-  color: var(--dm-sql-comment);
+.dm-syntax-comment {
+  color: var(--dm-syntax-comment);
   font-style: italic;
 }
 
-.dm-sql-ident {
-  color: var(--dm-sql-ident);
+.dm-syntax-ident {
+  color: var(--dm-syntax-ident);
 }
 
-.dm-sql-function {
-  color: var(--dm-sql-type);
+.dm-syntax-function {
+  color: var(--dm-syntax-type);
+}
+
+.dm-syntax-annotation {
+  color: var(--dm-syntax-annotation);
 }
 
 .dm-value-view {

@@ -34,7 +34,7 @@ export function SqlCode({ sql, driver, className, style, inline = false }: SqlCo
     token.kind === 'plain' ? (
       token.text
     ) : (
-      <span key={index} className={`dm-sql-${token.kind}`}>
+      <span key={index} className={`dm-syntax-${token.kind}`}>
         {token.text}
       </span>
     ),

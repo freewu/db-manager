@@ -5,7 +5,7 @@ import { CodeOutlined, CopyOutlined, ReloadOutlined, SaveOutlined } from '@ant-d
 import { api, toMessage } from '../api/client'
 import type { TableStructure } from '../api/types'
 import { qualifiedName } from '../lib/format'
-import { CODE_LANGUAGES, codeFileName, codeLanguageById, fieldsOf, generateCode } from '../lib/codegen'
+import { CODE_LANGUAGES, codeFileName, codeLanguageById, fieldsOf, generateCode, tokenizeCode } from '../lib/codegen'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 
 /** The picker's entries, in the order the settings page lists them too. */
@@ -26,6 +26,11 @@ interface CodegenPaneProps {
  * language the window opens in is the preference from the settings page; picking
  * another one changes what this window shows, which is a look at another
  * language rather than a change to the preference (that stays in Settings).
+ *
+ * The text is drawn with the same syntax palette the SQL previews use; which
+ * word is a keyword there is `lib/codegen/highlight.ts`'s business, and it is
+ * asked for the language on screen at that moment, so the colours follow the
+ * picker as quickly as the text does.
  */
 export function CodegenPane({ tab }: CodegenPaneProps) {
   const session = useAppStore((s) => s.sessionOf(tab.sessionId))
@@ -106,6 +111,7 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
   }, [code, current.ext, current.label, language, message, object])
 
   const fieldCount = structure?.columns.length ?? 0
+  const tokens = useMemo(() => tokenizeCode(code, language), [code, language])
 
   return (
     <div className="dm-pane">
@@ -192,7 +198,17 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
       ) : (
         // A failed reload keeps the text it already had on screen: the alert
         // above says what went wrong, and an empty page would say less.
-        <pre className="mono dm-codegen">{code}</pre>
+        <pre className="mono dm-codegen">
+          {tokens.map((token, index) =>
+            token.kind === 'plain' ? (
+              token.text
+            ) : (
+              <span key={index} className={`dm-syntax-${token.kind}`}>
+                {token.text}
+              </span>
+            ),
+          )}
+        </pre>
       )}
     </div>
   )
