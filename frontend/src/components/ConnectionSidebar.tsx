@@ -555,12 +555,6 @@ export function ConnectionSidebar() {
                       : 'Open fields',
                     onClick: () => openObject(sessionId, database, schema, object, 'structure'),
                   },
-                  {
-                    key: 'query',
-                    icon: <EditOutlined />,
-                    label: 'New query',
-                    onClick: () => openQueryTab(sessionId, database, schema),
-                  },
                   ...(relational
                     ? [
                         {

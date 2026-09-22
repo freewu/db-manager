@@ -4,7 +4,6 @@ import type { MenuProps, TableColumnsType } from 'antd'
 import {
   AppstoreOutlined,
   CheckOutlined,
-  EditOutlined,
   KeyOutlined,
   MoreOutlined,
   NumberOutlined,
@@ -39,7 +38,6 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
   const loadObjects = useAppStore((s) => s.loadObjects)
   const loadIndexes = useAppStore((s) => s.loadIndexes)
   const openTableTab = useAppStore((s) => s.openTableTab)
-  const openQueryTab = useAppStore((s) => s.openQueryTab)
 
   const [filter, setFilter] = useState('')
   const [selectedKey, setSelectedKey] = useState<string>()
@@ -147,12 +145,6 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
           label: `Design ${KIND_SINGULAR[object.kind]}`,
           onClick: () => openObject(object, 'structure'),
         },
-        {
-          key: 'query',
-          icon: <EditOutlined />,
-          label: 'New query',
-          onClick: () => openQueryTab(tab.sessionId, database, schema),
-        },
         { type: 'divider' as const },
         {
           key: 'copy',
@@ -162,7 +154,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         },
       ],
     }),
-    [copyName, database, openObject, openQueryTab, schema, tab.sessionId],
+    [copyName, openObject],
   )
 
   const objectColumns = useMemo<TableColumnsType<ObjectInfo>>(
