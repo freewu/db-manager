@@ -81,9 +81,14 @@ type Store struct {
 	unreadable map[string]string
 }
 
-// New returns a Store rooted at the per-user config directory.
+// New returns a Store rooted at the application's data directory.
+//
+// Which directory that is comes from the location pointer (see location.go):
+// the per-user config directory unless the user moved their data elsewhere from
+// the settings page. `NewAt` stays for tests and portable installs, which keep
+// the JSON files out of the user profile.
 func New() (*Store, error) {
-	dir, err := ConfigDir()
+	dir, err := DataDir()
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +96,6 @@ func New() (*Store, error) {
 }
 
 // NewAt returns a Store rooted at dir, creating the directory when needed.
-// Tests and portable installs use it to keep the JSON files out of the user
-// profile.
 func NewAt(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, dirMode); err != nil {
 		return nil, err
@@ -105,21 +108,8 @@ func NewAt(dir string) (*Store, error) {
 	}, nil
 }
 
-// ConfigDir returns (and creates) the application config directory.
-func ConfigDir() (string, error) {
-	base, err := os.UserConfigDir()
-	if err != nil || base == "" {
-		// Fall back to the working directory rather than failing outright.
-		base = "."
-	}
-	dir := filepath.Join(base, appDirName)
-	if err := os.MkdirAll(dir, dirMode); err != nil {
-		return "", err
-	}
-	return dir, nil
-}
-
-// Dir exposes the config directory (used by the welcome screen).
+// Dir exposes the data directory (used by the welcome screen, and by the
+// settings page, which shows the path and offers to open or move it).
 func (s *Store) Dir() string { return s.dir }
 
 // Path exposes the profile file path.

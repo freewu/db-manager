@@ -729,3 +729,44 @@ type AppInfo struct {
 	ConfigPath string `json:"configPath"`
 	Platform   string `json:"platform"`
 }
+
+// --- data directory --------------------------------------------------------
+
+// DataFileInfo is one file in the data directory, as the settings page lists it.
+type DataFileInfo struct {
+	Name  string `json:"name"`
+	Bytes int64  `json:"bytes"`
+}
+
+// DataDirInfo describes where the application keeps its data, so the settings
+// page can show the path, what is in it, and whether it is the default location
+// or one the user picked.
+type DataDirInfo struct {
+	Path string `json:"path"`
+	// DefaultPath is where the app looks when no directory was chosen. Shown for
+	// contrast, and the target of "use the default again".
+	DefaultPath string `json:"defaultPath"`
+	IsDefault   bool   `json:"isDefault"`
+	// Files are the recognised data files that exist right now. An empty list is
+	// honest — a fresh install has not written anything yet.
+	Files      []DataFileInfo `json:"files"`
+	TotalBytes int64          `json:"totalBytes"`
+}
+
+// DataDirMoveResult is what happened to the files during a move. It is
+// deliberately not a bare bool: a partial outcome has to be reportable, because
+// the files that were *not* moved are the ones a user needs to know about.
+type DataDirMoveResult struct {
+	// Info is the directory now in use.
+	Info DataDirInfo `json:"info"`
+	// Moved are the file names that were copied to the new directory and
+	// verified there.
+	Moved []string `json:"moved"`
+	// LeftBehind are entries of the old directory that are not files this build
+	// writes, so the move did not touch them.
+	LeftBehind []string `json:"leftBehind"`
+	// Remaining are files that were copied successfully but could not be deleted
+	// from the old directory (a lock, a read-only folder). The new directory is
+	// the one in use either way; this is only for an honest report.
+	Remaining []string `json:"remaining"`
+}

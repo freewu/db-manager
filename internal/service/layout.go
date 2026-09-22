@@ -33,11 +33,11 @@ const maxGroupName = 60
 // written by a build that had no groups — shows up at the bottom of the top
 // level.
 func (m *Manager) ConnectionLayout() (models.ConnectionLayout, error) {
-	profiles, err := m.store.Load()
+	profiles, err := m.storeRef().Load()
 	if err != nil {
 		return models.ConnectionLayout{}, apperr.Wrap(apperr.CodeInternal, err, "read connection profiles")
 	}
-	stored, err := m.store.LoadLayout()
+	stored, err := m.storeRef().LoadLayout()
 	if err != nil {
 		return models.ConnectionLayout{}, apperr.Wrap(apperr.CodeInternal, err, "read the connection layout")
 	}
@@ -54,12 +54,12 @@ func (m *Manager) ConnectionLayout() (models.ConnectionLayout, error) {
 // Names are not validated here: this call says where things are, not what they
 // are called. See SaveConnectionGroup.
 func (m *Manager) SaveConnectionLayout(layout models.ConnectionLayout) (models.ConnectionLayout, error) {
-	profiles, err := m.store.Load()
+	profiles, err := m.storeRef().Load()
 	if err != nil {
 		return models.ConnectionLayout{}, apperr.Wrap(apperr.CodeInternal, err, "read connection profiles")
 	}
 	out := placeProfiles(profiles, layout)
-	if err := m.store.SaveLayout(out); err != nil {
+	if err := m.storeRef().SaveLayout(out); err != nil {
 		return models.ConnectionLayout{}, apperr.Wrap(apperr.CodeInternal, err, "save the connection layout")
 	}
 	return out, nil
@@ -82,11 +82,11 @@ func (m *Manager) SaveConnectionGroup(group models.ConnectionGroup) (models.Conn
 		)
 	}
 
-	profiles, err := m.store.Load()
+	profiles, err := m.storeRef().Load()
 	if err != nil {
 		return group, apperr.Wrap(apperr.CodeInternal, err, "read connection profiles")
 	}
-	stored, err := m.store.LoadLayout()
+	stored, err := m.storeRef().LoadLayout()
 	if err != nil {
 		return group, apperr.Wrap(apperr.CodeInternal, err, "read the connection layout")
 	}
@@ -111,7 +111,7 @@ func (m *Manager) SaveConnectionGroup(group models.ConnectionGroup) (models.Conn
 	}
 
 	out := placeProfiles(profiles, layout)
-	if err := m.store.SaveLayout(out); err != nil {
+	if err := m.storeRef().SaveLayout(out); err != nil {
 		return group, apperr.Wrap(apperr.CodeInternal, err, "save the connection layout")
 	}
 	// Answer with the group as it now stands: the caller draws what it gets, and
@@ -135,11 +135,11 @@ func (m *Manager) DeleteConnectionGroup(id string) error {
 		return apperr.New(apperr.CodeInvalidConfig, "group id is required")
 	}
 
-	profiles, err := m.store.Load()
+	profiles, err := m.storeRef().Load()
 	if err != nil {
 		return apperr.Wrap(apperr.CodeInternal, err, "read connection profiles")
 	}
-	stored, err := m.store.LoadLayout()
+	stored, err := m.storeRef().LoadLayout()
 	if err != nil {
 		return apperr.Wrap(apperr.CodeInternal, err, "read the connection layout")
 	}
@@ -170,7 +170,7 @@ func (m *Manager) DeleteConnectionGroup(id string) error {
 	}
 
 	tidied := placeProfiles(profiles, models.ConnectionLayout{Groups: groups, Items: items})
-	if err := m.store.SaveLayout(tidied); err != nil {
+	if err := m.storeRef().SaveLayout(tidied); err != nil {
 		return apperr.Wrap(apperr.CodeInternal, err, "save the connection layout")
 	}
 	return nil

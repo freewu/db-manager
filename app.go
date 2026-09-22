@@ -383,6 +383,40 @@ func (a *App) RevealInExplorer(path string) error {
 	return revealPath(path)
 }
 
+// --- settings --------------------------------------------------------------
+
+// GetDataDir reports where the app keeps its data (profiles, query favourites,
+// UI state and the key saved passwords are sealed with), what is in it, and
+// where the default directory is.
+func (a *App) GetDataDir() (models.DataDirInfo, error) {
+	return a.manager.DataDir()
+}
+
+// PickDataDirectory opens a native folder chooser for the new data directory.
+// An empty string means the user cancelled — the caller decides what to say,
+// because nothing was asked of the backend.
+func (a *App) PickDataDirectory(title string) (string, error) {
+	if strings.TrimSpace(title) == "" {
+		title = "Choose where DB Manager keeps its data"
+	}
+	// DefaultDirectory is where the chooser opens: the directory in use, so the
+	// dialog starts from something the user recognises.
+	path, err := wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title:            title,
+		DefaultDirectory: a.manager.ConfigDir(),
+	})
+	if err != nil {
+		return "", apperr.Wrap(apperr.CodeInternal, err, "open folder dialog")
+	}
+	return path, nil
+}
+
+// MoveDataDirectory moves the app's data into dir and switches the running app
+// over to it. An empty dir means "use the default directory again".
+func (a *App) MoveDataDirectory(dir string) (models.DataDirMoveResult, error) {
+	return a.manager.MoveDataDir(dir)
+}
+
 // FormatError normalises an error for display; kept for completeness so the
 // frontend has a single place to sanitise backend messages.
 func (a *App) FormatError(message string) string {

@@ -67,7 +67,19 @@ func (m *Manager) SetContext(ctx context.Context) {
 }
 
 // ConfigDir exposes the profile directory for the welcome screen.
-func (m *Manager) ConfigDir() string { return m.store.Dir() }
+func (m *Manager) ConfigDir() string { return m.storeRef().Dir() }
+
+// storeRef is how the rest of the manager reaches the profile store.
+//
+// The pointer can be swapped (the settings page moves the data directory), so
+// the field is read under the same lock that guards the swap rather than being
+// captured at construction time: a store that has already been moved away from
+// would otherwise keep writing into an empty directory.
+func (m *Manager) storeRef() *config.Store {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.store
+}
 
 func (m *Manager) ctx(timeout time.Duration) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(m.baseCtx, timeout)
@@ -105,7 +117,7 @@ func (m *Manager) DriverInfos() []models.DriverInfo { return m.Drivers() }
 
 // Connections lists every saved profile, redacted.
 func (m *Manager) Connections() ([]models.ConnectionConfig, error) {
-	list, err := m.store.Load()
+	list, err := m.storeRef().Load()
 	if err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternal, err, "read connection profiles")
 	}
@@ -135,7 +147,7 @@ func (m *Manager) SaveConnection(cfg models.ConnectionConfig) (models.Connection
 		cfg.ID = uuid.NewString()
 	}
 
-	stored, err := m.store.Upsert(cfg)
+	stored, err := m.storeRef().Upsert(cfg)
 	if err != nil {
 		return cfg, apperr.Wrap(apperr.CodeInternal, err, "save connection profile")
 	}
@@ -147,7 +159,7 @@ func (m *Manager) DeleteConnection(id string) error {
 	if id == "" {
 		return apperr.New(apperr.CodeInvalidConfig, "connection id is required")
 	}
-	if err := m.store.Delete(id); err != nil {
+	if err := m.storeRef().Delete(id); err != nil {
 		return apperr.Wrap(apperr.CodeInternal, err, "delete connection profile")
 	}
 	return nil
@@ -244,7 +256,7 @@ func (m *Manager) Open(req models.OpenRequest) (models.SessionInfo, error) {
 	// it is best effort: the session is already up, failing the connect because
 	// the file could not be rewritten would be worse than asking once more.
 	if req.Password != "" && cfg.SavePassword && cfg.ID != "" {
-		if stored, err := m.store.Upsert(cfg); err == nil {
+		if stored, err := m.storeRef().Upsert(cfg); err == nil {
 			cfg.Password = stored.Password
 		}
 	}
@@ -282,7 +294,7 @@ func (m *Manager) resolveConfig(req models.OpenRequest) (models.ConnectionConfig
 	if req.ConnectionID == "" {
 		return models.ConnectionConfig{}, apperr.New(apperr.CodeInvalidConfig, "no connection specified")
 	}
-	cfg, found, err := m.store.Find(req.ConnectionID)
+	cfg, found, err := m.storeRef().Find(req.ConnectionID)
 	if err != nil {
 		return models.ConnectionConfig{}, apperr.Wrap(apperr.CodeInternal, err, "read connection profile")
 	}
@@ -902,7 +914,7 @@ func QueryTimeout(ms int) time.Duration {
 
 // SavedQueries lists the query favourites, sorted by name.
 func (m *Manager) SavedQueries() ([]models.SavedQuery, error) {
-	list, err := m.store.LoadQueries()
+	list, err := m.storeRef().LoadQueries()
 	if err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternal, err, "read saved queries")
 	}
@@ -944,7 +956,7 @@ func (m *Manager) SaveSavedQuery(query models.SavedQuery) (models.SavedQuery, er
 	}
 	query.UpdatedAt = now
 
-	stored, err := m.store.UpsertQuery(query)
+	stored, err := m.storeRef().UpsertQuery(query)
 	if err != nil {
 		return query, apperr.Wrap(apperr.CodeInternal, err, "save query favourite")
 	}
@@ -957,7 +969,7 @@ func (m *Manager) DeleteSavedQuery(id string) error {
 	if strings.TrimSpace(id) == "" {
 		return apperr.New(apperr.CodeInvalidConfig, "query id is required")
 	}
-	if err := m.store.DeleteQuery(id); err != nil {
+	if err := m.storeRef().DeleteQuery(id); err != nil {
 		return apperr.Wrap(apperr.CodeInternal, err, "delete saved query")
 	}
 	return nil
@@ -965,7 +977,7 @@ func (m *Manager) DeleteSavedQuery(id string) error {
 
 // LoadState returns the persisted UI preferences.
 func (m *Manager) LoadState() (map[string]any, error) {
-	state, err := m.store.LoadState()
+	state, err := m.storeRef().LoadState()
 	if err != nil {
 		return nil, apperr.Wrap(apperr.CodeInternal, err, "read application state")
 	}
@@ -977,7 +989,7 @@ func (m *Manager) SaveState(state map[string]any) error {
 	if state == nil {
 		state = map[string]any{}
 	}
-	if err := m.store.SaveState(state); err != nil {
+	if err := m.storeRef().SaveState(state); err != nil {
 		return apperr.Wrap(apperr.CodeInternal, err, "save application state")
 	}
 	return nil

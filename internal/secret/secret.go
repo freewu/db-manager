@@ -30,8 +30,11 @@ import (
 )
 
 const (
-	// keyName is the key file, next to connections.json.
-	keyName = "secret.key"
+	// keyName is the key file, next to connections.json. KeyFileName is the
+	// exported spelling the data-directory move needs: the key is part of the
+	// data, and a move that left it behind would strand every saved password.
+	keyName     = "secret.key"
+	KeyFileName = keyName
 	// keySize is what AES-256 wants.
 	keySize = 32
 	// keyMode keeps the key to the owner, like the profile file itself.
