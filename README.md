@@ -9,7 +9,7 @@
 ## 功能
 
 - **连接管理**：连接配置的增删改查、连通性测试、SQLite 文件选择、TLS（CA / 证书 / 私钥）、自定义 DSN 参数、只读标记、颜色标签、密码可选保存。新建连接先点出**驱动菜单**（命令条 `Connection`、连接树的 `+`、面板空白处右键，三处挂的是同一份列表，就展开在你刚点的那个东西下面），再落到**这个引擎自己的那一页** —— 走网络的要地址、端口、账号与 TLS，SQLite 只要一个文件加一个附加库别名，两边不会互相看到无关字段（保存下来的配置也照着这一页来，文件型连接不会混进 host / port / ssl）；编辑已有连接同样按它的驱动打开对应那页。
-- **对象浏览器**：会话 → 数据库 → Schema → 表 / 视图 / 索引 的懒加载树，**每个文件夹都带数量、空着也画**（`Tables (0)` / `Views (0)` / `Indexes (0)` —— 文件夹一空就消失，跟「这个引擎根本没有这种对象」就分不出来了），该画哪几个由后端按引擎声明（`DriverInfo.objectKinds`），前端不猜；右键菜单支持打开数据、设计表（设计器给不出的引擎是「看字段」）、复制名称 —— **新建查询不在对象自己的菜单里**：那个窗口跟这张表没有关系（不带上表名、也不落在这张表上），它的入口是文件夹 / 库 / 命令条。文档型引擎这里是 database → Collections / Indexes，没有 schema 层，SQL 专属的入口（新建 DDL 脚本、ER 图、设计表）自动不出现。
+- **对象浏览器**：会话 → 数据库 → Schema → 表 / 视图 / 索引 的懒加载树，**每个文件夹都带数量、空着也画**（`Tables (0)` / `Views (0)` / `Indexes (0)` —— 文件夹一空就消失，跟「这个引擎根本没有这种对象」就分不出来了），该画哪几个由后端按引擎声明（`DriverInfo.objectKinds`），前端不猜；右键菜单支持打开数据、设计表（设计器给不出的引擎是「看字段」）、复制名称 —— **新建查询不在对象自己的菜单里**：那个窗口跟这张表没有关系（不带上表名、也不落在这张表上），它的入口是命令条上的 `New Query` / 标签页的 `+`（都落在树里选中的那个库 / schema 上）、库节点与 `Queries` 文件夹的 `New query…`（后者是给脚本起名字）。文档型引擎这里是 database → Collections / Indexes，没有 schema 层，SQL 专属的入口（新建 DDL 脚本、ER 图、设计表）自动不出现。
 - **连接排序与分组**：整行拖着换位置，`+` / 空白处右键菜单里的 `New group…` 建一层深的文件夹，拖进去、拖出来、删掉文件夹（里面的连接会回到顶层，不会被一起删）都行；排法按 id 存在 `layout.json`，读与写都先拿实时配置对一遍，所以配置增删、换版本都不会让排列对不上号（按名字过滤时拖拽关闭 —— 那时候看得见的邻居不是布局里的邻居）。
 - **新建数据库**：连接右键 `New database…`，问什么由**服务端**回答 —— MySQL / TiDB 给出字符集与可配的排序规则，PostgreSQL 给出编码与 locale（locale 名单不可能完整，那一栏可以手打），Doris 与 MongoDB 没有可选项、只有一句说明。语句由后端按引擎渲染后**先展示再执行**（MongoDB 下是 `use <db>`，并明说「第一条 collection 写进去之前它什么都不存」）；SQLite 这类文件型引擎不出现这个菜单项，只读会话里它是灰的。
 - **MongoDB**：连接（含副本集多主机、`mongodb+srv`、TLS、认证库）、集合浏览（文档数 / 体积 / 索引）、数据网格的过滤排序与分页、双击改标量字段、批量删文档、索引列表与定义脚本、运行情况页（serverStatus + 每库 dbStats）。查询窗口跑的是 **mongosh 风格的 shell**（`db.orders.find({...}).sort({ts: -1}).limit(20)`），不是 SQL。
@@ -340,6 +340,7 @@ MongoDB 不从 `sqlbase` 继承任何东西（那个包是 `database/sql` 专用
 | 未连接的连接 | Open connection / Edit connection… |
 | 已连接的连接 | New query / Refresh / New database… / Edit connection… / Disconnect |
 | 库下面的 `Queries` 文件夹 | New query… / Reload queries |
+| 一个对象文件夹（`Tables` / `Views` …） | Open object list / New table…（`Tables` 才有）/ New DDL script…（关系型才有）/ Reload objects |
 | 一个对象（表 / 视图…） | Open data / Design table（给不出设计器的引擎是 Open fields）/ Edit DDL…（关系型才有）/ Copy name |
 | 一个已保存的脚本 | Open / Rename… / Copy name / Show in folder / Delete |
 
