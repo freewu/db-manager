@@ -482,15 +482,22 @@ body {
   word-break: break-all;
 }
 
+/* The explorer is a navigation widget, not a document: a row is double-clicked
+   to open what it stands for (a connection's runtime page, and the folders are
+   pressed the same way), so the label must not turn into a browser text
+   selection under the cursor — the tree already draws its own "this is
+   selected" state. Copying is offered per row in the context menus instead,
+   which is why the whole tree opts out rather than the rows that happen to have
+   a double-click of their own today. */
+.dm-sidebar-tree .ant-tree-title {
+  user-select: none;
+}
+
 .dm-connection-node {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
-  /* Double-clicking the node opens the connection, so the label must not turn
-     into a browser text selection under the cursor — the tree already draws its
-     own "this is selected" state. */
-  user-select: none;
 }
 
 /* A group's row: the same shape as a connection row, with its size on the right
@@ -501,7 +508,6 @@ body {
   gap: 6px;
   min-width: 0;
   width: 100%;
-  user-select: none;
 }
 
 .dm-group-node .dm-group-count {
