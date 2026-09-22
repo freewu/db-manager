@@ -29,7 +29,9 @@
 - **运行情况**：双击连接节点即可打开该连接的「运行情况」页（未连接会先连上，密码框填完再自动打开）；页面上半部分是会话事实与快照时间，下面按引擎各画各的 —— MySQL 给进程列表、连接数、InnoDB 缓冲池与命中率（TiDB 走同一页，外加集群成员表；Doris 也尽力取这一套，取不到的项挂进警告里），PostgreSQL 给后端/活动会话/数据库体积与提交率、缓存命中率，SQLite 则是「这是一个文件」的视角（路径、落盘大小、pragma、对象清单与 ATTACH 进来的库）。读不到的项一律显示 `—` 并附一条警告（缺权限、缺统计视图），不会拿 0 冒充；工具条的刷新按钮重新取一次快照。
 - **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（只画一个 GitHub 头像，悬停显示昵称、点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection，以及连接树的右键菜单。
 - **导出**：CSV / JSON / INSERT 脚本（MongoDB 下是 `insertMany` 脚本，按列的 BSON 类型还原 `$oid` / `$date` / 文档字面量），可写入文件或复制到剪贴板。
-- **外观**：Navicat 式窗口骨架（icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏 —— 表格的表头**固定不动**：数据网格、对象列表、设计器的字段表都一样，纵向滚动时表头留在容器顶上，横向滚动也带不走它（钉住的列仍旧钉在原处）。命令条上目前只有 **Connection**、**Open**、**Close**、**Refresh**、**Table** 与 **View** 是活的，其余按钮保持原来的位置但禁用并在提示里说明 —— 摆着的空位比消失的按钮更好认。
+- **外观**：Navicat 式窗口骨架（icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏 —— 表格的表头**固定不动**：数据网格、对象列表、设计器的字段表都一样，纵向滚动时表头留在容器顶上，横向滚动也带不走它（钉住的列仍旧钉在原处）。主题有三档：`Light` / `Dark` / `System`，在命令条的 **Settings → Appearance** 里选，状态栏那格点一下也能循环切换（跟随系统时它会写成 `system (dark)`，把当前系统给的那一档一起说出来）；选**跟随系统**时窗口真的跟着操作系统走 —— 操作系统在运行期间切深浅色，界面当场就变，不用重启也不用再点一次。命令条上目前只有 **Connection**、**Open**、**Close**、**Refresh**、**Table**、**View** 与 **Settings** 是活的，其余按钮保持原来的位置但禁用并在提示里说明 —— 摆着的空位比消失的按钮更好认。
+- **设置**：命令条上的 **Settings** 开一个三页的窗口 —— `Appearance` 选主题，`Data folder` 看数据存在哪、里面有哪些文件（每个文件写的是干什么的、多大）、从这里**打开目录**、**换一个目录**或**恢复默认**，`About` 就是原来那页项目信息（技术栈徽章、项目地址、开发者）。换目录是真的**把数据搬过去**：连接配置、查询收藏、树的排法、窗口状态与密码密钥一起复制到新目录（逐个读回校验，对不上就不动原文件），然后才改指针、最后才删旧文件；没能删掉的（被占用、只读）会**如实列出来**，而不是回一句「已移动」。目标目录里已经有**非空的**本程序数据时会被拒绝并点名是哪个文件（同名但零字节的不算数据，照常覆盖），选到当前目录本身也会被拒绝；那些**不是本程序写的**文件留在原地并在结果里注明。目录就绪后不需要重启 —— 会话照旧连着，新的保存当场写进新目录。
+- **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（头像加昵称整个是一条链接，昵称就是显示出来的文字，也是链接的标题，点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。这页在没连库时显示，**Settings → About** 里也是同一份（同一个组件，两处不会各说一套）。连库的入口在命令条的 Connection，以及连接树的右键菜单。
 - **托盘**（Windows）：关掉窗口是**收进托盘**，不是退出；托盘图标左键单击等于把窗口叫回来，右键的菜单从上到下是 `Show window` / `Project page` / `Report an issue` / 版本号（灰色，只是给你看的）/ `Quit`。第一次收起来会弹一次气泡说明「还在运行」，免得以为程序没了；`Quit` 走的是正常退出（连接池照常关），而**图标没能建出来时关窗照旧直接退出** —— 一个没能出现的托盘不该留下一个看不见的进程。其它平台没有通知区域，行为保持原样（关窗即退出）。
 
 ## 环境要求
@@ -106,6 +108,7 @@ wails build
 ├── build/                    # 图标、清单、安装包脚本（appicon.png 由 `just icons` 同步）
 ├── internal/
 │   ├── apperr/               # 错误码 + 脱敏（打码 password=... 与 URI userinfo）
+│   ├── config/location.go    # 数据目录的指针（location.json）与搬家：复制 → 校验 → 改指针 → 删旧文件
 │   ├── config/store.go       # %APPDATA%/db-manager/{connections,queries,state,layout}.json（0600）
 │   ├── secret/               # AES-256-GCM 封装连接的密码；密钥 secret.key（0600，首次用时生成）
 │   ├── models/               # 跨层 DTO，时间统一为 int64 unix ms
@@ -126,11 +129,12 @@ wails build
     └── src/
         ├── api/              # 手写类型 + 手写 window.go.main.App 桥接（不依赖生成代码）
         ├── components/       # AppShell / Sidebar / Workspace / TablePane / QueryPane / DataGrid …
-        │   ├── AboutProject.tsx  # 项目信息（技术栈徽章 / 项目地址 / 开发者），空态页与 Help → About 共用
+        │   ├── AboutProject.tsx   # 项目信息（技术栈徽章 / 项目地址 / 开发者），空态页与 Settings → About 共用
+        │   ├── SettingsDialog.tsx # 设置窗口：外观 / 数据目录 / 关于
         │   └── overview/     # 运行情况：每个引擎一个视图 + 共用的指标卡片与数据表
         ├── connection/       # 每种驱动一页连接表单（Mysql / Postgres / Sqlite / Mongodb / Tidb / Doris）+ 注册表
         ├── hooks/useConnect  # 先试后问的连接流程
-        ├── lib/              # tree key 编解码、格式化、导出、驱动能力（capabilities.ts）、项目信息（about.ts）、品牌素材（assets.ts，@asserts 别名）
+        ├── lib/              # tree key 编解码、格式化、导出、驱动能力（capabilities.ts）、项目信息（about.ts）、主题（theme.ts）、品牌素材（assets.ts，@asserts 别名）
         ├── store/            # zustand 全局状态（连接 / 会话 / 标签页 / 浏览器缓存）
         └── styles/global.css
 ```
@@ -410,7 +414,8 @@ PostgreSQL `… ENCODING '…' LOCALE '…' TEMPLATE template0`、MongoDB `use <
 **在窗口里先展示再执行**，前端只把请求递过去、不拼 SQL。SQLite 这类文件型引擎直接没有这个菜单项，
 只读会话里它是灰的。
 
-没有任何标签页时右侧就只有一页**项目信息**（`WelcomePane` 渲染 `AboutProject`），标题是应用名 + 版本
+没有任何标签页时右侧就只有一页**项目信息**（`WelcomePane` 渲染 `AboutProject`；命令条 **Settings → About**
+里挂的是同一个组件，两处不会各说一套），标题是应用名 + 版本
 （版本只出现在标题里，徽章里不再重复）—— 这一页不再放快捷入口、连接卡片与引擎清单，因为那些在命令条与
 连接树里已经有了。徽章分四组：顶部三枚说明**手上这个程序**（`license MIT`、`build just 1.58.0`、
 `running windows/amd64`，最后一项来自后端 `AppInfo.platform`）；下面按组列出 `Build`（
@@ -421,13 +426,44 @@ PostgreSQL `… ENCODING '…' LOCALE '…' TEMPLATE template0`、MongoDB `use <
 `macos universal` / `linux amd64`，与 `.github/workflows/release.yml` 的构建矩阵一一对应，一套 Wails
 代码三个平台。徽章是本地 CSS 画的灰标签 + 品牌色值（Linux 的黄底浅，值用深色字），不依赖 shields.io，
 断网也照常显示；链接统一走 `openExternal`，桌面壳里交给系统浏览器，纯浏览器里退化成新标签页。
-开发者一栏只画头像、不写名字，昵称放在悬停提示里（`Tooltip` 得挂在 DOM 元素上，包在 `ExternalLink`
-外面会被组件吃掉 hover 事件），无障碍文本走 `aria-label`。**头像随程序发布，不在运行时去 GitHub 拿**
+开发者一栏是头像加昵称，整个是一条去 GitHub 主页的链接，昵称同时也是链接的标题（悬停能看到完整地址）；
+无障碍文本走 `aria-label`。**头像随程序发布，不在运行时去 GitHub 拿**
 （`asserts/developer.png`，由 `lib/assets.ts` 注册），所以整页断网也能完整渲染，拿不到图时还有 antd
 `Avatar` 的首字母灰底兜底；头像换了就按 `about.ts` 里 `avatarSourceUrl` 的注释重新下载一份。项目地址 /
 作者 / 许可证 / 构建工具集中在 `frontend/src/lib/about.ts`（仓库地址、Issues、Releases、Justfile 链接
 都由 `REPO_OWNER` / `REPO_NAME` 拼出来，改一处即可），其中三处要手动对齐：作者与 `wails.json` 的
 `author`、`just` 版本与下面的「环境要求」表、`Platforms` 与 release workflow 的矩阵。
+
+### 设置：主题与数据目录
+
+设置窗口自己**不存**任何偏好：主题经过 store 落进 `state.json`，数据目录本来就是后端的事，所以关掉窗口
+不会丢选择，两个窗口看到的也永远是同一份值。主题分成**偏好**（`light` / `dark` / `system`）与**画出来的**
+两件事 —— 偏好写进状态文件的东西就是它自己，跟随系统时「现在到底什么颜色」另算（`resolvedTheme`），
+页面据此给自己加 `data-theme` 与 `color-scheme`；系统那边的监听器只在这条偏好是 `system` 时才真的会
+改变颜色（`resolveTheme` 对另外两档直接忽略系统），所以来回切主题不会积累监听器，旧版本留下的
+`light` / `dark` 状态文件也照样读得进来（认不出的值回到 `light`，Navicat 的经典模样）。
+
+**数据目录的指针不在数据目录里**，而在默认位置（`%APPDATA%/db-manager`）的一张
+`location.json`：`{"version":1,"dataDir":"…"}`。理由很直接 —— 数据目录本身要先被读出来，指针
+不能跟着数据一起搬走，否则读指针的人得先知道指针在哪。文件走 tmp + rename 原子写：半张指针会被读成
+「没有指针」，那就等于把用户悄悄送回默认目录。内容读不成（空、坏、相对路径、没有这个字段）一律回落
+到默认目录，这个文件坏掉不该让程序打不开。**在指针里写下默认目录 = 清掉指针**，这样以后默认位置换了，
+用户仍然跟着走。
+
+搬家的顺序是**先复制再删**：逐个文件读出来、写到新目录、再读回来逐字节比一遍（`copyVerified`），五份
+数据（连接 / 收藏 / 排法 / 状态 / `secret.key`）都到位之后才改指针，最后删旧文件；删除是尽力而为，
+删不掉的留在原地并出现在结果里（`remaining`），绝不说一句「已移动」了事。所以任何一步失败，原目录都是
+完好的（最坏只是多出一份没人用的副本）。拒绝的三种情况：目标就是当前目录（`sameDir` 认符号链接、
+Windows 上还认大小写）、相对路径、以及目标里已经有**非空的**本程序数据（点名是哪个文件）。目录**可以
+互相嵌套** —— 只搬名单里的文件、从不递归，所以谁在谁里面都行。不是本程序写的文件（`LeftBehind`）留着
+不动并如实报告，其中不算指针文件与 `*.tmp`；目标目录如果正好在源目录里面，也不会被误报成「留下没搬」。
+名单写死在 `dataFiles`，**新增一份数据文件必须同时加到这个名单里**，否则搬家会把它落下（并因此在
+结果里报出来）。
+
+搬完不重启：`MoveDataDir` 会重新 `config.New()` 并把新的 store 换进 `Manager`。整个搬家过程持写锁
+（`m.mu.Lock()`，`m.storeRef()` 读锁）—— 否则这一步复制、下一步删除之间落进来的一次保存会丢在旧
+目录里；已经连上的会话不受影响，它们手里是 driver 连接不是 store。指针改完但 store 换不过去（目录被
+外力弄没了）时错误信息会说**数据已经搬走、重启一下**，而不是谎称失败。
 
 ### 运行情况从哪来
 
@@ -478,7 +514,14 @@ just test
 （外键方向、主键/可空标记、跨命名空间的目标名），service 层再用一个只实现 `Conn`
 的包装验证「没有 `Grapher` 时退化成逐对象 `Structure`」这条路；建库同一条路子：
 先用 SQLite 确认「没有这个能力就说 `unsupported`」，再加上 `drivers.DatabaseCreator` 的包装确认
-服务端给的选项与渲染好的语句原样透传。
+服务端给的选项与渲染好的语句原样透传。搬家的规则全在 `internal/config/location_test.go` 里：
+默认目录、文件清单、带着数据搬去新目录并对留在原地的文件如实报告、搬回默认目录、
+拒绝自己（`sameDir`）与相对路径、拒绝已经有非空数据的目录（零字节同名文件不算数据）、
+目标在源目录里面（只搬名单里的文件，不递归）、指针文件读不成时回落默认、目录被删了会重建；
+`internal/service/datadir_test.go` 再验证运行中的程序真的换了 store —— 保存、搬家、旧目录里不再
+有连接配置、已连上的会话还在、下一次保存落在新目录，以及搬回默认目录时指针会被清掉。
+两个测试都先把 `AppData` / `XDG_CONFIG_HOME` 指到临时目录（`os.UserConfigDir()` 读的就是它们），
+不会碰真实的用户配置。
 
 `internal/drivers/mongodb` 是纯单元测试加一组**默认跳过**的集成测试：连接串拼装、TLS 三档、
 索引信息、shell 的词法 / 参数解析（`SplitStatements` / `ParseStatement` / 各种 JSON 值，`use` 与库名规则在内）、

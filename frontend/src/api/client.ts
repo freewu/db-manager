@@ -12,6 +12,8 @@ import type {
   ConnectionGroup,
   ConnectionLayout,
   CreateDatabaseRequest,
+  DataDirInfo,
+  DataDirMoveResult,
   DatabaseOptions,
   DatabasePlan,
   DesignPlan,
@@ -96,6 +98,14 @@ export const api = {
   loadState: () => invoke<Record<string, unknown>>('LoadState'),
   saveState: (state: Record<string, unknown>) => invoke<void>('SaveState', state),
   revealInExplorer: (path: string) => invoke<void>('RevealInExplorer', path),
+
+  // --- settings -----------------------------------------------------------
+  /** Where the app keeps its data, and what is in there right now. */
+  getDataDir: () => invoke<DataDirInfo>('GetDataDir'),
+  /** Native folder chooser; an empty string means the user cancelled. */
+  pickDataDirectory: (title: string) => invoke<string>('PickDataDirectory', title),
+  /** Moves the data into `dir` (empty = the default directory) and switches over. */
+  moveDataDirectory: (dir: string) => invoke<DataDirMoveResult>('MoveDataDirectory', dir),
 
   // --- query favourites ---------------------------------------------------
   listSavedQueries: () => invoke<SavedQuery[]>('ListSavedQueries'),

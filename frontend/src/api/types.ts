@@ -509,6 +509,37 @@ export interface AppInfo {
   platform: string
 }
 
+/** One file in the data directory, as the settings page lists it. */
+export interface DataFileInfo {
+  name: string
+  bytes: number
+}
+
+/**
+ * Where the app keeps its data: the profiles, the query favourites, the UI
+ * state and the key the saved passwords are sealed with.
+ */
+export interface DataDirInfo {
+  path: string
+  /** Where the app looks when no directory was chosen. */
+  defaultPath: string
+  isDefault: boolean
+  /** Only the files that exist right now — empty on a fresh install. */
+  files: DataFileInfo[]
+  totalBytes: number
+}
+
+/** What happened to the files during a move; a partial outcome is reportable. */
+export interface DataDirMoveResult {
+  info: DataDirInfo
+  /** Copied to the new directory and verified there. */
+  moved: string[]
+  /** Entries of the old directory that are not this app's files. */
+  leftBehind: string[]
+  /** Copied, but the old copy could not be deleted (a lock, a read-only folder). */
+  remaining: string[]
+}
+
 /** A named SQL snippet kept in the user's favourites. */
 export interface SavedQuery {
   id: string

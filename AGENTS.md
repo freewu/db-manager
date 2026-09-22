@@ -149,6 +149,9 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
   - 引擎表达不了的变更写进 `Plan.Warnings` **而不是静默跳过**（尤其 SQLite）。
   - 字段改名时索引跟着改：前端在重命名时同步索引列，后端把只写了旧名字的索引列也重映射到新名字。
 - 后端新增能力时按 `drivers.Driver` → `Conn` → `Dialect` 契约落地，并在 `init()` 里 `drivers.Register`。
+- **数据目录不由「写死的路径」决定，而是由默认位置里的指针 `location.json` 决定**（见
+  `internal/config/location.go`）。**新增一份数据文件必须同时加进 `dataFiles`**，否则用户换目录时它会被
+  落在原处。搬家的顺序是复制 → 逐字节校验 → 改指针 → 删旧文件，不要改成先删后拷。
 
 ---
 

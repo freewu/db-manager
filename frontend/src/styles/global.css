@@ -1510,6 +1510,80 @@ body {
   color: #fff;
 }
 
+/* The developer row is one link: avatar then nickname, on a line of their own. */
+.dm-about-rows dd a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---- settings dialog ------------------------------------------------------ */
+
+.dm-settings-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Tall enough that switching tabs does not make the modal jump, short enough
+     that the dialog never grows past a small laptop screen. */
+  min-height: 260px;
+  max-height: 62vh;
+  overflow: auto;
+}
+
+.dm-settings-row-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dm-settings-row-hint {
+  margin-top: 2px;
+  opacity: 0.65;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dm-settings-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* The path is the one thing on this page a user may want to read character by
+   character (to paste it elsewhere), so it gets its own framed line and wraps
+   instead of being truncated. */
+.dm-settings-path {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--dm-border);
+  border-radius: 3px;
+  background: var(--dm-tree-hover);
+}
+
+.dm-settings-path-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-all;
+  user-select: text;
+}
+
+.dm-settings-report {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.dm-settings-report > div {
+  word-break: break-word;
+}
+
+.dm-settings-report-note {
+  opacity: 0.7;
+}
+
 .dm-link-icon {
   margin-inline-end: 5px;
   opacity: 0.75;

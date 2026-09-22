@@ -8,8 +8,15 @@ import {
 
 import { useAppStore } from '../store/appStore'
 import { driverIcon } from '../lib/assets'
+import { THEME_MODES } from '../lib/theme'
 
-/** Bottom status strip: active session details and global counters. */
+/**
+ * Bottom status strip: active session details and global counters.
+ *
+ * The theme entry is a three-way cycle rather than a switch: a switch can only
+ * say light or dark, and the preference the settings page stores has a third
+ * value — follow the system.
+ */
 export function StatusBar() {
   const sessions = useAppStore((s) => s.sessions)
   const activeSessionId = useAppStore((s) => s.activeSessionId)
@@ -18,6 +25,7 @@ export function StatusBar() {
   const drivers = useAppStore((s) => s.drivers)
   const appInfo = useAppStore((s) => s.appInfo)
   const theme = useAppStore((s) => s.theme)
+  const resolvedTheme = useAppStore((s) => s.resolvedTheme)
   const setTheme = useAppStore((s) => s.setTheme)
 
   const session = sessions.find((s) => s.id === activeSessionId)
@@ -26,6 +34,11 @@ export function StatusBar() {
   const profile = session?.connectionId
     ? connections.find((c) => c.id === session.connectionId)
     : undefined
+
+  const cycleTheme = () => {
+    const order = THEME_MODES.map((m) => m.value)
+    setTheme(order[(order.indexOf(theme) + 1) % order.length])
+  }
 
   return (
     <div className="dm-statusbar">
@@ -88,20 +101,29 @@ export function StatusBar() {
       <Tooltip title={`Backend ${appInfo?.version ?? '?'} · ${appInfo?.goVersion ?? ''}`}>
         <span className="dm-statusbar-item">v{appInfo?.version ?? '—'}</span>
       </Tooltip>
-      <Tooltip title="Switch theme">
+      {/* The status bar shows the *preference* (so "System" is visible as
+          such) and says which way it is resolving while it is not fixed. */}
+      <Tooltip
+        title={
+          theme === 'system'
+            ? `Following the system theme (${resolvedTheme}) — click to switch`
+            : 'Switch theme: light, dark, or follow the system'
+        }
+      >
         <span
           className="dm-statusbar-item"
           role="button"
           tabIndex={0}
           style={{ cursor: 'pointer' }}
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          onClick={() => cycleTheme()}
           onKeyDown={(event) => {
             if (event.key === 'Enter' || event.key === ' ') {
-              setTheme(theme === 'dark' ? 'light' : 'dark')
+              cycleTheme()
             }
           }}
         >
-          {theme === 'dark' ? 'dark' : 'light'}
+          {theme}
+          {theme === 'system' ? ` (${resolvedTheme})` : ''}
         </span>
       </Tooltip>
     </div>

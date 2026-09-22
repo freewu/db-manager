@@ -8,8 +8,8 @@ import {
   DiffOutlined,
   DisconnectOutlined,
   EyeOutlined,
-  FileTextOutlined,
   ReloadOutlined,
+  SettingOutlined,
   SwapOutlined,
   SyncOutlined,
   TableOutlined,
@@ -38,12 +38,12 @@ const PARKED = 'Temporarily unavailable'
  * Navicat-style ribbon: flat, grouped, icon-over-label buttons.
  *
  * The button set mirrors Navicat's main window one-for-one so the layout reads
- * the same, but only *Connection*, *Open*, *Close*, *Refresh*, *Table* and
- * *View* are live. Everything else is disabled and says why — a dead button is
- * worse than an honest gap, but an empty toolbar is not the layout we are
- * after.
+ * the same, but only *Connection*, *Open*, *Close*, *Refresh*, *Table*, *View*
+ * and *Settings* are live. Everything else is disabled and says why — a dead
+ * button is worse than an honest gap, but an empty toolbar is not the layout we
+ * are after.
  */
-export function MainToolbar() {
+export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const connections = useAppStore((s) => s.connections)
   const drivers = useAppStore((s) => s.drivers)
   const sessions = useAppStore((s) => s.sessions)
@@ -221,7 +221,12 @@ export function MainToolbar() {
       <RibbonButton icon={<SwapOutlined />} label="Transfer" hint={PARKED} disabled />
       <RibbonButton icon={<SyncOutlined />} label="Data Sync" hint={PARKED} disabled />
       <RibbonButton icon={<DiffOutlined />} label="Structure Sync" hint={PARKED} disabled />
-      <RibbonButton icon={<FileTextOutlined />} label="Report" hint={PARKED} disabled />
+      <RibbonButton
+        icon={<SettingOutlined />}
+        label="Settings"
+        hint="Theme, data folder and about"
+        onClick={onOpenSettings}
+      />
     </div>
   )
 }

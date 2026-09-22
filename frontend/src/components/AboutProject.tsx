@@ -93,23 +93,14 @@ export function AboutProject() {
 
         <dt>Developer</dt>
         <dd>
-          {/* Just the avatar: it is the one thing worth showing at a glance, and
-              it links to the profile it stands for. The name lives in the
-              tooltip, the email in `wails.json` / the repository. */}
-          <ExternalLink url={DEVELOPER.url} ariaLabel={`${DEVELOPER.name} on GitHub`}>
-            {/* The Tooltip goes inside the link, not around it: it has to attach
-                its hover handlers to a real element, and `ExternalLink` is a
-                component that would swallow them. */}
-            <Tooltip title={`${DEVELOPER.name} · ${DEVELOPER.url}`}>
-              <Avatar
-                size={22}
-                className="dm-about-avatar"
-                src={developerAvatar}
-                alt={DEVELOPER.name}
-              >
-                {DEVELOPER.name.slice(0, 1).toUpperCase()}
-              </Avatar>
-            </Tooltip>
+          {/* The avatar and the nickname are one link to the profile it stands
+              for, which is also the anchor's title — the email lives in
+              `wails.json` and the repository, not in the UI. */}
+          <ExternalLink url={DEVELOPER.url} title={DEVELOPER.name} ariaLabel={`${DEVELOPER.name} on GitHub`}>
+            <Avatar size={22} className="dm-about-avatar" src={developerAvatar} alt={DEVELOPER.name}>
+              {DEVELOPER.name.slice(0, 1).toUpperCase()}
+            </Avatar>
+            <span>{DEVELOPER.name}</span>
           </ExternalLink>
         </dd>
       </dl>
@@ -155,6 +146,7 @@ function ExternalLink({
   icon,
   children,
   ariaLabel,
+  title,
 }: {
   url: string
   /** Plain text to show; use `children` instead for richer content. */
@@ -163,11 +155,14 @@ function ExternalLink({
   children?: ReactNode
   /** Required when the link shows no text of its own (a bare avatar). */
   ariaLabel?: string
+  /** Native tooltip; also what a screen reader reads out with the URL. */
+  title?: string
 }) {
   return (
     <a
       href={url}
       aria-label={ariaLabel}
+      title={title}
       onClick={(event) => {
         event.preventDefault()
         openExternal(url)

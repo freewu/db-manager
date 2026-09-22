@@ -43,7 +43,7 @@ interface QueryPaneProps {
 export function QueryPane({ tab }: QueryPaneProps) {
   const session = useAppStore((s) => s.sessionOf(tab.sessionId))
   const drivers = useAppStore((s) => s.drivers)
-  const theme = useAppStore((s) => s.theme)
+  const theme = useAppStore((s) => s.resolvedTheme)
   const { message } = AntApp.useApp()
 
   const driver: DriverType | undefined = session?.driver

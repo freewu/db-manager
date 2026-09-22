@@ -32,7 +32,8 @@ import {
 
 import { api, toMessage } from '../api/client'
 import type { GraphEdge, GraphNode, SchemaGraph } from '../api/types'
-import { useAppStore, type ThemeMode, type WorkspaceTab } from '../store/appStore'
+import { useAppStore, type WorkspaceTab } from '../store/appStore'
+import type { ResolvedTheme } from '../lib/theme'
 
 /* Node geometry, in diagram units (1 unit = 1 px at 100% zoom). */
 const BOX_W = 268
@@ -60,7 +61,7 @@ interface Palette {
 }
 
 /** Inline colours (not CSS classes) so an exported SVG stands on its own. */
-function paletteOf(theme: ThemeMode): Palette {
+function paletteOf(theme: ResolvedTheme): Palette {
   return theme === 'dark'
     ? {
         bg: '#1b1b1f',
@@ -315,7 +316,7 @@ interface ErDiagramPaneProps {
  */
 export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
   const session = useAppStore((s) => s.sessionOf(tab.sessionId))
-  const theme = useAppStore((s) => s.theme)
+  const theme = useAppStore((s) => s.resolvedTheme)
   const openTableTab = useAppStore((s) => s.openTableTab)
   const { message } = AntApp.useApp()
 

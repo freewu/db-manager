@@ -12,7 +12,9 @@ import { useAppStore } from './store/appStore'
 export function AppRoot() {
   const boot = useAppStore((s) => s.boot)
   const bootError = useAppStore((s) => s.bootError)
-  const themeMode = useAppStore((s) => s.theme)
+  // What is painted is the resolved theme, not the preference: `system` is a
+  // question for the operating system, and the store has already asked it.
+  const themeResolved = useAppStore((s) => s.resolvedTheme)
   const bootstrap = useAppStore((s) => s.bootstrap)
 
   // StrictMode runs effects twice in development; bootstrap must be idempotent.
@@ -24,11 +26,11 @@ export function AppRoot() {
   }, [bootstrap])
 
   useEffect(() => {
-    document.documentElement.dataset.theme = themeMode
-    document.documentElement.style.colorScheme = themeMode
-  }, [themeMode])
+    document.documentElement.dataset.theme = themeResolved
+    document.documentElement.style.colorScheme = themeResolved
+  }, [themeResolved])
 
-  const dark = themeMode === 'dark'
+  const dark = themeResolved === 'dark'
 
   return (
     <ConfigProvider

@@ -16,6 +16,8 @@ import type {
   ConnectionConfig,
   ConnectionGroup,
   ConnectionLayout,
+  DataDirInfo,
+  DataDirMoveResult,
   DriverInfo,
   IndexEntry,
   ObjectInfo,
@@ -30,6 +32,15 @@ import type { ConnectionDraft } from '../connection/shared'
 import { arrangementOf, layoutOf, moveEntry, type DropTarget } from '../lib/explorer'
 import { databaseKey, FOLDER_LABEL, indexesKey, namespaceKey, objectsKey } from '../lib/tree'
 import { designFrom, emptyStructure, newTableDesign } from '../lib/design'
+import {
+  parseThemeMode,
+  resolveTheme,
+  watchSystemTheme,
+  type ResolvedTheme,
+  type ThemeMode,
+} from '../lib/theme'
+
+export type { ResolvedTheme, ThemeMode } from '../lib/theme'
 
 export type TabKind = 'query' | 'table' | 'newtable' | 'objects' | 'ddl' | 'er' | 'runtime'
 
@@ -83,9 +94,6 @@ export interface WorkspaceTab {
   /** Object-list windows only: which folder the list is scoped to. */
   list?: ListScope
 }
-
-export type ThemeMode = 'light' | 'dark'
-
 
 /**
  * Table designer state, kept per table window so switching between the Data and
@@ -163,7 +171,12 @@ interface AppState {
   reveal?: RevealTarget
   tabs: WorkspaceTab[]
   activeTabId?: string
+  /** The preference: light, dark, or follow the system. */
   theme: ThemeMode
+  /** What is actually painted — `theme` with `system` resolved. */
+  resolvedTheme: ResolvedTheme
+  /** Where the app keeps its data, as the settings page shows it. */
+  dataDir?: DataDirInfo
   tree: TreeCache
   designs: Record<string, DesignState>
   savedQueries: SavedQuery[]
@@ -172,6 +185,13 @@ interface AppState {
 
   bootstrap: () => Promise<void>
   setTheme: (theme: ThemeMode) => void
+  /** Re-reads the data directory (the settings page calls this after a move). */
+  refreshDataDir: () => Promise<DataDirInfo>
+  /**
+   * Moves the app's data into `dir` (empty = the default) and switches the
+   * running app over to it. Returns what happened to each file.
+   */
+  moveDataDir: (dir: string) => Promise<DataDirMoveResult>
   /** Takes the driver the user picked from the "new connection" menu. */
   openConnectionEditor: (draft?: ConnectionDraft) => void
   closeConnectionEditor: () => void
@@ -319,6 +339,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessions: [],
   tabs: [],
   theme: 'light',
+  resolvedTheme: 'light',
   tree: emptyTree(),
   designs: {},
   savedQueries: [],
@@ -334,7 +355,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async bootstrap() {
     try {
-      const [appInfo, drivers, connections, connectionLayout, savedQueries, persisted] =
+      const [appInfo, drivers, connections, connectionLayout, savedQueries, persisted, dataDir] =
         await Promise.all([
           api.appInfo(),
           api.listDrivers(),
@@ -344,11 +365,22 @@ export const useAppStore = create<AppState>((set, get) => ({
           // A missing or unreadable favourites file must not block startup.
           api.listSavedQueries().catch(() => [] as SavedQuery[]),
           api.loadState().catch(() => ({}) as Record<string, unknown>),
+          // The data directory is only reported by the settings page; failing to
+          // read it must not keep the app from starting.
+          api.getDataDir().catch(() => undefined),
         ])
 
-      const storedTheme = persisted?.[STATE_KEY] as { theme?: ThemeMode } | undefined
+      const storedTheme = persisted?.[STATE_KEY] as { theme?: unknown } | undefined
       // Navicat's classic look is light; dark stays one toggle away.
-      const theme: ThemeMode = storedTheme?.theme === 'dark' ? 'dark' : 'light'
+      const theme = parseThemeMode(storedTheme?.theme)
+
+      // The OS can be switched to dark while the app is running, and "follow the
+      // system" has to follow it live — the listener stays installed for the
+      // whole session and only ever moves when the preference is `system`,
+      // because `resolveTheme` ignores the system for the other two.
+      watchSystemTheme((systemDark) => {
+        set({ resolvedTheme: resolveTheme(get().theme, systemDark) })
+      })
 
       set({
         boot: 'ready',
@@ -357,7 +389,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         connections,
         connectionLayout,
         savedQueries,
+        dataDir,
         theme,
+        resolvedTheme: resolveTheme(theme),
       })
     } catch (error) {
       set({ boot: 'failed', bootError: toMessage(error) })
@@ -365,11 +399,34 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setTheme(theme) {
-    set({ theme })
+    // The preference and the painted value are kept apart: a `system` choice
+    // passes the current system answer through, and the listener above keeps it
+    // up to date from then on.
+    set({ theme, resolvedTheme: resolveTheme(theme) })
     // Fire and forget: a failed preference write must not disturb the UI.
     void api
       .saveState({ [STATE_KEY]: { theme } })
       .catch(() => undefined)
+  },
+
+  async refreshDataDir() {
+    const dataDir = await api.getDataDir()
+    set({ dataDir })
+    return dataDir
+  },
+
+  async moveDataDir(dir) {
+    const result = await api.moveDataDirectory(dir)
+    set({ dataDir: result.info })
+    // The welcome pane and the About tab show the path the app is working in,
+    // and it has just changed; re-reading the info is cheaper than patching a
+    // copy of it that would then disagree with the backend.
+    try {
+      set({ appInfo: await api.appInfo() })
+    } catch {
+      // Cosmetic only: the move itself already succeeded.
+    }
+    return result
   },
 
   async refreshConnections() {

@@ -56,7 +56,7 @@ interface DdlPaneProps {
  */
 export function DdlPane({ tab }: DdlPaneProps) {
   const session = useAppStore((s) => s.sessionOf(tab.sessionId))
-  const theme = useAppStore((s) => s.theme)
+  const theme = useAppStore((s) => s.resolvedTheme)
   const { message, modal } = AntApp.useApp()
 
   const driver: DriverType | undefined = session?.driver
