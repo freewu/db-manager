@@ -140,26 +140,48 @@ function nameWords(name: string): string[] {
  *
  * Tables are remembered by name — `t_user`, `t_user_favorite` and
  * `t_user_profile` are read together, not scattered through the diagram — so a
- * table's row is its shortest leading word sequence that is also the *whole*
- * name of some table. That is exactly "the table this one is a variation of":
+ * table's row is its *shortest* leading word sequence that reads as a family
+ * name. Two things make a sequence one:
  *
- *   - `t_user_favorite` → `t_user`, because a table is called that;
- *   - `t_user` → `t_user`, it is its own root;
- *   - `t_product` → `t_product`, a row of its own: in a schema of `t_…` tables
- *     the bare `t` is a prefix of all of them and the whole name of none, so it
- *     never becomes a row key.
+ *   - it is the whole name of a table (`t_user_favorite` → `t_user`), or
+ *   - at least two names lead with it (`xxx_dict_data` and `xxx_dict_env` →
+ *     `xxx_dict`, even though no table is called that).
  *
- * That last case is what keeps this from putting every table sharing a common
- * leading `t_` on one endless line; only names somebody is a variation of are
- * grouped, and an unrelated table keeps its row to itself.
+ * The second rule is what keeps siblings together when the table they are
+ * variations of was never created; the first is what keeps a two-word name
+ * that *is* the prefix (`users` in front of `users_addresses`) as the row.
+ *
+ * A single leading word only names a family through the first rule: in a schema
+ * of `t_…` tables the bare `t` leads all of them and is nobody's name, so
+ * counting it would put every table on one endless line. Someone who really
+ * does have a table called `t` gets exactly that line — which is then the name
+ * family they asked for.
  */
-function rowKeyOf(name: string, wholeNames: Set<string>): string {
+function rowKeyOf(name: string, wholeNames: Set<string>, shared: Map<string, number>): string {
   const words = nameWords(name)
-  for (let end = 1; end <= words.length; end++) {
+  for (let end = 1; end < words.length; end++) {
     const key = words.slice(0, end).join(' ')
     if (wholeNames.has(key)) return key
+    if (end > 1 && (shared.get(key) ?? 0) > 1) return key
   }
   return words.join(' ')
+}
+
+/**
+ * How many names lead with each word sequence — a name counts for all of its
+ * own prefixes, itself included. `rowKeyOf` reads every family off this, so it
+ * is built once for the whole diagram.
+ */
+function prefixCounts(names: string[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const name of names) {
+    const words = nameWords(name)
+    for (let end = 1; end <= words.length; end++) {
+      const key = words.slice(0, end).join(' ')
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+  }
+  return counts
 }
 
 /**
@@ -210,10 +232,11 @@ function computeLayout(graph: SchemaGraph, showColumns: boolean): Layout {
 
   const all = [...visible.map((node) => node.name), ...externalNames]
   const wholeNames = new Set(all.map((name) => nameWords(name).join(' ')))
+  const shared = prefixCounts(all)
 
   const rows = new Map<string, string[]>()
   for (const name of all) {
-    const key = rowKeyOf(name, wholeNames)
+    const key = rowKeyOf(name, wholeNames, shared)
     const list = rows.get(key) ?? []
     if (list.length === 0) rows.set(key, list)
     list.push(name)
