@@ -1,9 +1,10 @@
-import { AutoComplete, Checkbox, Input, Select, Table, Tag, Tooltip, Typography } from 'antd'
+import { AutoComplete, Checkbox, Input, Table, Tooltip, Typography } from 'antd'
 import type { TableColumnsType } from 'antd'
-import type { Key } from 'react'
-import { KeyOutlined } from '@ant-design/icons'
+import { useRef, useState } from 'react'
+import type { DragEvent, Key } from 'react'
+import { HolderOutlined, KeyOutlined } from '@ant-design/icons'
 
-import type { DesignColumn, DesignIndex, DriverType, TableDesign } from '../api/types'
+import type { DesignColumn, DriverType, TableDesign } from '../api/types'
 import { typeSuggestions } from '../lib/design'
 
 /** Which row of a designer grid is selected, and how to change that. */
@@ -35,17 +36,13 @@ function rowSelection(selection: GridSelection | undefined) {
   }
 }
 
-/** Turns a draft patch into a new draft (the draft is treated as immutable). */
-function withIndexes(design: TableDesign, indexes: DesignIndex[]): TableDesign {
-  return { ...design, indexes }
-}
-
 /**
  * The field list of the table designer.
  *
- * The grid edits the draft in place, the way Navicat's structure tab does; the
- * SQL preview next to it is what the backend would run for the draft as it
- * stands right now.
+ * The grid edits the draft in place, the way Navicat's structure tab does. The
+ * order of the rows is meaning — it is the column order the DDL is rendered
+ * with — so a field is moved by dragging the grip in front of it. Only the grip
+ * arms the row for a drag, so selecting text inside the inputs still works.
  */
 export function FieldGrid({ design, driver, readOnly, onChange, selection }: DesignGridProps) {
   const patch = (index: number, next: Partial<DesignColumn>) => {
@@ -72,7 +69,42 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
 
   const suggestions = typeSuggestions(driver).map((value) => ({ value }))
 
+  // Native HTML5 drag. `armed` is only true between pressing the grip and the
+  // end of the gesture, so the rest of the time the row is not draggable and
+  // the inputs behave like inputs.
+  const dragFrom = useRef<number | null>(null)
+  const [armed, setArmed] = useState(false)
+  const [dropAt, setDropAt] = useState<number | null>(null)
+
+  const move = (from: number, to: number) => {
+    if (from === to) return
+    const columns = design.columns.slice()
+    const [moved] = columns.splice(from, 1)
+    if (!moved) return
+    columns.splice(to, 0, moved)
+    onChange({ ...design, columns })
+    // Keep the selection on the field that moved.
+    if (selection?.selected === from) selection.onChange(to)
+  }
+
   const columns: TableColumnsType<DesignColumn> = [
+    {
+      title: '',
+      key: 'drag',
+      width: 30,
+      align: 'center',
+      render: () => (
+        <Tooltip title="Drag to reorder">
+          <span
+            className="dm-drag-handle"
+            onMouseDown={() => setArmed(true)}
+            onMouseUp={() => setArmed(false)}
+          >
+            <HolderOutlined />
+          </span>
+        </Tooltip>
+      ),
+    },
     {
       title: '#',
       width: 44,
@@ -203,114 +235,39 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
       dataSource={design.columns}
       pagination={false}
       rowSelection={selection ? rowSelection(selection) : undefined}
+      onRow={(_row, index) => {
+        const rowIndex = index ?? 0
+        return {
+          draggable: armed && !readOnly && design.columns.length > 1,
+          onDragStart: (event: DragEvent<HTMLElement>) => {
+            dragFrom.current = rowIndex
+            event.dataTransfer.effectAllowed = 'move'
+            // Firefox refuses to start a drag without a payload.
+            event.dataTransfer.setData('text/plain', String(rowIndex))
+          },
+          onDragOver: (event: DragEvent<HTMLElement>) => {
+            if (dragFrom.current === null) return
+            event.preventDefault()
+            event.dataTransfer.dropEffect = 'move'
+            setDropAt(rowIndex)
+          },
+          onDrop: (event: DragEvent<HTMLElement>) => {
+            event.preventDefault()
+            const from = dragFrom.current
+            dragFrom.current = null
+            setArmed(false)
+            setDropAt(null)
+            if (from !== null) move(from, rowIndex)
+          },
+          onDragEnd: () => {
+            dragFrom.current = null
+            setArmed(false)
+            setDropAt(null)
+          },
+          className: dropAt === rowIndex ? 'dm-drag-over' : undefined,
+        }
+      }}
       scroll={{ x: 'max-content', y: '100%' }}
-    />
-  )
-}
-
-interface IndexGridProps extends DesignGridProps {
-  /** The primary key of the table, shown read-only (edit it in the field list). */
-  primary: DesignIndex | null
-}
-
-/** The index list of the table designer. */
-export function IndexGrid({ design, readOnly, onChange, primary, selection }: IndexGridProps) {
-  const patch = (index: number, next: Partial<DesignIndex>) => {
-    const indexes = design.indexes.map((entry, i) => (i === index ? { ...entry, ...next } : entry))
-    onChange(withIndexes(design, indexes))
-  }
-
-  const fields = design.columns
-    .map((column) => column.name.trim())
-    .filter(Boolean)
-    .map((name) => ({ value: name, label: name }))
-
-  const columns: TableColumnsType<DesignIndex> = [
-    {
-      title: 'Name',
-      width: 240,
-      render: (_value, row, index) => (
-        <Input
-          size="small"
-          className="mono"
-          value={row.name}
-          disabled={readOnly}
-          status={row.name.trim() ? undefined : 'error'}
-          onChange={(event) => patch(index, { name: event.target.value })}
-        />
-      ),
-    },
-    {
-      title: 'Fields',
-      render: (_value, row, index) => (
-        <Select
-          size="small"
-          mode="multiple"
-          className="mono"
-          style={{ width: '100%' }}
-          value={row.columns}
-          options={fields}
-          disabled={readOnly}
-          placeholder="pick one or more fields"
-          onChange={(value: string[]) => patch(index, { columns: value })}
-        />
-      ),
-    },
-    {
-      title: 'Unique',
-      width: 74,
-      align: 'center',
-      render: (_value, row, index) => (
-        <Checkbox
-          checked={row.unique}
-          disabled={readOnly}
-          onChange={(event) => patch(index, { unique: event.target.checked })}
-        />
-      ),
-    },
-    {
-      title: 'Kind',
-      width: 110,
-      render: (_value, row) => (
-        <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-          {row.originalName ? 'existing' : 'new'}
-        </Typography.Text>
-      ),
-    },
-  ]
-
-  return (
-    <Table
-      className="dm-design-grid"
-      size="small"
-      bordered
-      rowKey={(_row, index) => String(index)}
-      columns={columns}
-      dataSource={design.indexes}
-      pagination={false}
-      rowSelection={selection ? rowSelection(selection) : undefined}
-      scroll={{ x: 'max-content', y: '100%' }}
-      locale={{ emptyText: 'No secondary indexes' }}
-      summary={() =>
-        primary ? (
-          <Table.Summary.Row className="dm-design-pk">
-            <Table.Summary.Cell index={0}>
-              <Typography.Text className="mono">{primary.name}</Typography.Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={1}>
-              <Typography.Text className="mono">{primary.columns.join(', ')}</Typography.Text>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={2} align="center">
-              <Tag color="gold">PK</Tag>
-            </Table.Summary.Cell>
-            <Table.Summary.Cell index={3}>
-              <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                edited above
-              </Typography.Text>
-            </Table.Summary.Cell>
-          </Table.Summary.Row>
-        ) : null
-      }
     />
   )
 }

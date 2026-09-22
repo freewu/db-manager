@@ -144,7 +144,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         {
           key: 'structure',
           icon: <AppstoreOutlined />,
-          label: 'Design object',
+          label: `Design ${KIND_SINGULAR[object.kind]}`,
           onClick: () => openObject(object, 'structure'),
         },
         {

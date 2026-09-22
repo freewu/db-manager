@@ -1092,8 +1092,8 @@ body {
 
 /* -------------------------------------------------------------- table designer */
 
-/* The structure tab of a table window is a small designer: a command strip, the
-   field grid, the index grid and the SQL the draft would produce. */
+/* The structure tab of a table window is a small designer: a command strip and
+   the field grid — the fields *are* the table, the DDL is derived from them. */
 .dm-designer {
   display: flex;
   flex-direction: column;
@@ -1127,16 +1127,13 @@ body {
   gap: 6px;
 }
 
-.dm-designer-split {
+/* Everything under the command strip. It used to be a vertical splitter with
+   the index grid in its lower pane; now the field grid has the room. */
+.dm-designer-body {
   flex: 1 1 auto;
   min-height: 0;
-}
-
-.dm-designer-split .ant-splitter-panel {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
 }
 
 .dm-designer-panel {
@@ -1163,8 +1160,8 @@ body {
    height down the boxes antd puts between the panel and the grid is what makes
    its own split real: the header stays where it is, the rows scroll under it.
    `flex-basis: 0` matters as much as the height — measured by its content, a
-   thousand-row grid made the splitter starve the sibling panel and the fields
-   list was left with nothing but its heading. */
+   thousand-row grid would otherwise push the panel taller than the window and
+   leave the list with nothing but its heading. */
 .dm-designer-panel .ant-table-wrapper,
 .dm-designer-panel .ant-spin,
 .dm-designer-panel .ant-spin-container,
@@ -1191,46 +1188,17 @@ body {
   font-size: 12px;
 }
 
-.dm-design-grid .ant-table-summary > tr > td {
-  background: var(--dm-chrome-bg);
-  padding: 3px 6px;
+/* The grip in front of each field row. Only the grip arms the row for a drag,
+   so the inputs keep their normal cursor and text selection. */
+.dm-drag-handle {
+  display: inline-flex;
+  color: var(--dm-null);
+  cursor: grab;
 }
 
-.dm-design-preview {
-  flex: 0 0 auto;
-  max-height: 42%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-top: 1px solid var(--dm-border);
-}
-
-.dm-design-preview-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  padding: 5px 10px;
-  background: var(--dm-chrome-bg);
-  border-bottom: 1px solid var(--dm-border);
-}
-
-.dm-design-preview-head .dm-spacer {
-  flex: 1 1 auto;
-}
-
-.dm-design-preview-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  padding: 8px 10px;
-}
-
-.dm-design-preview-body .dm-ddl {
-  max-height: none;
-  background: transparent;
-  border: 0;
-  padding: 0;
+/* The line that says where the dragged field would land. */
+.dm-design-grid .ant-table-tbody > tr.dm-drag-over > td {
+  box-shadow: inset 0 2px 0 var(--dm-accent);
 }
 
 /* ------------------------------------------------- runtime status page */

@@ -56,6 +56,7 @@ import {
   FOLDER_LABEL,
   FOLDER_ORDER,
   indexesKey,
+  KIND_SINGULAR,
   namespaceKey,
   objectsKey,
   queriesKey,
@@ -548,7 +549,9 @@ export function ConnectionSidebar() {
                   {
                     key: 'structure',
                     icon: <AppstoreOutlined />,
-                    label: designable ? 'Design object' : 'Open fields',
+                    label: designable
+                      ? `Design ${KIND_SINGULAR[object.kind]}`
+                      : 'Open fields',
                     onClick: () => openObject(sessionId, database, schema, object, 'structure'),
                   },
                   {
@@ -2140,7 +2143,7 @@ function errorNode(scope: string, text: string, onRetry?: () => void): TreeDataN
  * the *component* tree, and this one hangs off a tree row — so without care a
  * click on an item also reaches the row's own click handler, which re-opens the
  * object on its data page and undoes whatever the item just asked for
- * ("Design object" would land on Data, "New query" on a folder would open the
+ * ("Design table" would land on Data, "New query" on a folder would open the
  * object list). Stopping the event at the menu keeps a menu click a menu click.
  */
 function NodeMenu({

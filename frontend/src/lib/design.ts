@@ -8,7 +8,6 @@
  */
 import type {
   DesignColumn,
-  DesignIndex,
   DriverType,
   TableDesign,
   TableStructure,
@@ -149,14 +148,6 @@ export function emptyColumn(design: TableDesign, driver: DriverType | undefined)
   }
 }
 
-/** A brand new index over the given fields. */
-export function emptyIndex(design: TableDesign, columns: string[]): DesignIndex {
-  const used = new Set(design.indexes.map((ix) => ix.name.toLowerCase()))
-  let name = `idx_${design.object}`
-  for (let n = 2; used.has(name.toLowerCase()); n += 1) name = `idx_${design.object}_${n}`
-  return { name, originalName: '', columns, unique: false }
-}
-
 /** Field names of a draft, in order (the options of an index editor). */
 export function fieldNames(design: TableDesign): string[] {
   return design.columns.map((c) => c.name.trim()).filter(Boolean)
@@ -260,20 +251,4 @@ const TYPE_SUGGESTIONS: Partial<Record<DriverType, string[]>> = {
 export function typeSuggestions(driver: DriverType | undefined): string[] {
   if (!driver) return []
   return TYPE_SUGGESTIONS[driver] ?? []
-}
-
-/**
- * Indexes an engine keeps in the background: the primary key shows up in the
- * catalog, but it is edited through the fields, not as an index.
- */
-export function primaryKeyRow(structure: TableStructure): DesignIndex | null {
-  const index = structure.indexes.find((ix) => ix.primary)
-  const fields = structure.columns.filter((c) => c.primaryKey).map((c) => c.name)
-  if (!index && fields.length === 0) return null
-  return {
-    name: index?.name || 'PRIMARY',
-    originalName: index?.name ?? '',
-    columns: index?.columns?.length ? index.columns : fields,
-    unique: true,
-  }
 }

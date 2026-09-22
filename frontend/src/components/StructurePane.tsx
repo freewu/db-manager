@@ -7,7 +7,6 @@ import {
   Input,
   Space,
   Spin,
-  Splitter,
   Table,
   Tag,
   Tooltip,
@@ -15,14 +14,12 @@ import {
 } from 'antd'
 import type { TableColumnsType } from 'antd'
 import {
-  CaretRightOutlined,
   CopyOutlined,
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
   PlusOutlined,
   ReloadOutlined,
-  WarningOutlined,
 } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
@@ -35,9 +32,9 @@ import type {
   TableStructure,
 } from '../api/types'
 import { capabilitiesOf } from '../lib/capabilities'
-import { emptyColumn, emptyIndex, isDirty, primaryKeyRow } from '../lib/design'
+import { emptyColumn, isDirty } from '../lib/design'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
-import { FieldGrid, IndexGrid } from './DesignGrid'
+import { FieldGrid } from './DesignGrid'
 import { SqlCode } from './SqlCode'
 
 /** Which slice of the structure a table window is showing. */
@@ -67,8 +64,8 @@ interface StructureViewProps {
  * instant and costs no extra round trip.
  *
  * The Columns slice is the table designer: it edits a draft of the table, and
- * the SQL that would turn the live table into that draft is previewed next to
- * it. Nothing runs until Save is pressed.
+ * the SQL that would turn the live table into that draft is shown in the
+ * confirmation before it runs. Nothing runs until Save is pressed.
  */
 export function StructureView({ tab, section, reloadToken = 0, creating = false }: StructureViewProps) {
   const { message, modal } = AntApp.useApp()
@@ -108,7 +105,6 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
   const [applying, setApplying] = useState(false)
   const [applyError, setApplyError] = useState<string | null>(null)
   const [selectedField, setSelectedField] = useState<number | null>(null)
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   // Set right before a reload that must throw the draft away (after a save).
   const rebase = useRef(false)
 
@@ -238,6 +234,21 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
         okText: creating ? 'Create' : 'Apply',
         content: (
           <div>
+            {plan && plan.warnings.length > 0 ? (
+              <Alert
+                type="info"
+                showIcon
+                style={{ marginBottom: 8 }}
+                title="This engine cannot do everything the design asks for"
+                description={
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {plan.warnings.map((warning, index) => (
+                      <li key={index}>{warning}</li>
+                    ))}
+                  </ul>
+                }
+              />
+            ) : null}
             <SqlCode
               className="dm-ddl"
               style={{ maxHeight: 280 }}
@@ -305,7 +316,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
         },
       })
     },
-    [creating, database, draft, message, modal, object, schema, tab.id, tab.sessionId],
+    [creating, database, draft, message, modal, object, plan, schema, tab.id, tab.sessionId],
   )
 
   if (loading && !structure) {
@@ -499,47 +510,9 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
           </Button>
         </Tooltip>
 
-        <span className="dm-toolbar-sep" />
-
-        <Tooltip title="Index the current fields">
-          <Button
-            size="small"
-            icon={<PlusOutlined />}
-            disabled={readOnly || !draft}
-            onClick={() => {
-              if (!draft) return
-              const fields = draft.columns.map((c) => c.name.trim()).filter(Boolean)
-              const next = [...draft.indexes, emptyIndex(draft, fields.slice(0, 1))]
-              updateDesign(tab.id, { ...draft, indexes: next })
-              setSelectedIndex(next.length - 1)
-            }}
-          >
-            Add index
-          </Button>
-        </Tooltip>
-        <Tooltip title="Drop the selected index">
-          <Button
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            disabled={readOnly || selectedIndex === null || !draft}
-            onClick={() => {
-              if (!draft || selectedIndex === null) return
-              const index = draft.indexes[selectedIndex]
-              const indexes = draft.indexes.filter((_, i) => i !== selectedIndex)
-              updateDesign(tab.id, { ...draft, indexes })
-              setSelectedIndex(null)
-              message.info(`Index ${index.name} will be dropped when you save`)
-            }}
-          >
-            Delete index
-          </Button>
-        </Tooltip>
-
         <div className="dm-toolbar-right">
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {rowCount} field{rowCount === 1 ? '' : 's'}
-            {draft ? ` · ${draft.indexes.length} index${draft.indexes.length === 1 ? '' : 'es'}` : ''}
           </Typography.Text>
           {readOnly ? (
             <Tag color="warning">read-only</Tag>
@@ -555,7 +528,6 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
                   onClick={() => {
                     ensureDesign(tab.id, structure, true)
                     setSelectedField(null)
-                    setSelectedIndex(null)
                   }}
                 >
                   Revert
@@ -587,95 +559,25 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
         />
       ) : null}
 
-      <Splitter layout="vertical" className="dm-designer-split">
-        <Splitter.Panel defaultSize="58%" min="25%">
-          <div className="dm-designer-panel">
-            <div className="dm-designer-heading">Fields</div>
-            <FieldGrid
-              design={draft ?? { sessionId: tab.sessionId, object, columns: [], indexes: [] }}
-              driver={session?.driver}
-              readOnly={readOnly}
-              onChange={(next) => updateDesign(tab.id, next)}
-              selection={{ selected: selectedField, onChange: setSelectedField }}
-            />
-          </div>
-        </Splitter.Panel>
-        <Splitter.Panel min="15%">
-          <div className="dm-designer-panel">
-            <div className="dm-designer-heading">Indexes</div>
-            <IndexGrid
-              design={draft ?? { sessionId: tab.sessionId, object, columns: [], indexes: [] }}
-              driver={session?.driver}
-              readOnly={readOnly}
-              onChange={(next) => updateDesign(tab.id, next)}
-              selection={{ selected: selectedIndex, onChange: setSelectedIndex }}
-              primary={primaryKeyRow(structure)}
-            />
-          </div>
-        </Splitter.Panel>
-      </Splitter>
+      {planError ? (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ margin: '8px 12px 0' }}
+          title={<span className="mono">{planError}</span>}
+        />
+      ) : null}
 
-      <div className="dm-design-preview">
-        <div className="dm-design-preview-head">
-          <CaretRightOutlined style={{ fontSize: 10 }} />
-          <Typography.Text strong style={{ fontSize: 12 }}>
-            SQL preview
-          </Typography.Text>
-          {plan?.destructive ? <Tag color="red">drops data</Tag> : null}
-          <span className="dm-spacer" />
-          <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-            {planError
-              ? 'the design cannot be rendered'
-              : statements.length === 0
-                ? creating
-                  ? 'nothing to create yet'
-                  : 'no changes'
-                : `${statements.length} statement${statements.length === 1 ? '' : 's'}`}
-          </Typography.Text>
-          {statements.length > 0 ? (
-            <Tooltip title="Copy the script">
-              <Button
-                size="small"
-                icon={<CopyOutlined />}
-                onClick={() => copy(statements.map((s) => `${s};`).join('\n'), 'SQL')}
-              />
-            </Tooltip>
-          ) : null}
-        </div>
-        <div className="dm-design-preview-body">
-          {planError ? (
-            <Alert type="warning" showIcon title={<span className="mono">{planError}</span>} />
-          ) : null}
-          {plan && plan.warnings.length > 0 ? (
-            <Alert
-              type="info"
-              showIcon
-              icon={<WarningOutlined />}
-              style={{ marginBottom: 6 }}
-              title="This engine cannot do everything the design asks for"
-              description={
-                <ul style={{ margin: 0, paddingLeft: 18 }}>
-                  {plan.warnings.map((warning, index) => (
-                    <li key={index}>{warning}</li>
-                  ))}
-                </ul>
-              }
-            />
-          ) : null}
-          {statements.length === 0 && !planError ? (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {creating
-                ? 'Name the table, then add the fields it should have.'
-                : 'The table matches the design; nothing to run.'}
-            </Typography.Text>
-          ) : (
-            <SqlCode
-              className="dm-ddl"
-              style={{ margin: 0 }}
-              sql={statements.map((statement) => `${statement};`).join('\n')}
-              driver={session?.driver}
-            />
-          )}
+      <div className="dm-designer-body">
+        <div className="dm-designer-panel">
+          <div className="dm-designer-heading">Fields</div>
+          <FieldGrid
+            design={draft ?? { sessionId: tab.sessionId, object, columns: [], indexes: [] }}
+            driver={session?.driver}
+            readOnly={readOnly}
+            onChange={(next) => updateDesign(tab.id, next)}
+            selection={{ selected: selectedField, onChange: setSelectedField }}
+          />
         </div>
       </div>
     </div>
