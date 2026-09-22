@@ -129,6 +129,72 @@ export function groupOf(entries: ExplorerEntry[], id: string): string | undefine
 }
 
 /**
+ * Where a drop lands, or `undefined` when the arrangement cannot express it.
+ *
+ * `relative` is where on a row the drop sits — -1 above it, 0 on it, +1 below —
+ * the three values a row's own drop handler is asked about, and `below` says the
+ * pointer has gone past that row's bottom edge rather than resting on its lower
+ * half. The two only differ on the *last* row of a folder, and there they mean
+ * different things:
+ *
+ * - its lower half is still the row, so the drop is next to it — inside the
+ *   folder, which is how a member is moved to the bottom of its own folder;
+ * - past its bottom edge the rows are over, and what is under a folder belongs
+ *   to the level the folder itself sits at — which is how a member comes back
+ *   out.
+ *
+ * Without that distinction a connection cannot be dragged out of a folder
+ * downwards: the space under the folder's last row would put it back in. A
+ * folder is the same story in reverse — it never goes inside one.
+ */
+export function dropTargetFor(
+  entries: ExplorerEntry[],
+  dragId: string,
+  dropId: string,
+  relative: number,
+  below = false,
+): DropTarget | undefined {
+  const dragged = entryAt(entries, dragId)
+  const dropped = entryAt(entries, dropId)
+  if (!dragged || !dropped) return undefined
+
+  if (dropped.t === 'group') {
+    // Onto the folder's own row puts the connection inside it; above or below
+    // its row is the level the folder itself sits at.
+    if (relative !== 0) return { t: 'root', neighborId: dropped.id, after: relative > 0 }
+    return dragged.t === 'connection' ? { t: 'inside', groupId: dropped.id } : undefined
+  }
+
+  const owner = groupOf(entries, dropped.id)
+  if (!owner) return { t: 'root', neighborId: dropped.id, after: relative >= 0 }
+
+  if (below && relative > 0 && isLastMember(entries, owner, dropped.id)) {
+    return { t: 'root', neighborId: owner, after: true }
+  }
+  // A member sits inside its folder, so its neighbours are slots in that folder
+  // rather than rows at the top level.
+  if (dragged.t === 'group') return undefined
+  return { t: 'member', groupId: owner, neighborId: dropped.id, after: relative >= 0 }
+}
+
+/**
+ * The drop the pane's empty space means: the bottom of the top level.
+ *
+ * The rows end where the arrangement ends, so anything under them is past the
+ * list — and past every row at the top level is where a connection let go under
+ * a folder lands. Aiming at the last entry itself is not a move, and it is
+ * refused here rather than sent to the backend.
+ */
+export function endOfTopLevelTarget(
+  entries: ExplorerEntry[],
+  dragId: string,
+): DropTarget | undefined {
+  const last = entries[entries.length - 1]
+  if (!last || last.id === dragId) return undefined
+  return { t: 'root', neighborId: last.id, after: true }
+}
+
+/**
  * Moves an entry to where the drop asked for and returns the new top level.
  *
  * Everything that cannot be expressed — a folder inside a folder, a folder
@@ -178,6 +244,21 @@ export function moveEntry(
   const at = rest.findIndex((entry) => entry.id === target.neighborId)
   if (at < 0) return entries
   return insert(rest, moved, target.after ? at + 1 : at)
+}
+
+/** The entry a row stands for: a top-level entry, or a connection inside a folder. */
+function entryAt(entries: ExplorerEntry[], id: string): ExplorerEntry | undefined {
+  for (const entry of entries) {
+    if (entry.id === id) return entry
+    if (entry.t === 'group' && entry.members.includes(id)) return { t: 'connection', id }
+  }
+  return undefined
+}
+
+/** Whether a connection is the bottom row drawn inside its folder. */
+function isLastMember(entries: ExplorerEntry[], groupId: string, id: string): boolean {
+  const group = entries.find((entry) => entry.id === groupId)
+  return group?.t === 'group' && group.members[group.members.length - 1] === id
 }
 
 /** Takes an entry out of the arrangement, wherever it sits. */

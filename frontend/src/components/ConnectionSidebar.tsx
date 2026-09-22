@@ -37,6 +37,8 @@ import { driverIconOrLogo } from '../lib/assets'
 import { capabilitiesOf, findDriver, objectKindsOf } from '../lib/capabilities'
 import {
   arrangementOf,
+  dropTargetFor,
+  endOfTopLevelTarget,
   groupOf,
   type DropTarget,
   type ExplorerEntry,
@@ -800,6 +802,7 @@ export function ConnectionSidebar() {
           <NodeMenu items={connectionMenuItems(root, session)}>
             <span
               className="dm-connection-node"
+              data-tree-key={connectionKey}
               onDoubleClick={() => openRuntime(root, session)}
             >
               <span
@@ -965,6 +968,60 @@ export function ConnectionSidebar() {
   }, [])
 
   /**
+   * Where the pointer is while a row is being dragged.
+   *
+   * A row's drop handler says "below *this* row" and never says whether the
+   * pointer is still on that row's lower half or already past it — and on a
+   * folder's last row those are two different drops (see `dropTargetFor`). The
+   * pane listens for `dragover` in the capture phase, so this is the position of
+   * the event that is about to be turned into a drop decision, not one from
+   * before it.
+   */
+  const dragPoint = useRef<{ x: number; y: number } | null>(null)
+
+  /** The entry a drag carries, so a drop in the empty space knows what moves. */
+  const draggedId = useRef<string | null>(null)
+
+  /** The row a key is drawn in, so "on the row" can be told from "under it". */
+  const rowElement = useCallback((key: string): HTMLElement | undefined => {
+    const rows = treePaneRef.current?.querySelectorAll<HTMLElement>('[data-tree-key]') ?? []
+    for (const title of rows) {
+      if (title.getAttribute('data-tree-key') === key) {
+        return title.closest<HTMLElement>('.ant-tree-treenode') ?? title
+      }
+    }
+    return undefined
+  }, [])
+
+  /** Whether the pointer has gone past the bottom edge of the row it is over. */
+  const belowRow = useCallback(
+    (key: string): boolean => {
+      const point = dragPoint.current
+      const row = rowElement(key)
+      if (!point || !row) return false
+      return point.y > row.getBoundingClientRect().bottom
+    },
+    [rowElement],
+  )
+
+  /**
+   * Whether the pointer is in the pane's empty space, under its last row.
+   *
+   * There are no rows down there, so no row handler runs and the tree reports
+   * nothing at all: the one gesture that means "out of the list" — let go below
+   * it — would do nothing. The pane answers for that space itself.
+   */
+  const overEmptySpace = useCallback((event: React.DragEvent): boolean => {
+    const pane = treePaneRef.current
+    if (!pane) return false
+    const rows = pane.querySelectorAll<HTMLElement>('.ant-tree-treenode')
+    const last = rows[rows.length - 1]
+    if (!last || event.clientY <= last.getBoundingClientRect().bottom) return false
+    const under = document.elementFromPoint(event.clientX, event.clientY)
+    return Boolean(under && pane.contains(under) && !under.closest('.ant-tree-treenode'))
+  }, [])
+
+  /**
    * Where a drop would land, or `undefined` when the arrangement cannot express
    * it.
    *
@@ -975,47 +1032,63 @@ export function ConnectionSidebar() {
    * schema, an object — lands nowhere at all.
    */
   const resolveDrop = useCallback(
-    (dragId: string, dropKey: string, relative: number): DropTarget | undefined => {
-      const dragged = arrangement.find((entry) => entry.id === dragId)
-      if (!dragged) return undefined
-      const ref = decodeNode(dropKey)
-      if (!ref) return undefined
+    (dragId: string, dropKey: string, relative: number, below: boolean): DropTarget | undefined => {
+      const dropId = entryIdOfKey(dropKey)
+      if (!dropId) return undefined
+      return dropTargetFor(arrangement, dragId, dropId, relative, below)
+    },
+    [arrangement, entryIdOfKey],
+  )
 
-      if (ref.t === 'group') {
-        if (relative === 0) {
-          // Onto the folder's own row puts the connection inside it. A folder
-          // inside a folder is one level too deep.
-          return dragged.t === 'connection' ? { t: 'inside', groupId: ref.groupId } : undefined
-        }
-        return { t: 'root', neighborId: ref.groupId, after: relative > 0 }
-      }
-      if (ref.t === 'connection') {
-        const owner = groupOf(arrangement, ref.connectionId)
-        if (!owner) return { t: 'root', neighborId: ref.connectionId, after: relative >= 0 }
-        // A member sits inside its folder, so its neighbours are slots in that
-        // folder — and a folder does not go inside one. This is also how a
-        // connection is dragged back out: aim next to a top-level row.
-        if (dragged.t === 'group') return undefined
-        return { t: 'member', groupId: owner, neighborId: ref.connectionId, after: relative >= 0 }
-      }
-      return undefined
+  /**
+   * Moves the drop hint to the level the drop will really land at.
+   *
+   * The tree draws its line at the indentation of the row it settled on and has
+   * no way to say "one level out", but that is exactly the drop under a folder's
+   * last row: the line would sit under the member while the connection lands
+   * beside the folder. Pulling it back by the width the tree is really indented
+   * with — measured off the tree, not assumed — is what keeps the hint honest.
+   */
+  const markDropLevel = useCallback(
+    (target: DropTarget | undefined, ref: NodeRef | undefined) => {
+      const pane = treePaneRef.current
+      if (!pane) return
+      const outdent =
+        target?.t === 'root' &&
+        ref?.t === 'connection' &&
+        groupOf(arrangement, ref.connectionId) !== undefined
+      pane.classList.toggle('is-drop-outdent', outdent)
+      if (!outdent) return
+      const unit = pane.querySelector<HTMLElement>('.ant-tree-indent-unit')
+      if (unit) pane.style.setProperty('--dm-tree-indent', `${unit.offsetWidth}px`)
     },
     [arrangement],
   )
 
+  /** Drops the drag state the pane keeps outside React: hint, pointer, cargo. */
+  const clearDragHints = useCallback(() => {
+    dragPoint.current = null
+    draggedId.current = null
+    treePaneRef.current?.classList.remove('is-drop-outdent', 'is-drop-end')
+  }, [])
+
   const allowDrop = useCallback<NonNullable<TreeProps['allowDrop']>>(
     ({ dragNode, dropNode, dropPosition }) => {
       const dragId = entryIdOfKey(dragNode.key)
-      if (!dragId || dragId === entryIdOfKey(dropNode.key)) return false
-      return resolveDrop(dragId, String(dropNode.key), dropPosition) !== undefined
+      const dropKey = String(dropNode.key)
+      const target =
+        dragId && dragId !== entryIdOfKey(dropNode.key)
+          ? resolveDrop(dragId, dropKey, dropPosition, belowRow(dropKey))
+          : undefined
+      markDropLevel(target, decodeNode(dropKey) ?? undefined)
+      return target !== undefined
     },
-    [entryIdOfKey, resolveDrop],
+    [belowRow, entryIdOfKey, markDropLevel, resolveDrop],
   )
 
   const handleDrop = useCallback<NonNullable<TreeProps['onDrop']>>(
     (info) => {
       const dragId = entryIdOfKey(info.dragNode?.key)
-      if (!dragId) return
       // rc-tree reports where the drop landed as an index among the parent's
       // children; what the hint meant is the same -1 / 0 / +1 relative to the
       // node it names that `allowDrop` was asked about.
@@ -1023,11 +1096,51 @@ export function ConnectionSidebar() {
       const relative = info.dropToGap
         ? info.dropPosition - Number(pos.split('-').pop())
         : 0
-      const target = resolveDrop(dragId, String(info.node.key), relative)
+      const dropKey = String(info.node.key)
+      const target = dragId ? resolveDrop(dragId, dropKey, relative, belowRow(dropKey)) : undefined
+      clearDragHints()
+      if (!dragId || !target) return
+      void moveConnection(dragId, target).catch((error) => message.error(toMessage(error)))
+    },
+    [belowRow, clearDragHints, entryIdOfKey, message, moveConnection, resolveDrop],
+  )
+
+  const handleDragStart = useCallback<NonNullable<TreeProps['onDragStart']>>(
+    ({ node }) => {
+      draggedId.current = entryIdOfKey(node.key) ?? null
+    },
+    [entryIdOfKey],
+  )
+
+  /** The pane's own half of dragging: where the pointer is, and what it is over. */
+  const handlePaneDrag = useCallback(
+    (event: React.DragEvent) => {
+      dragPoint.current = { x: event.clientX, y: event.clientY }
+      const pane = treePaneRef.current
+      // Only a row of this pane can be let go in its empty space; a file dragged
+      // in from outside is none of the pane's business.
+      const empty = draggedId.current !== null && overEmptySpace(event)
+      pane?.classList.toggle('is-drop-end', empty)
+      if (empty) pane?.classList.remove('is-drop-outdent')
+      // A row prevents the default itself; the empty space has nobody to do it
+      // for it, and without that nothing can be dropped there.
+      if (empty) event.preventDefault()
+    },
+    [overEmptySpace],
+  )
+
+  const handlePaneDrop = useCallback(
+    (event: React.DragEvent) => {
+      const dragId = draggedId.current
+      if (!dragId || !overEmptySpace(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+      clearDragHints()
+      const target = endOfTopLevelTarget(arrangement, dragId)
       if (!target) return
       void moveConnection(dragId, target).catch((error) => message.error(toMessage(error)))
     },
-    [entryIdOfKey, message, moveConnection, resolveDrop],
+    [arrangement, clearDragHints, message, moveConnection, overEmptySpace],
   )
 
   /**
@@ -1169,12 +1282,14 @@ export function ConnectionSidebar() {
    * Answers whether it found the row: a row whose namespace is still loading is
    * not drawn yet, and the caller gets another chance on a later render.
    */
-  const scrollToRow = useCallback((key: string) => {
-    const rows = treePaneRef.current?.querySelectorAll('[data-tree-key]') ?? []
-    const row = [...rows].find((element) => element.getAttribute('data-tree-key') === key)
-    row?.scrollIntoView({ block: 'nearest' })
-    return Boolean(row)
-  }, [])
+  const scrollToRow = useCallback(
+    (key: string) => {
+      const row = rowElement(key)
+      row?.scrollIntoView({ block: 'nearest' })
+      return Boolean(row)
+    },
+    [rowElement],
+  )
 
   /**
    * Shows the explorer the folder a list window was opened from.
@@ -1438,7 +1553,14 @@ export function ConnectionSidebar() {
         />
       </div>
 
-      <div className="dm-sidebar-tree" ref={treePaneRef}>
+      <div
+        className="dm-sidebar-tree"
+        ref={treePaneRef}
+        onDragEnterCapture={handlePaneDrag}
+        onDragOverCapture={handlePaneDrag}
+        onDropCapture={handlePaneDrop}
+        onDragEndCapture={clearDragHints}
+      >
         {arrangement.length === 0 && looseSessions.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -1471,6 +1593,8 @@ export function ConnectionSidebar() {
             onLoad={handleLoad}
             draggable={{ icon: false, nodeDraggable }}
             allowDrop={allowDrop}
+            onDragStart={handleDragStart}
+            onDragEnd={clearDragHints}
             onDrop={handleDrop}
             style={{ background: 'transparent' }}
           />

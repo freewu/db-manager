@@ -150,6 +150,25 @@ body {
   padding: 4px 4px 12px;
 }
 
+/* The drop under a folder's last row lands beside the folder, not inside it, so
+   the line the tree drew at that row is pulled back one indent — the width of
+   the tree's own indent unit, which the pane measures (`--dm-tree-indent`) and
+   falls back to the row height it is built from. */
+.dm-sidebar-tree.is-drop-outdent .ant-tree-drop-indicator {
+  margin-left: calc(-1 * var(--dm-tree-indent, var(--dm-tree-row-height, 22px)));
+}
+
+/* Letting go under the last row means the bottom of the top level. There is no
+   row down there to hang a line on, so the line is drawn under the rows. */
+.dm-sidebar-tree.is-drop-end::after {
+  content: '';
+  display: block;
+  height: 2px;
+  margin: 0 4px;
+  border-radius: 1px;
+  background: var(--dm-accent);
+}
+
 /* Context menu for the empty part of the sidebar, pinned where it was asked for. */
 .dm-blank-menu {
   position: fixed;
