@@ -38,10 +38,27 @@ import { formatSql, formatterDialect } from '../lib/sqlFormat'
 import { catalogOf, objectsKey } from '../lib/tree'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { DataGrid } from './DataGrid'
+import { NamePromptModal } from './NamePromptModal'
 import { QueryFavorites } from './QueryFavorites'
 import { SqlEditor } from './SqlEditor'
 
 const MAX_HISTORY = 25
+
+/**
+ * Why a window has nowhere to keep a script, or `null` when it has.
+ *
+ * A script is filed under the connection's profile and the database it was
+ * written against, so an ad-hoc session (no profile to file it under) and a
+ * session with no database picked (no folder to put it in) both have nowhere to
+ * go. Both are said in the button's tooltip — the way the ribbon explains its
+ * disabled buttons — rather than by a button that only fails once pressed.
+ */
+function saveBlocker(hasFile: boolean, connectionId?: string, database?: string): string | null {
+  if (hasFile) return null
+  if (!connectionId) return 'This connection has no saved profile, so there is nowhere to keep a script'
+  if (!database) return 'This session has no database picked, so there is no folder to save into'
+  return null
+}
 
 interface QueryPaneProps {
   tab: WorkspaceTab
@@ -51,9 +68,10 @@ interface QueryPaneProps {
  * SQL scratchpad for one tab: editor on top, results below.
  *
  * Two shapes share the pane. A scratchpad tab (`tab.queryFile` unset) holds text
- * that nothing outside the window can see. A tab bound to a saved script edits
- * that file: its text is read from it when the window opens, Save writes it back,
- * and the tab is marked dirty until it has.
+ * that nothing outside the window can see; Save asks for a name and turns it into
+ * the second shape. A tab bound to a saved script edits that file: its text is
+ * read from it when the window opens, Save writes it back, and the tab is marked
+ * dirty until it has.
  */
 export function QueryPane({ tab }: QueryPaneProps) {
   const session = useAppStore((s) => s.sessionOf(tab.sessionId))
@@ -63,6 +81,8 @@ export function QueryPane({ tab }: QueryPaneProps) {
   const treeSchemas = useAppStore((s) => s.tree.schemas)
   const loadObjects = useAppStore((s) => s.loadObjects)
   const saveQueryFile = useAppStore((s) => s.saveQueryFile)
+  const createQueryFile = useAppStore((s) => s.createQueryFile)
+  const adoptQueryFile = useAppStore((s) => s.adoptQueryFile)
   const setTabDirty = useAppStore((s) => s.setTabDirty)
   const { message } = AntApp.useApp()
 
@@ -86,12 +106,15 @@ export function QueryPane({ tab }: QueryPaneProps) {
   const [timeoutMs, setTimeoutMs] = useState(60000)
   const [history, setHistory] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  /** Whether the window is asking what to call the script it is holding. */
+  const [naming, setNaming] = useState(false)
   /** Why the saved script could not be opened, if it could not. */
   const [fileError, setFileError] = useState<string | null>(null)
   const viewRef = useRef<EditorView | null>(null)
 
   const database = tab.database ?? session?.database
   const file = tab.queryFile
+  const saveBlocked = saveBlocker(Boolean(file), session?.connectionId, database)
 
   /**
    * The namespace whose objects the editor completes table names from.
@@ -172,7 +195,13 @@ export function QueryPane({ tab }: QueryPaneProps) {
   )
 
   const save = useCallback(async () => {
-    if (!file) return
+    // A window that is not over a file yet has no name to write to, and asking
+    // for one is what Save means there. The text is not touched: naming a script
+    // and writing it are one step (see `saveAs`).
+    if (!file) {
+      setNaming(true)
+      return
+    }
     setSaving(true)
     try {
       await saveQueryFile({
@@ -190,6 +219,27 @@ export function QueryPane({ tab }: QueryPaneProps) {
       setSaving(false)
     }
   }, [file, message, saveQueryFile, setTabDirty, sql, tab.id])
+
+  /**
+   * Writes the scratchpad out under the name the user just picked.
+   *
+   * The window becomes a window over that file, holding exactly the text that
+   * was just written to it. Nothing about the text changes, so the read that a
+   * file-backed window does when it opens has to be marked as already done:
+   * left to run it would land after this and put back what the file held before
+   * — which is nothing.
+   */
+  const saveAs = useCallback(
+    async (name: string) => {
+      if (!database) return
+      const created = await createQueryFile(tab.sessionId, database, name, sql)
+      readFor.current = tab.id
+      adoptQueryFile(tab.id, created)
+      setFileError(null)
+      message.success(`Saved ${created.name}`)
+    },
+    [adoptQueryFile, createQueryFile, database, message, sql, tab.id, tab.sessionId],
+  )
 
   // The only difference between the two script exports is the language, and
   // the label and the file extension are the only places that shows.
@@ -516,18 +566,30 @@ export function QueryPane({ tab }: QueryPaneProps) {
         <Tooltip title="Clear editor">
           <Button size="small" icon={<ClearOutlined />} onClick={() => setSql('')} />
         </Tooltip>
-        {file ? (
-          <Tooltip title="Ctrl/Cmd+S">
+        {/* Save is here even before the window has a name: a scratchpad is the
+            text that most needs saving, and pressing Save is what asks for the
+            name. Where there is nowhere to put a script at all, the tooltip says
+            so instead — and the button goes grey. */}
+        <Tooltip
+          title={
+            saveBlocked ??
+            (file
+              ? 'Ctrl/Cmd+S'
+              : 'Name this script and save it to the data folder (Ctrl/Cmd+S)')
+          }
+        >
+          <span>
             <Button
               size="small"
               icon={tab.dirty ? <FileTextOutlined /> : <SaveOutlined />}
+              disabled={saveBlocked !== null}
               loading={saving}
               onClick={() => void save()}
             >
               {tab.dirty ? 'Save *' : 'Save'}
             </Button>
-          </Tooltip>
-        ) : null}
+          </span>
+        </Tooltip>
 
         <span style={{ opacity: 0.35 }}>|</span>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -603,7 +665,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
             onChange={changeSql}
             onRun={runAll}
             onRunSelection={runSelection}
-            onSave={file ? () => void save() : undefined}
+            onSave={() => void save()}
             onFormat={canFormat ? reformat : undefined}
             onReady={(view) => {
               viewRef.current = view
@@ -828,6 +890,20 @@ export function QueryPane({ tab }: QueryPaneProps) {
           </div>
         </Splitter.Panel>
       </Splitter>
+
+      {/* The name a scratchpad is saved under. It lives here rather than in the
+          store because the name is what this window is being asked, and the
+          answer is handed straight back to the window. */}
+      <NamePromptModal
+        open={naming}
+        title="Save this script"
+        okText="Save"
+        placeholder="Query name"
+        initial=""
+        hint="Saved as a .sql file in the data folder, where the tree's Queries folder lists it. A name that is already taken is refused."
+        onClose={() => setNaming(false)}
+        onSubmit={saveAs}
+      />
     </div>
   )
 }

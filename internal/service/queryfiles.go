@@ -117,12 +117,17 @@ func (m *Manager) RenameQueryFile(rename models.QueryFileRename) (models.QueryFi
 	return file, nil
 }
 
-// CreateQueryFile creates an empty script and returns it, so a new query window
-// opens onto a file that really exists (and shows up in the tree immediately).
+// CreateQueryFile creates a script holding the given text and returns it, so a
+// new query window opens onto a file that really exists (and shows up in the tree
+// immediately).
 //
-// The name has to be free: overwriting an existing script with an empty one is
-// the exact data loss this check is here to prevent.
-func (m *Manager) CreateQueryFile(connectionID, database, name string) (models.QueryFile, error) {
+// The text is what the caller already has: naming an unsaved script and writing
+// it are one step, since a file created empty and filled in by a second call can
+// be left empty by a failure in between.
+//
+// The name has to be free: overwriting an existing script is the exact data loss
+// this check is here to prevent.
+func (m *Manager) CreateQueryFile(connectionID, database, name, sql string) (models.QueryFile, error) {
 	if err := m.checkQueryScope(connectionID, database); err != nil {
 		return models.QueryFile{}, err
 	}
@@ -140,11 +145,14 @@ func (m *Manager) CreateQueryFile(connectionID, database, name string) (models.Q
 		ConnectionID: connectionID,
 		Database:     database,
 		Name:         clean,
-		SQL:          "",
+		SQL:          sql,
 	})
 	if err != nil {
 		return models.QueryFile{}, queryFileError(err, clean)
 	}
+	// The write went through, so what is on disk is exactly the text that was
+	// sent; the caller gets it back without reading the file a second time.
+	file.SQL = sql
 	return file, nil
 }
 

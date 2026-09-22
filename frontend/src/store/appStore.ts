@@ -293,8 +293,25 @@ interface AppState {
   saveQueryFile: (save: QueryFileSave) => Promise<QueryFile>
   /** Moves a script to another name, and re-points an open tab at it. */
   renameQueryFile: (rename: QueryFileRename) => Promise<QueryFile>
-  /** Creates an empty script. Refuses (through the backend) a taken name. */
-  createQueryFile: (sessionId: string, database: string, name: string) => Promise<QueryFile>
+  /**
+   * Creates a script holding `sql`, named as asked. Refuses (through the
+   * backend) a name that is already taken.
+   */
+  createQueryFile: (
+    sessionId: string,
+    database: string,
+    name: string,
+    sql: string,
+  ) => Promise<QueryFile>
+  /**
+   * Binds a scratchpad window to the file it has just been saved as.
+   *
+   * The window keeps what is typed in it (its id does not change, so the pane is
+   * not rebuilt) and from here on it is a window *over a file*: the tree row it
+   * now has and the next Save both mean that name, and closing it with unsaved
+   * edits asks first.
+   */
+  adoptQueryFile: (tabId: string, file: QueryFile) => void
   /**
    * Re-reads one database's script folder by the connection it belongs to.
    *
@@ -858,12 +875,31 @@ export const useAppStore = create<AppState>((set, get) => ({
     return file
   },
 
-  async createQueryFile(sessionId, database, name) {
+  async createQueryFile(sessionId, database, name, sql) {
     const connectionId = get().sessions.find((s) => s.id === sessionId)?.connectionId
     if (!connectionId) throw new Error('This session has no saved connection profile.')
-    const file = await api.createQueryFile(connectionId, database, name)
+    const file = await api.createQueryFile(connectionId, database, name, sql)
     await get().reloadQueryFolder(connectionId, database)
     return file
+  },
+
+  adoptQueryFile(tabId, file) {
+    set((state) => ({
+      tabs: state.tabs.map((tab) =>
+        tab.id === tabId
+          ? {
+              ...tab,
+              title: file.name,
+              dirty: false,
+              queryFile: {
+                connectionId: file.connectionId,
+                database: file.database,
+                name: file.name,
+              },
+            }
+          : tab,
+      ),
+    }))
   },
 
   async deleteQueryFile(sessionId, database, name) {

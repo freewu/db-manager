@@ -237,9 +237,10 @@ func (a *App) RenameQueryFile(rename models.QueryFileRename) (models.QueryFile, 
 	return a.manager.RenameQueryFile(rename)
 }
 
-// CreateQueryFile creates an empty script, refusing a name that is taken.
-func (a *App) CreateQueryFile(connectionID, database, name string) (models.QueryFile, error) {
-	return a.manager.CreateQueryFile(connectionID, database, name)
+// CreateQueryFile creates a script holding the given text, refusing a name that
+// is taken.
+func (a *App) CreateQueryFile(connectionID, database, name, sql string) (models.QueryFile, error) {
+	return a.manager.CreateQueryFile(connectionID, database, name, sql)
 }
 
 // DeleteQueryFile removes one script.

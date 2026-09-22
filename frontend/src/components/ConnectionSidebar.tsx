@@ -47,6 +47,7 @@ import {
 } from '../lib/explorer'
 import { useAppStore, type ListScope, type TableView } from '../store/appStore'
 import { ConnectionTypeDropdown, connectionTypeItems, driverFromKey } from './ConnectionTypeMenu'
+import { NamePromptModal } from './NamePromptModal'
 import { objectIcon } from './objectIcon'
 import { SqlCode } from './SqlCode'
 import {
@@ -1777,7 +1778,7 @@ export function ConnectionSidebar() {
           if (rename) {
             await renameQueryFile({ connectionId, database, from: rename, to: name })
           } else {
-            await createQueryFile(sessionId, database, name)
+            await createQueryFile(sessionId, database, name, '')
           }
           // Opening the window is the point of both: a new script is made to be
           // written in, and a renamed one should not vanish from under the user.
@@ -2629,80 +2630,5 @@ function QueryNameModal({
       onClose={onClose}
       onSubmit={onSubmit}
     />
-  )
-}
-
-/**
- * A one-field name window.
- *
- * Create and rename look the same to a user, so they are the same window: the
- * caller says what the title should read and what to do with the answer. A
- * failed submit keeps the window open with the name still in it — losing a typed
- * name to a refused save would be the second mistake in a row.
- */
-function NamePromptModal({
-  open,
-  title,
-  okText,
-  placeholder,
-  initial,
-  hint,
-  onSubmit,
-  onClose,
-}: {
-  open: boolean
-  title: string
-  okText: string
-  placeholder: string
-  initial: string
-  hint?: string
-  onSubmit: (name: string) => Promise<void>
-  onClose: () => void
-}) {
-  const { message } = AntApp.useApp()
-  const [name, setName] = useState(initial)
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    setName(initial)
-  }, [initial, open])
-
-  const submit = useCallback(async () => {
-    const trimmed = name.trim()
-    if (!trimmed) return
-    setSaving(true)
-    try {
-      await onSubmit(trimmed)
-      onClose()
-    } catch (error) {
-      message.error(toMessage(error))
-    } finally {
-      setSaving(false)
-    }
-  }, [message, name, onClose, onSubmit])
-
-  return (
-    <Modal
-      open={open}
-      title={title}
-      okText={okText}
-      confirmLoading={saving}
-      okButtonProps={{ disabled: name.trim() === '' }}
-      onOk={() => void submit()}
-      onCancel={onClose}
-    >
-      <Input
-        autoFocus
-        value={name}
-        placeholder={placeholder}
-        onChange={(event) => setName(event.target.value)}
-        onPressEnter={() => void submit()}
-      />
-      {hint ? (
-        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>
-          {hint}
-        </Typography.Text>
-      ) : null}
-    </Modal>
   )
 }

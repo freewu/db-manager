@@ -124,9 +124,9 @@ export const api = {
   readQueryFile: (connectionId: string, database: string, name: string) =>
     invoke<QueryFile>('ReadQueryFile', connectionId, database, name),
   saveQueryFile: (save: QueryFileSave) => invoke<QueryFile>('SaveQueryFile', save),
-  /** Creates an empty script; refuses a name that is already taken. */
-  createQueryFile: (connectionId: string, database: string, name: string) =>
-    invoke<QueryFile>('CreateQueryFile', connectionId, database, name),
+  /** Creates a script holding `sql`; refuses a name that is already taken. */
+  createQueryFile: (connectionId: string, database: string, name: string, sql: string) =>
+    invoke<QueryFile>('CreateQueryFile', connectionId, database, name, sql),
   /** Moves a script to another name without touching the script itself. */
   renameQueryFile: (rename: QueryFileRename) =>
     invoke<QueryFile>('RenameQueryFile', rename),

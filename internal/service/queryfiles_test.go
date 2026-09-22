@@ -51,18 +51,39 @@ func TestQueryNameIsRequiredAndBounded(t *testing.T) {
 	manager, cfg := queryManager(t)
 
 	for _, name := range []string{"", "   ", "...", strings.Repeat("x", maxQueryNameRunes+1)} {
-		if _, err := manager.CreateQueryFile(cfg.ID, "shop", name); !apperr.Is(err, apperr.CodeInvalidConfig) {
+		if _, err := manager.CreateQueryFile(cfg.ID, "shop", name, ""); !apperr.Is(err, apperr.CodeInvalidConfig) {
 			t.Errorf("name %q: %v, want a refusal", name, err)
 		}
 	}
-	if _, err := manager.CreateQueryFile(cfg.ID, "shop", strings.Repeat("x", maxQueryNameRunes)); err != nil {
+	if _, err := manager.CreateQueryFile(cfg.ID, "shop", strings.Repeat("x", maxQueryNameRunes), ""); err != nil {
 		t.Fatalf("a name at the limit should be accepted: %v", err)
+	}
+}
+
+func TestCreateQueryFileWritesTheTextItWasGiven(t *testing.T) {
+	manager, cfg := queryManager(t)
+
+	// Naming a scratchpad and writing it are one step: the file has to hold the
+	// script the window was showing, not an empty one.
+	created, err := manager.CreateQueryFile(cfg.ID, "shop", "orders", "SELECT 1;")
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if created.SQL != "SELECT 1;" {
+		t.Fatalf("created file holds %q, want the script it was given", created.SQL)
+	}
+	read, err := manager.ReadQueryFile(cfg.ID, "shop", "orders")
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if read.SQL != "SELECT 1;" {
+		t.Fatalf("on disk: %q", read.SQL)
 	}
 }
 
 func TestCreateQueryFileRefusesAnExistingName(t *testing.T) {
 	manager, cfg := queryManager(t)
-	created, err := manager.CreateQueryFile(cfg.ID, "shop", "orders")
+	created, err := manager.CreateQueryFile(cfg.ID, "shop", "orders", "")
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -70,10 +91,10 @@ func TestCreateQueryFileRefusesAnExistingName(t *testing.T) {
 		t.Fatalf("a new query file should be empty: %+v", created)
 	}
 	// A new window must not silently empty a script that is already there.
-	if _, err := manager.CreateQueryFile(cfg.ID, "shop", "orders"); !apperr.Is(err, apperr.CodeInvalidConfig) {
+	if _, err := manager.CreateQueryFile(cfg.ID, "shop", "orders", ""); !apperr.Is(err, apperr.CodeInvalidConfig) {
 		t.Fatalf("creating over an existing query: %v", err)
 	}
-	if _, err := manager.CreateQueryFile(cfg.ID, "shop", "ORDERS"); !apperr.Is(err, apperr.CodeInvalidConfig) {
+	if _, err := manager.CreateQueryFile(cfg.ID, "shop", "ORDERS", ""); !apperr.Is(err, apperr.CodeInvalidConfig) {
 		t.Fatalf("a name differing only in case is the same file: %v", err)
 	}
 }
@@ -133,7 +154,7 @@ func TestSaveQueryFileRenamesThroughTheService(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("saving over the open file should be fine: %v", err)
 	}
-	if _, err := manager.CreateQueryFile(cfg.ID, "shop", "other"); err != nil {
+	if _, err := manager.CreateQueryFile(cfg.ID, "shop", "other", ""); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	_, err = manager.RenameQueryFile(models.QueryFileRename{
