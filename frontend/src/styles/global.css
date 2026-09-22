@@ -517,6 +517,32 @@ body {
   max-height: 460px;
 }
 
+/* The generated code takes the whole window rather than the DDL preview's
+   460px cap: it is the page's only content, and a class of thirty fields is
+   taller than a screen. Its own toolbar and the status row are the flex
+   siblings that stay put while this scrolls. */
+.dm-codegen {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  font-family: var(--dm-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre;
+  overflow: auto;
+  padding: 12px 14px;
+  tab-size: 4;
+}
+
+.dm-codegen-loading {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
 /* --- syntax highlighting -------------------------------------------------
    The token kinds come from `lib/sqlHighlight.ts`; the colours are the
    `--dm-sql-*` variables next to the other theme tokens. Quoted names are the
@@ -616,6 +642,7 @@ body {
 .dm-pane-body::-webkit-scrollbar,
 .dm-runtime-scroll::-webkit-scrollbar,
 .dm-ddl::-webkit-scrollbar,
+.dm-codegen::-webkit-scrollbar,
 .dm-messages::-webkit-scrollbar,
 .ant-table-body::-webkit-scrollbar,
 .ant-table-content::-webkit-scrollbar {
@@ -627,6 +654,7 @@ body {
 .dm-pane-body::-webkit-scrollbar-thumb,
 .dm-runtime-scroll::-webkit-scrollbar-thumb,
 .dm-ddl::-webkit-scrollbar-thumb,
+.dm-codegen::-webkit-scrollbar-thumb,
 .dm-messages::-webkit-scrollbar-thumb,
 .ant-table-body::-webkit-scrollbar-thumb,
 .ant-table-content::-webkit-scrollbar-thumb {
@@ -639,6 +667,7 @@ body {
 .dm-sidebar-tree::-webkit-scrollbar-thumb:hover,
 .dm-pane-body::-webkit-scrollbar-thumb:hover,
 .dm-runtime-scroll::-webkit-scrollbar-thumb:hover,
+.dm-codegen::-webkit-scrollbar-thumb:hover,
 .ant-table-body::-webkit-scrollbar-thumb:hover {
   background: rgba(128, 128, 128, 0.6);
   background-clip: content-box;

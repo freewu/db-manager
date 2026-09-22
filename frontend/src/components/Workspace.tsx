@@ -5,6 +5,7 @@ import { CodeOutlined, DashboardOutlined, FileTextOutlined, FolderOutlined, Part
 
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { DdlPane } from './DdlPane'
+import { CodegenPane } from './CodegenPane'
 import { ErDiagramPane } from './ErDiagramPane'
 import { NewTablePane } from './NewTablePane'
 import { ObjectListPane } from './ObjectListPane'
@@ -63,6 +64,8 @@ export function Workspace() {
             <ObjectListPane tab={tab} />
           ) : tab.kind === 'ddl' ? (
             <DdlPane tab={tab} />
+          ) : tab.kind === 'codegen' ? (
+            <CodegenPane tab={tab} />
           ) : tab.kind === 'er' ? (
             <ErDiagramPane tab={tab} />
           ) : tab.kind === 'runtime' ? (
@@ -141,6 +144,8 @@ function TabLabel({ tab, sessionName }: { tab: WorkspaceTab; sessionName?: strin
         <FolderOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'ddl' ? (
         <FileTextOutlined style={{ opacity: 0.7 }} />
+      ) : tab.kind === 'codegen' ? (
+        <CodeOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'er' ? (
         <PartitionOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'runtime' ? (

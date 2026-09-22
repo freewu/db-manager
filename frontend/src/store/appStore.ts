@@ -42,6 +42,7 @@ import {
   queriesKey,
 } from '../lib/tree'
 import { designFrom, emptyStructure, newTableDesign } from '../lib/design'
+import { DEFAULT_CODE_LANGUAGE, codeLanguageById } from '../lib/codegen'
 import {
   parseThemeMode,
   resolveTheme,
@@ -52,7 +53,15 @@ import {
 
 export type { ResolvedTheme, ThemeMode } from '../lib/theme'
 
-export type TabKind = 'query' | 'table' | 'newtable' | 'objects' | 'ddl' | 'er' | 'runtime'
+export type TabKind =
+  | 'query'
+  | 'table'
+  | 'newtable'
+  | 'objects'
+  | 'ddl'
+  | 'codegen'
+  | 'er'
+  | 'runtime'
 
 /**
  * The id of a saved-script window.
@@ -221,6 +230,8 @@ interface AppState {
   activeTabId?: string
   /** The preference: light, dark, or follow the system. */
   theme: ThemeMode
+  /** Which language the code window opens in; the settings page moves it. */
+  codegenLanguage: string
   /** What is actually painted — `theme` with `system` resolved. */
   resolvedTheme: ResolvedTheme
   /** Where the app keeps its data, as the settings page shows it. */
@@ -233,6 +244,8 @@ interface AppState {
 
   bootstrap: () => Promise<void>
   setTheme: (theme: ThemeMode) => void
+  /** Sets the language a new code window starts in, and stores it. */
+  setCodegenLanguage: (language: string) => void
   /** Re-reads the data directory (the settings page calls this after a move). */
   refreshDataDir: () => Promise<DataDirInfo>
   /**
@@ -365,6 +378,17 @@ interface AppState {
     schema: string,
     object?: string,
   ) => void
+  /**
+   * Opens the code window of an object: its fields as a class, struct or record
+   * in the language that window's own picker shows. One window per object, so
+   * going back and forth does not pile up copies of the same file.
+   */
+  openCodegenTab: (
+    sessionId: string,
+    database: string,
+    schema: string,
+    object: ObjectInfo,
+  ) => void
   /** Opens the ER diagram of one namespace (schema, or database when there is
    * no schema layer). */
   openErTab: (sessionId: string, database: string, schema: string) => void
@@ -389,6 +413,21 @@ interface AppState {
 }
 
 const STATE_KEY = 'ui'
+
+/**
+ * Stores the UI preferences.
+ *
+ * `SaveState` replaces the whole file rather than merging into it, so every
+ * preference has to be written every time one of them changes — one writer for
+ * all of them is what keeps a theme change from dropping the language, and the
+ * other way round.
+ */
+function saveUi(state: Pick<AppState, 'theme' | 'codegenLanguage'>): void {
+  // Fire and forget: a failed preference write must not disturb the UI.
+  void api
+    .saveState({ [STATE_KEY]: { theme: state.theme, codegenLanguage: state.codegenLanguage } })
+    .catch(() => undefined)
+}
 
 /** Copy of an object without one key (drafts must die with their window). */
 function withoutKey<T>(source: Record<string, T>, key: string): Record<string, T> {
@@ -441,6 +480,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   tabs: [],
   theme: 'light',
   resolvedTheme: 'light',
+  codegenLanguage: DEFAULT_CODE_LANGUAGE,
   tree: emptyTree(),
   designs: {},
   savedQueries: [],
@@ -471,9 +511,16 @@ export const useAppStore = create<AppState>((set, get) => ({
           api.getDataDir().catch(() => undefined),
         ])
 
-      const storedTheme = persisted?.[STATE_KEY] as { theme?: unknown } | undefined
+      const stored = persisted?.[STATE_KEY] as
+        | { theme?: unknown; codegenLanguage?: unknown }
+        | undefined
       // Navicat's classic look is light; dark stays one toggle away.
-      const theme = parseThemeMode(storedTheme?.theme)
+      const theme = parseThemeMode(stored?.theme)
+      // An id from a version that had different languages is one this build may
+      // not know, and `codeLanguageById` answers with the default for it.
+      const codegenLanguage = codeLanguageById(
+        typeof stored?.codegenLanguage === 'string' ? stored.codegenLanguage : undefined,
+      ).id
 
       // The OS can be switched to dark while the app is running, and "follow the
       // system" has to follow it live — the listener stays installed for the
@@ -493,6 +540,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         dataDir,
         theme,
         resolvedTheme: resolveTheme(theme),
+        codegenLanguage,
       })
     } catch (error) {
       set({ boot: 'failed', bootError: toMessage(error) })
@@ -504,10 +552,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     // passes the current system answer through, and the listener above keeps it
     // up to date from then on.
     set({ theme, resolvedTheme: resolveTheme(theme) })
-    // Fire and forget: a failed preference write must not disturb the UI.
-    void api
-      .saveState({ [STATE_KEY]: { theme } })
-      .catch(() => undefined)
+    saveUi(get())
+  },
+
+  setCodegenLanguage(codegenLanguage) {
+    set({ codegenLanguage })
+    saveUi(get())
   },
 
   async refreshDataDir() {
@@ -1081,6 +1131,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       database,
       schema,
       object,
+    }
+    set((state) => ({
+      tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
+      activeTabId: id,
+      ...focused(state, sessionId),
+    }))
+  },
+
+  openCodegenTab(sessionId, database, schema, object) {
+    const id = `codegen:${sessionId}:${database}:${schema}:${object.name}`
+    const tab: WorkspaceTab = {
+      id,
+      kind: 'codegen',
+      sessionId,
+      title: `${object.name} code`,
+      database,
+      schema,
+      object: object.name,
+      objectKind: object.kind,
     }
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],

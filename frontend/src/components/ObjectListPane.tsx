@@ -4,6 +4,7 @@ import type { MenuProps, TableColumnsType } from 'antd'
 import {
   AppstoreOutlined,
   CheckOutlined,
+  FunctionOutlined,
   KeyOutlined,
   MoreOutlined,
   NumberOutlined,
@@ -13,6 +14,7 @@ import {
 } from '@ant-design/icons'
 
 import type { IndexEntry, ObjectInfo } from '../api/types'
+import { generatable } from '../lib/codegen'
 import { formatBytes, formatCount } from '../lib/format'
 import { indexesKey, KIND_SINGULAR, namespaceKey, objectsKey } from '../lib/tree'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
@@ -38,6 +40,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
   const loadObjects = useAppStore((s) => s.loadObjects)
   const loadIndexes = useAppStore((s) => s.loadIndexes)
   const openTableTab = useAppStore((s) => s.openTableTab)
+  const openCodegenTab = useAppStore((s) => s.openCodegenTab)
 
   const [filter, setFilter] = useState('')
   const [selectedKey, setSelectedKey] = useState<string>()
@@ -145,6 +148,20 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
           label: `Design ${KIND_SINGULAR[object.kind]}`,
           onClick: () => openObject(object, 'structure'),
         },
+        ...(generatable(object.kind)
+          ? [
+              {
+                key: 'codegen',
+                icon: <FunctionOutlined />,
+                label: 'Generate code…',
+                onClick: () => {
+                  if (database && schema) {
+                    openCodegenTab(tab.sessionId, database, schema, object)
+                  }
+                },
+              },
+            ]
+          : []),
         { type: 'divider' as const },
         {
           key: 'copy',
@@ -154,7 +171,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         },
       ],
     }),
-    [copyName, openObject],
+    [copyName, database, openCodegenTab, openObject, schema, tab.sessionId],
   )
 
   const objectColumns = useMemo<TableColumnsType<ObjectInfo>>(

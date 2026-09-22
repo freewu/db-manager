@@ -7,6 +7,7 @@ import {
   Empty,
   Modal,
   Segmented,
+  Select,
   Space,
   Tag,
   Tooltip,
@@ -17,24 +18,32 @@ import { api, toMessage } from '../api/client'
 import type { DataDirInfo, DataDirMoveResult } from '../api/types'
 import { AboutProject } from './AboutProject'
 import { useAppStore } from '../store/appStore'
+import { CODE_LANGUAGES } from '../lib/codegen'
 import { THEME_MODES, type ThemeMode } from '../lib/theme'
 
-/** The three pages of the dialog, in the order they are shown. */
-type SettingsTab = 'appearance' | 'data' | 'about'
+/** The pages of the dialog, in the order they are shown. */
+type SettingsTab = 'appearance' | 'code' | 'data' | 'about'
 
 const TABS: { key: SettingsTab; label: string }[] = [
   { key: 'appearance', label: 'Appearance' },
+  { key: 'code', label: 'Code generation' },
   { key: 'data', label: 'Data folder' },
   { key: 'about', label: 'About' },
 ]
+
+/** The languages a code window can open in, listed by the name they go by. */
+const LANGUAGE_OPTIONS = [...CODE_LANGUAGES]
+  .sort((a, b) => a.label.localeCompare(b.label))
+  .map((language) => ({ value: language.id, label: language.label }))
 
 /**
  * Program settings: how the window looks, where the data is kept, and what this
  * build is.
  *
- * The dialog owns no preference of its own — the theme goes to the state file
- * through the store and the data directory is the backend's — so closing it can
- * never lose a choice, and the values it shows are the ones the app is using.
+ * The dialog owns no preference of its own — the theme and the code language go
+ * to the state file through the store and the data directory is the backend's —
+ * so closing it can never lose a choice, and the values it shows are the ones the
+ * app is using.
  * The one operation with a real consequence is the data-directory move, and its
  * answer (which files moved, what was left behind, what could not be deleted) is
  * shown in full rather than being reduced to a success message.
@@ -42,6 +51,8 @@ const TABS: { key: SettingsTab; label: string }[] = [
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const theme = useAppStore((s) => s.theme)
   const setTheme = useAppStore((s) => s.setTheme)
+  const codegenLanguage = useAppStore((s) => s.codegenLanguage)
+  const setCodegenLanguage = useAppStore((s) => s.setCodegenLanguage)
   const dataDir = useAppStore((s) => s.dataDir)
   const refreshDataDir = useAppStore((s) => s.refreshDataDir)
   const moveDataDir = useAppStore((s) => s.moveDataDir)
@@ -137,6 +148,24 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                 ),
               }))}
               onChange={(value) => setTheme(value as ThemeMode)}
+            />
+          </SettingRow>
+        </div>
+      ) : null}
+
+      {tab === 'code' ? (
+        <div className="dm-settings-pane">
+          <SettingRow
+            title="Default code language"
+            hint="What a new code window opens in. Each window can be switched to another language on the spot; this is the one it starts from."
+          >
+            <Select
+              showSearch
+              optionFilterProp="label"
+              style={{ width: 240 }}
+              value={codegenLanguage}
+              options={LANGUAGE_OPTIONS}
+              onChange={setCodegenLanguage}
             />
           </SettingRow>
         </div>

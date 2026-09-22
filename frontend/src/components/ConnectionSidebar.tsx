@@ -11,6 +11,7 @@ import {
   FileTextOutlined,
   FolderAddOutlined,
   FolderOutlined,
+  FunctionOutlined,
   KeyOutlined,
   MinusSquareOutlined,
   NumberOutlined,
@@ -37,6 +38,7 @@ import type {
 import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
 import { capabilitiesOf, findDriver, objectKindsOf } from '../lib/capabilities'
+import { generatable } from '../lib/codegen'
 import {
   arrangementOf,
   dropTargetFor,
@@ -116,6 +118,7 @@ export function ConnectionSidebar() {
   const openObjectsTab = useAppStore((s) => s.openObjectsTab)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const openDdlTab = useAppStore((s) => s.openDdlTab)
+  const openCodegenTab = useAppStore((s) => s.openCodegenTab)
   const openErTab = useAppStore((s) => s.openErTab)
   const openRuntimeTab = useAppStore((s) => s.openRuntimeTab)
   const closeSession = useAppStore((s) => s.closeSession)
@@ -559,6 +562,18 @@ export function ConnectionSidebar() {
                         },
                       ]
                     : []),
+                  // Only something with fields of its own: a sequence and a
+                  // stored procedure have no columns to turn into a class.
+                  ...(generatable(object.kind)
+                    ? [
+                        {
+                          key: 'codegen',
+                          icon: <FunctionOutlined />,
+                          label: 'Generate code…',
+                          onClick: () => openCodegenTab(sessionId, database, schema, object),
+                        },
+                      ]
+                    : []),
                   { type: 'divider' as const },
                   {
                     key: 'copy',
@@ -589,6 +604,7 @@ export function ConnectionSidebar() {
       buildIndexFolder,
       driverOfSession,
       loadNamespace,
+      openCodegenTab,
       openDdlTab,
       openList,
       openNewTableTab,

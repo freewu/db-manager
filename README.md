@@ -26,6 +26,7 @@
 - **保存的查询**：每个库下面有一个 `Queries` 文件夹（排在 `Tables` / `Views` / `Indexes` 后面），右键「New query…」新建脚本、点一下就开在查询窗口里 —— 脚本落成 `<数据目录>/.query/<连接>/<库>/<名字>.sql`，窗口里改了字标签页上出现 `*`，`Ctrl/Cmd-S` 存回文件，关掉没保存的窗口会先问一句；**没名字的草稿窗口也有 Save** —— 点它（或 `Ctrl/Cmd-S`）先问名字，名字定下来就把窗口里现有的正文当场写进去（后端一次 `CreateQueryFile` 写完正文，不做「先建空文件、再填内容」两步，免得中间失败只剩一个空文件），窗口随即变成「这个文件的窗口」：标题换成名字、树里 `Queries` 下多一行，之后的保存都落在它上面；名字已被占用时后端拒绝并点名是哪一个，而不是悄悄覆盖掉别人的脚本（没有配置的临时会话、连库都没定的会话无处可存，按钮是灰的并说明原因）。重命名是**纯文件移动**（从不读写内容，所以树里改名不会覆盖窗口里没保存的编辑），删除会先确认并说明「已经打开的那个窗口里的文字会留下」。脚本跟着**数据目录**走，换目录时 `.query/` 整棵树一起搬。
 - **ER 图**：在 schema（没有 schema 层的引擎就是 database）节点右键即可打开该命名空间的关系图 —— 一张 `GetSchemaGraph` 就把对象、字段与它们之间的外键取回来；**同一家的表排成一行**，行的归属由名字决定：一个名字的行 key 是它最短的那段「读起来像一家人的」前缀 —— 要么本身就是某张表的完整名字（`t_user_favorite` 归到 `t_user`），要么是至少两张表共同的开头（`xxx_dict_data` 与 `xxx_dict_env` 归到 `xxx_dict`，哪怕库里根本没有 `xxx_dict` 这张表）；于是 `t_user` / `t_user_favorite` / `t_user_profile` 一行，`t_order` / `t_order_payment` 一行，而 `t_product` 这种没人同族的自己占一行 —— 单个词只有当真有表叫这个名字时才算一家（否则库里都叫 `t_…` 的表会被挤成一条长龙；真有一张表就叫 `t` 的话，它们就是这一家）；**行内**再按外键层级从左到右排，所以行内的箭头仍指向被引用的那张表，跨行的外键就随它斜着走（往左上走的那根从左边缘绕出去，不穿过自己这个框）；主键高亮，箭头悬停显示「哪一列引用哪一列」；支持拖动平移、滚轮缩放、按名搜索、隐藏/显示字段、网格开关，点节点直接打开该表，还能把当前这张图导出成自包含的 SVG。跨命名空间的外键画成虚线 stub，读不到字段的对象仍在图里但会列出警告，超过 300 个对象时明确提示只画了前 300 个。
 - **DDL 编辑器**：把对象的定义开成可编辑的脚本窗口（MongoDB 下就是集合的定义脚本与 shell 查询） —— 工具条、对象树右键「Edit DDL…」或结构页的「Edit in DDL editor」都能进；编辑器下方是**后端算出来的干跑结果**（逐条语句标出 query / DDL / DML、标红 DROP、TRUNCATE、无 WHERE 的 DELETE/UPDATE，MongoDB 下则是 `drop()` / `dropDatabase()` / 无 filter 的 `deleteMany`，并说明只读连接会拒掉几条），真正点「Run script」时只对破坏性脚本弹二次确认；执行完顺手刷新目录树与索引缓存。
+- **代码生成**：表的右键菜单里多了 `Generate code…`（表 / 视图 / 物化视图 / 集合都有，序列与存储过程没有字段，所以菜单里不摆），开出来的窗口把这个对象的字段与类型翻成这个语言的类 / 结构体 / 记录 —— 一共 18 种（python、c、cpp、java、csharp、javascript、rust、php、go、ruby、swift、perl、objectivec、julia、kotlin、typescript、erlang、lua），Java 分两档：`Java (Lombok)` 用 `@Data`，素写的那个把 getter / setter 展开。**生成在前端做**（`frontend/src/lib/codegen/`），所以工具条上的语言下拉一换就当场重画 —— 不过桥、不发请求（结构只读一次，跟 DDL 生成不同：那是引擎自己的事，`PlanAlter` 在后端），窗口里换语言也只换这个窗口，要换新窗口开出来的那一档就去 **Settings → Code generation** 改（默认 `Java (Lombok)`）。类型映射是一张**有序的规则表**收成 14 类（`tinyint(1)` 是布尔、`character varying` 与 `nvarchar` 都是字符串、`numeric` / `money` 是定点数、MongoDB 的 `int32 | string` 这种联合类型取读得懂的那一半），不认识的落到该语言自己的兜底类型而不是瞎猜；**可空按各语言的写法给**（Java 换包装类型、Python `Optional[T]`、Kotlin `T?`、Rust `Option<T>`、Go 指针、TS `T | null`、Erlang `T | undefined`…），字段名按该语言的命名习惯收（Go / C# 用 Pascal、Java 一族用 camel、Python 一族用 snake），Go 的字段名还按 Go 的规矩把缩写拼全（`user_id` → `UserID`）并带上 `json` / `db` 两个 tag（可空加 `,omitempty`）—— 生成的 Go 是 `gofmt` 之后一个字节不长不短的样子（有注释的字段会打断对齐组，所以补对齐是按段算的）。字段注释只来自这个列自己的注释，主键与自增不另加标记；文件名与后缀按语言给（`Users.java` / `users.py` / `users.go` / `users.erl`…），Copy 与 Save 在工具条上。
 - **窗口即应用**：右键不再弹出 WebView 自带的那套菜单（后退 / 刷新 / 另存为 / 打印 / 检查），
   右键要么什么都不做，要么就是应用自己的菜单（连接树等）；文本框与 SQL 编辑器是例外 —— 那里保留系统菜单，
   右键粘贴照旧可用，其它地方用 `Ctrl+C` / `Ctrl+V`。
@@ -33,7 +34,7 @@
 - **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（只画一个 GitHub 头像，悬停显示昵称、点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection，以及连接树的右键菜单。
 - **导出**：CSV / JSON / INSERT 脚本（MongoDB 下是 `insertMany` 脚本，按列的 BSON 类型还原 `$oid` / `$date` / 文档字面量），可写入文件或复制到剪贴板。
 - **外观**：Navicat 式窗口骨架（icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏 —— 表格的表头**固定不动**：数据网格、对象列表、设计器的字段表都一样，纵向滚动时表头留在容器顶上，横向滚动也带不走它（钉住的列仍旧钉在原处）。主题有三档：`Light` / `Dark` / `System`，在命令条的 **Settings → Appearance** 里选，状态栏那格点一下也能循环切换（跟随系统时它会写成 `system (dark)`，把当前系统给的那一档一起说出来）；选**跟随系统**时窗口真的跟着操作系统走 —— 操作系统在运行期间切深浅色，界面当场就变，不用重启也不用再点一次。命令条上目前只有 **Connection**、**Open**、**Close**、**New Query**、**Refresh**、**Table**、**View** 与 **Settings** 是活的，其余按钮保持原来的位置但禁用并在提示里说明 —— 摆着的空位比消失的按钮更好认。
-- **设置**：命令条上的 **Settings** 开一个三页的窗口 —— `Appearance` 选主题，`Data folder` 看数据存在哪、里面有哪些文件（每个文件写的是干什么的、多大）、从这里**打开目录**、**换一个目录**或**恢复默认**，`About` 就是原来那页项目信息（技术栈徽章、项目地址、开发者）。换目录是真的**把数据搬过去**：连接配置、查询收藏、树的排法、窗口状态与密码密钥一起复制到新目录（逐个读回校验，对不上就不动原文件），然后才改指针、最后才删旧文件；没能删掉的（被占用、只读）会**如实列出来**，而不是回一句「已移动」。目标目录里已经有**非空的**本程序数据时会被拒绝并点名是哪个文件（同名但零字节的不算数据，照常覆盖），选到当前目录本身也会被拒绝；那些**不是本程序写的**文件留在原地并在结果里注明。目录就绪后不需要重启 —— 会话照旧连着，新的保存当场写进新目录。
+- **设置**：命令条上的 **Settings** 开一个四页的窗口 —— `Appearance` 选主题，`Code generation` 选代码窗口默认用哪种语言，`Data folder` 看数据存在哪、里面有哪些文件（每个文件写的是干什么的、多大）、从这里**打开目录**、**换一个目录**或**恢复默认**，`About` 就是原来那页项目信息（技术栈徽章、项目地址、开发者）。换目录是真的**把数据搬过去**：连接配置、查询收藏、树的排法、窗口状态与密码密钥一起复制到新目录（逐个读回校验，对不上就不动原文件），然后才改指针、最后才删旧文件；没能删掉的（被占用、只读）会**如实列出来**，而不是回一句「已移动」。目标目录里已经有**非空的**本程序数据时会被拒绝并点名是哪个文件（同名但零字节的不算数据，照常覆盖），选到当前目录本身也会被拒绝；那些**不是本程序写的**文件留在原地并在结果里注明。目录就绪后不需要重启 —— 会话照旧连着，新的保存当场写进新目录。
 - **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（头像加昵称整个是一条链接，昵称就是显示出来的文字，也是链接的标题，点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。这页在没连库时显示，**Settings → About** 里也是同一份（同一个组件，两处不会各说一套）。连库的入口在命令条的 Connection，以及连接树的右键菜单。
 - **托盘**（Windows）：关掉窗口是**收进托盘**，不是退出；托盘图标左键单击等于把窗口叫回来，右键的菜单从上到下是 `Show window` / `Project page` / `Report an issue` / 版本号（灰色，只是给你看的）/ `Quit`。`Quit` 走的是正常退出（连接池照常关），而**图标没能建出来时关窗照旧直接退出** —— 一个没能出现的托盘不该留下一个看不见的进程。其它平台没有通知区域，行为保持原样（关窗即退出）。
 
@@ -133,11 +134,12 @@ wails build
         ├── api/              # 手写类型 + 手写 window.go.main.App 桥接（不依赖生成代码）
         ├── components/       # AppShell / Sidebar / Workspace / TablePane / QueryPane / DataGrid …
         │   ├── AboutProject.tsx   # 项目信息（技术栈徽章 / 项目地址 / 开发者），空态页与 Settings → About 共用
-        │   ├── SettingsDialog.tsx # 设置窗口：外观 / 数据目录 / 关于
+        │   ├── SettingsDialog.tsx # 设置窗口：外观 / 代码生成 / 数据目录 / 关于
         │   └── overview/     # 运行情况：每个引擎一个视图 + 共用的指标卡片与数据表
         ├── connection/       # 每种驱动一页连接表单（Mysql / Postgres / Sqlite / Mongodb / Tidb / Doris）+ 注册表
         ├── hooks/useConnect  # 先试后问的连接流程
-        ├── lib/              # tree key 编解码、格式化、导出、驱动能力（capabilities.ts）、项目信息（about.ts）、主题（theme.ts）、品牌素材（assets.ts，@asserts 别名）
+        ├── lib/              # tree key 编解码、格式化、导出、代码生成（codegen/，见下）、驱动能力（capabilities.ts）、项目信息（about.ts）、主题（theme.ts）、品牌素材（assets.ts，@asserts 别名）
+        │   └── codegen/      # 代码生成：types.ts（类型归类与渲染契约）/ languages.ts（每种语言的数据）/ index.ts（入口）
         ├── store/            # zustand 全局状态（连接 / 会话 / 标签页 / 浏览器缓存）
         └── styles/global.css
 ```
@@ -341,7 +343,7 @@ MongoDB 不从 `sqlbase` 继承任何东西（那个包是 `database/sql` 专用
 | 已连接的连接 | New query / Refresh / New database… / Edit connection… / Disconnect |
 | 库下面的 `Queries` 文件夹 | New query… / Reload queries |
 | 一个对象文件夹（`Tables` / `Views` …） | Open object list / New table…（`Tables` 才有）/ New DDL script…（关系型才有）/ Reload objects |
-| 一个对象（表 / 视图…） | Open data / Design table（给不出设计器的引擎是 Open fields）/ Edit DDL…（关系型才有）/ Copy name |
+| 一个对象（表 / 视图…） | Open data / Design table（给不出设计器的引擎是 Open fields）/ Edit DDL…（关系型才有）/ Generate code…（有字段的对象才有）/ Copy name |
 | 一个已保存的脚本 | Open / Rename… / Copy name / Show in folder / Delete |
 
 **每个文件夹都带数量，空着也照样画。** 画哪几个文件夹是引擎事实，由后端在 `DriverInfo.objectKinds` 里给
@@ -496,10 +498,11 @@ PostgreSQL `… ENCODING '…' LOCALE '…' TEMPLATE template0`、MongoDB `use <
 一个脚本对应一个窗口：标签页的 id 由「连接 + 库 + 名字」拼出来，所以同一个脚本打开两次是切回原来那一页，
 而不是两个窗口抢同一个文件。
 
-### 设置：主题与数据目录
+### 设置：主题、代码语言与数据目录
 
-设置窗口自己**不存**任何偏好：主题经过 store 落进 `state.json`，数据目录本来就是后端的事，所以关掉窗口
-不会丢选择，两个窗口看到的也永远是同一份值。主题分成**偏好**（`light` / `dark` / `system`）与**画出来的**
+设置窗口自己**不存**任何偏好：主题与代码窗口的默认语言经过 store 落进 `state.json`，数据目录本来就是后端的事，所以关掉窗口
+不会丢选择，两个窗口看到的也永远是同一份值。`state.json` 是**整份替换**而不是合并写，所以落盘只有
+一个出口（`saveUi`）—— 改主题时把语言一起写进去，反过来也一样，不然改一个偏好会把另一个抹掉。主题分成**偏好**（`light` / `dark` / `system`）与**画出来的**
 两件事 —— 偏好写进状态文件的东西就是它自己，跟随系统时「现在到底什么颜色」另算（`resolvedTheme`），
 页面据此给自己加 `data-theme` 与 `color-scheme`；系统那边的监听器只在这条偏好是 `system` 时才真的会
 改变颜色（`resolveTheme` 对另外两档直接忽略系统），所以来回切主题不会积累监听器，旧版本留下的
