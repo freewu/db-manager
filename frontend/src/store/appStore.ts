@@ -54,6 +54,21 @@ export interface NamespaceScope {
   schema?: string
 }
 
+/**
+ * A folder of the explorer whose object list just came to the front.
+ *
+ * A list window is always scoped to one namespace and one folder of it, so
+ * bringing one up says where the user is: the tree is asked to open that
+ * namespace up and point at that folder. `schema` is the namespace the list is
+ * scoped to, which is the database itself on an engine that has no schemas.
+ */
+export interface RevealTarget {
+  sessionId: string
+  database: string
+  schema: string
+  kind: ListScope
+}
+
 export interface WorkspaceTab {
   id: string
   kind: TabKind
@@ -136,6 +151,16 @@ interface AppState {
    * which list the objects of the place the user is standing in.
    */
   activeNamespace?: NamespaceScope
+  /**
+   * A place in the explorer to open up and point at, if one was asked for.
+   *
+   * Written when a list window comes to the front — by the ribbon that opens it
+   * and by the tab strip — and consumed by the tree, which is the pane that owns
+   * `expandedKeys` / `selectedKeys`. It is deliberately one-way: the request
+   * never writes `activeNamespace`, so the ribbon still follows the tree and
+   * only the tree's own selection says where the user stands (see Round 8).
+   */
+  reveal?: RevealTarget
   tabs: WorkspaceTab[]
   activeTabId?: string
   theme: ThemeMode
@@ -184,6 +209,8 @@ interface AppState {
    * is about the connection, not about any database.
    */
   setActiveNamespace: (scope?: NamespaceScope) => void
+  /** Drops a request once the tree has carried it out, or given up on it. */
+  clearReveal: () => void
 
   loadDatabases: (sessionId: string) => Promise<void>
   loadSchemas: (sessionId: string, database: string) => Promise<void>
@@ -271,6 +298,18 @@ const focused = (state: AppState, sessionId: string) => ({
   activeSessionId: sessionId,
   activeConnectionId: connectionOfSession(state.sessions, sessionId) ?? state.activeConnectionId,
 })
+
+/**
+ * The explorer request that belongs to bringing a window to the front.
+ *
+ * An object list *is* one folder of one namespace, so the tree is asked to show
+ * the place it came from; every other kind of window leaves the explorer where
+ * the user put it.
+ */
+const revealOf = (tab: WorkspaceTab): RevealTarget | undefined => {
+  if (tab.kind !== 'objects' || !tab.database || !tab.schema || !tab.list) return undefined
+  return { sessionId: tab.sessionId, database: tab.database, schema: tab.schema, kind: tab.list }
+}
 
 export const useAppStore = create<AppState>((set, get) => ({
   boot: 'loading',
@@ -481,6 +520,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ activeNamespace: scope })
   },
 
+  clearReveal() {
+    set({ reveal: undefined })
+  },
+
   async loadDatabases(sessionId) {
     set((state) => ({
       tree: {
@@ -655,6 +698,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       activeTabId: id,
       ...focused(state, sessionId),
+      // Opening (or re-using) a list window is also a request to show where it
+      // came from, so the ribbon and the tree agree without the ribbon writing
+      // the tree's own focus.
+      reveal: { sessionId, database, schema, kind: list },
     }))
   },
 
@@ -823,7 +870,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       const tab = state.tabs.find((t) => t.id === tabId)
       if (!tab) return { activeTabId: tabId }
-      return { activeTabId: tabId, ...focused(state, tab.sessionId) }
+      const reveal = revealOf(tab)
+      return {
+        activeTabId: tabId,
+        ...focused(state, tab.sessionId),
+        // Switching to a list window points the explorer at its folder as well.
+        ...(reveal ? { reveal } : {}),
+      }
     })
   },
 

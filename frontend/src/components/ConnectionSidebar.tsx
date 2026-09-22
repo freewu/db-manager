@@ -53,6 +53,7 @@ import {
   indexesKey,
   namespaceKey,
   objectsKey,
+  type NodeRef,
 } from '../lib/tree'
 
 /** Menu key of "New group…", which no driver ever answers to. */
@@ -108,6 +109,8 @@ export function ConnectionSidebar() {
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const setActiveConnection = useAppStore((s) => s.setActiveConnection)
   const setActiveNamespace = useAppStore((s) => s.setActiveNamespace)
+  const reveal = useAppStore((s) => s.reveal)
+  const clearReveal = useAppStore((s) => s.clearReveal)
   const moveConnection = useAppStore((s) => s.moveConnection)
   const deleteConnectionGroup = useAppStore((s) => s.deleteConnectionGroup)
 
@@ -117,6 +120,17 @@ export function ConnectionSidebar() {
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
   const [loadedKeys, setLoadedKeys] = useState<React.Key[]>([])
+  /** The scrolling pane, for bringing a revealed row into view. */
+  const treePaneRef = useRef<HTMLDivElement | null>(null)
+  /**
+   * Row a reveal asked for, waiting for its turn to be drawn.
+   *
+   * Pointing the tree at a row means expanding the way down to it first, and a
+   * row that was not in the tree a moment ago can only be scrolled to once it
+   * has been rendered — one commit later. Keeping the key here lets the scroll
+   * happen on the render that finally draws it.
+   */
+  const revealScroll = useRef<string | null>(null)
 
   /**
    * Nodes the user opened by expanding them.
@@ -389,7 +403,9 @@ export function ConnectionSidebar() {
               },
             ]}
           >
-            <span>{indexes ? `Indexes (${indexes.length})` : 'Indexes'}</span>
+            <span data-tree-key={encodeNode({ t: 'indexFolder', sessionId, database, schema })}>
+              {indexes ? `Indexes (${indexes.length})` : 'Indexes'}
+            </span>
           </NodeMenu>
         ),
         icon: <KeyOutlined />,
@@ -436,8 +452,9 @@ export function ConnectionSidebar() {
       const folders: TreeDataNode[] = []
       for (const kind of [...declared, ...undeclared]) {
         const items = groups.get(kind) ?? []
+        const key = encodeNode({ t: 'folder', sessionId, database, schema, kind })
         folders.push({
-          key: encodeNode({ t: 'folder', sessionId, database, schema, kind }),
+          key,
           title: (
             <NodeMenu
               items={[
@@ -483,7 +500,8 @@ export function ConnectionSidebar() {
                 },
               ]}
             >
-              <span>{`${FOLDER_LABEL[kind]} (${items.length})`}</span>
+              {/* `data-tree-key` is how a reveal finds the row to scroll to. */}
+              <span data-tree-key={key}>{`${FOLDER_LABEL[kind]} (${items.length})`}</span>
             </NodeMenu>
           ),
           icon: <FolderOutlined />,
@@ -1145,6 +1163,136 @@ export function ConnectionSidebar() {
     openRuntimeTab(session.id)
   }, [openRuntimeTab, sessionForConnection, sessions])
 
+  /**
+   * Scrolls the explorer row with this tree key into view, if it is on screen.
+   *
+   * Answers whether it found the row: a row whose namespace is still loading is
+   * not drawn yet, and the caller gets another chance on a later render.
+   */
+  const scrollToRow = useCallback((key: string) => {
+    const rows = treePaneRef.current?.querySelectorAll('[data-tree-key]') ?? []
+    const row = [...rows].find((element) => element.getAttribute('data-tree-key') === key)
+    row?.scrollIntoView({ block: 'nearest' })
+    return Boolean(row)
+  }, [])
+
+  /**
+   * Shows the explorer the folder a list window was opened from.
+   *
+   * The request comes from the ribbon buttons and from the tab strip, never the
+   * other way round: only the tree's own selection says where the user stands,
+   * so a programmatic pick cannot feed back into it. Every level below the
+   * connection loads itself once its node is expanded (`loadData` in the tree),
+   * which is why this only has to expand the way down and wait — the folder row
+   * cannot exist before the namespace's object list has landed.
+   */
+  useEffect(() => {
+    if (!reveal) return
+    const session = sessions.find((s) => s.id === reveal.sessionId)
+    // A window whose session is gone has no row to point at.
+    if (!session) {
+      clearReveal()
+      return
+    }
+
+    const driver = driverOfSession(session.id)
+    const dbKey = encodeNode({ t: 'db', sessionId: session.id, database: reveal.database })
+    const nsRef: NodeRef = driver?.supportsSchema
+      ? { t: 'schema', sessionId: session.id, database: reveal.database, schema: reveal.schema }
+      : { t: 'db', sessionId: session.id, database: reveal.database }
+    const nsKey = encodeNode(nsRef)
+    const folderKey = encodeNode(
+      reveal.kind === 'index'
+        ? {
+            t: 'indexFolder',
+            sessionId: session.id,
+            database: reveal.database,
+            schema: reveal.schema,
+          }
+        : {
+            t: 'folder',
+            sessionId: session.id,
+            database: reveal.database,
+            schema: reveal.schema,
+            kind: reveal.kind,
+          },
+    )
+
+    const open = new Set(expandedKeys.map(String))
+    const connectionId = session.connectionId ?? session.id
+    const groupId = groupOf(arrangement, connectionId)
+    const path = [
+      // A connection in a folder is only drawn once the folder is open.
+      ...(groupId ? [encodeNode({ t: 'group', groupId })] : []),
+      encodeNode({ t: 'connection', connectionId }),
+      dbKey,
+      nsKey,
+    ].filter((key) => !open.has(String(key)))
+    if (path.length > 0) setExpandedKeys([...expandedKeys, ...path])
+
+    // Each level has to report before the one below it exists, so the wait is
+    // per level. A level that answers with a "no" — an error, or a list that
+    // does not hold what the window is scoped to — ends the request: there will
+    // never be a row to point at, and holding on to it would let a stale request
+    // hijack the explorer the next time the namespace does load.
+    if (tree.errors[session.id] || tree.errors[dbKey]) {
+      clearReveal()
+      return
+    }
+    const databases = tree.databases[session.id]
+    if (!databases) return
+    if (!databases.includes(reveal.database)) {
+      clearReveal()
+      return
+    }
+    if (driver?.supportsSchema) {
+      const schemas = tree.schemas[dbKey]
+      if (!schemas) return
+      if (!schemas.includes(reveal.schema)) {
+        clearReveal()
+        return
+      }
+    }
+
+    const ns = namespaceKey(session.id, reveal.database, reveal.schema)
+    if (tree.errors[ns]) {
+      clearReveal()
+      return
+    }
+    if (!tree.loaded[ns]) return
+
+    // A folder for a kind the engine does not declare is only drawn once it
+    // holds something (see `buildFolders`), so an empty one is nothing to show.
+    const objects = tree.objects[objectsKey(session.id, reveal.database, reveal.schema)] ?? []
+    const drawn =
+      reveal.kind === 'index' ||
+      objectKindsOf(driver).includes(reveal.kind) ||
+      objects.some((object) => object.kind === reveal.kind)
+    if (!drawn) {
+      clearReveal()
+      return
+    }
+
+    setSelectedKeys([folderKey])
+    // The row is usually already drawn (the namespace was open); when it took
+    // this request to draw it, the scroll waits for the render that does.
+    if (!scrollToRow(String(folderKey))) revealScroll.current = String(folderKey)
+    clearReveal()
+  }, [
+    arrangement,
+    clearReveal,
+    driverOfSession,
+    expandedKeys,
+    reveal,
+    scrollToRow,
+    sessions,
+    tree.databases,
+    tree.errors,
+    tree.loaded,
+    tree.objects,
+    tree.schemas,
+  ])
+
   const handleLoad = useCallback<NonNullable<TreeProps['onLoad']>>((keys) => {
     setLoadedKeys(keys as React.Key[])
   }, [])
@@ -1181,6 +1329,13 @@ export function ConnectionSidebar() {
       return [...next]
     })
   }, [sessions])
+
+  // Brings a revealed row into view as soon as it is on screen. A row that is
+  // still loading stays pending, and is scrolled to by the render that draws it.
+  useEffect(() => {
+    const key = revealScroll.current
+    if (key && scrollToRow(key)) revealScroll.current = null
+  }, [scrollToRow, treeData])
 
   /* ---------------------------------------------------------------- menus */
 
@@ -1283,7 +1438,7 @@ export function ConnectionSidebar() {
         />
       </div>
 
-      <div className="dm-sidebar-tree">
+      <div className="dm-sidebar-tree" ref={treePaneRef}>
         {arrangement.length === 0 && looseSessions.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
