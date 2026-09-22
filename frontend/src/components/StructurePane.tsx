@@ -38,6 +38,7 @@ import { capabilitiesOf } from '../lib/capabilities'
 import { emptyColumn, emptyIndex, isDirty, primaryKeyRow } from '../lib/design'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { FieldGrid, IndexGrid } from './DesignGrid'
+import { SqlCode } from './SqlCode'
 
 /** Which slice of the structure a table window is showing. */
 export type StructureSection = 'structure' | 'indexes' | 'foreignKeys' | 'ddl'
@@ -237,9 +238,12 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
         okText: creating ? 'Create' : 'Apply',
         content: (
           <div>
-            <pre className="dm-ddl" style={{ maxHeight: 280 }}>
-              {statements.map((statement) => `${statement};`).join('\n')}
-            </pre>
+            <SqlCode
+              className="dm-ddl"
+              style={{ maxHeight: 280 }}
+              sql={statements.map((statement) => `${statement};`).join('\n')}
+              driver={session?.driver}
+            />
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               The statements run one at a time, in this order.
             </Typography.Text>
@@ -408,7 +412,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
             Save
           </Button>
         </div>
-        <pre className="dm-ddl">{structure.ddl}</pre>
+        <SqlCode className="dm-ddl" sql={structure.ddl} driver={session?.driver} />
         <Typography.Paragraph type="secondary" style={{ fontSize: 11, marginTop: 12 }}>
           {appInfo ? `${appInfo.name} ${appInfo.version} · ` : ''}
           {/^(--|\/\/)/.test(structure.ddl)
@@ -665,9 +669,12 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
                 : 'The table matches the design; nothing to run.'}
             </Typography.Text>
           ) : (
-            <pre className="dm-ddl" style={{ margin: 0 }}>
-              {statements.map((statement) => `${statement};`).join('\n')}
-            </pre>
+            <SqlCode
+              className="dm-ddl"
+              style={{ margin: 0 }}
+              sql={statements.map((statement) => `${statement};`).join('\n')}
+              driver={session?.driver}
+            />
           )}
         </div>
       </div>

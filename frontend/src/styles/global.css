@@ -24,6 +24,18 @@
   --dm-toolbar-bg: var(--dm-chrome-bg);
   --dm-toolbar-border: var(--dm-chrome-border);
   --dm-tree-row-height: 22px;
+
+  /* Syntax highlighting for the read-only scripts (DDL, SQL preview). The
+     editor next door draws the same script with CodeMirror's own palette; these
+     are tuned to sit next to it without either one looking wrong on the other
+     surface. `--dm-sql-comment` is the existing muted grey and
+     `--dm-sql-ident` the existing link blue, so only four colours are new. */
+  --dm-sql-keyword: #8250df;
+  --dm-sql-type: #0b7285;
+  --dm-sql-string: #b23a48;
+  --dm-sql-number: #0b6e4f;
+  --dm-sql-comment: var(--dm-null);
+  --dm-sql-ident: var(--dm-hot-text);
 }
 
 [data-theme='dark'] {
@@ -45,6 +57,17 @@
   --dm-hot-text: #cfe6ff;
   --dm-toolbar-bg: var(--dm-chrome-bg);
   --dm-toolbar-border: var(--dm-chrome-border);
+
+  /* Same roles, brightened for a dark surface — the light-mode reds and greens
+     are unreadable on #191b22. The two aliases are repeated here on purpose: a
+     custom property is substituted where it is declared, so a `var()` left in
+     `:root` would keep resolving against the light values. */
+  --dm-sql-keyword: #c792ea;
+  --dm-sql-type: #63d4c8;
+  --dm-sql-string: #e79aa4;
+  --dm-sql-number: #7fd9a1;
+  --dm-sql-comment: var(--dm-null);
+  --dm-sql-ident: var(--dm-hot-text);
 }
 
 html,
@@ -492,6 +515,41 @@ body {
   background: var(--dm-sidebar-bg);
   border: 1px solid var(--dm-border);
   max-height: 460px;
+}
+
+/* --- syntax highlighting -------------------------------------------------
+   The token kinds come from `lib/sqlHighlight.ts`; the colours are the
+   `--dm-sql-*` variables next to the other theme tokens. Quoted names are the
+   only kind drawn without a colour of their own — they are already set off by
+   their quotes — and functions share the type colour, which is what makes
+   `VARCHAR(120)` and `COUNT(` read the same way in a preview. */
+.dm-sql-keyword {
+  color: var(--dm-sql-keyword);
+}
+
+.dm-sql-type {
+  color: var(--dm-sql-type);
+}
+
+.dm-sql-string {
+  color: var(--dm-sql-string);
+}
+
+.dm-sql-number {
+  color: var(--dm-sql-number);
+}
+
+.dm-sql-comment {
+  color: var(--dm-sql-comment);
+  font-style: italic;
+}
+
+.dm-sql-ident {
+  color: var(--dm-sql-ident);
+}
+
+.dm-sql-function {
+  color: var(--dm-sql-type);
 }
 
 .dm-value-view {

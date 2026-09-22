@@ -46,6 +46,7 @@ import {
 import { useAppStore, type ListScope, type TableView } from '../store/appStore'
 import { ConnectionTypeDropdown, connectionTypeItems, driverFromKey } from './ConnectionTypeMenu'
 import { objectIcon } from './objectIcon'
+import { SqlCode } from './SqlCode'
 import {
   databaseKey,
   decodeNode,
@@ -2194,7 +2195,11 @@ function NewDatabaseModal({
         </Typography.Paragraph>
       ) : (
         <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-          {plan ? <code>{plan.statement}</code> : 'Name it and the statement appears here.'}
+          {plan ? (
+            <SqlCode inline sql={plan.statement} driver={session?.driver} />
+          ) : (
+            'Name it and the statement appears here.'
+          )}
         </Typography.Paragraph>
       )}
 
