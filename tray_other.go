@@ -3,8 +3,8 @@
 package main
 
 // macOS and Linux get no notification-area icon (see tray.go), so there is
-// nothing to create, nothing to take down, and no balloon to show: closing the
-// window still quits the app, exactly as it did before the tray existed.
+// nothing to create and nothing to take down: closing the window still quits the
+// app, exactly as it did before the tray existed.
 type tray struct{}
 
 func newTray(trayActions) *tray { return &tray{} }
@@ -14,5 +14,3 @@ func newTray(trayActions) *tray { return &tray{} }
 func (*tray) running() bool { return false }
 
 func (*tray) close() {}
-
-func (*tray) noticeHidden() {}

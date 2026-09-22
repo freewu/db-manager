@@ -117,7 +117,6 @@ func (a *App) beforeClose(context.Context) bool {
 		return false
 	}
 	wruntime.WindowHide(a.ctx)
-	a.tray.noticeHidden()
 	return true
 }
 

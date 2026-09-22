@@ -53,12 +53,10 @@ const (
 
 	// Shell_NotifyIcon: what to do with the icon, and which of its fields count.
 	nimAdd     = 0x00000000
-	nimModify  = 0x00000001
 	nimDelete  = 0x00000002
 	nifMessage = 0x00000001
 	nifIcon    = 0x00000002
 	nifTip     = 0x00000004
-	nifInfo    = 0x00000010
 
 	// Menu flags for the popup that every right-click builds from scratch.
 	menuString     = 0x00000000
@@ -70,11 +68,6 @@ const (
 	// How GetMenuState and GetMenuString are asked: by row rather than by command
 	// id.
 	menuByPosition = 0x00000400
-
-	// An information balloon without the notification sound.
-	balloonInfo    = 0x00000001
-	balloonNoSound = 0x00000010
-	balloonTimeout = 10000
 
 	// The stock application icon, for a build with no icon resource to extract
 	// (a plain `go run` has none).
@@ -125,6 +118,12 @@ var (
 // header, so Go's natural alignment lines up with the C struct; `Size` is filled
 // in from unsafe.Sizeof, which is how the shell knows which version of the
 // structure it was handed. tray_windows_test.go pins the offsets.
+//
+// The balloon fields (Info, InfoTitle, InfoFlags, the timeout/version union and
+// BalloonIcon) are never written: the icon is the way back to the window, not a
+// notification, so nothing here pops a balloon. They stay in the struct because
+// `Size` is computed from it as a whole — dropping them would shrink the record
+// the shell is handed.
 type notifyIconData struct {
 	Size             uint32
 	Wnd              windows.Handle
@@ -177,17 +176,14 @@ type tray struct {
 	actions trayActions
 
 	// hwnd is the hidden window the shell reports to; 0 until it exists. It is
-	// read from other threads (close, the balloon) while the tray thread owns it,
-	// hence the atomic.
+	// read from other threads (close) while the tray thread owns it, hence the
+	// atomic.
 	hwnd atomic.Uintptr
 
 	// up is true while the icon is really in the notification area. The app only
 	// hides its window behind the icon while this holds, so a tray that never
 	// appeared cannot leave the process running with no way back to it.
 	up atomic.Bool
-
-	// toldOnce keeps the "still running" balloon to a single appearance.
-	toldOnce atomic.Bool
 
 	// The rest belongs to the tray thread alone.
 
@@ -232,31 +228,6 @@ func (t *tray) close() {
 	if hwnd := t.hwnd.Load(); hwnd != 0 {
 		postMessage(windows.Handle(hwnd), wmClose, 0, 0)
 	}
-}
-
-// noticeHidden pops the balloon that explains where the window went the first
-// time the user closes it. Without it a first-time user on a system that keeps
-// new tray icons in the overflow menu has no way of knowing the app is still
-// running. Only ever fires once.
-func (t *tray) noticeHidden() {
-	hwnd := t.hwnd.Load()
-	if hwnd == 0 || !t.up.Load() || !t.toldOnce.CompareAndSwap(false, true) {
-		return
-	}
-
-	data := notifyIconData{
-		Size:             uint32(unsafe.Sizeof(notifyIconData{})),
-		Wnd:              windows.Handle(hwnd),
-		ID:               trayIconID,
-		Flags:            nifInfo,
-		TimeoutOrVersion: balloonTimeout,
-		InfoFlags:        balloonInfo | balloonNoSound,
-	}
-	utf16Fill(data.InfoTitle[:], appName)
-	utf16Fill(data.Info[:], "Is still running. Use its tray icon to come back or to quit.")
-
-	procShellNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&data)))
-	runtime.KeepAlive(&data)
 }
 
 // serve owns the tray from beginning to end: it creates the hidden window on a
