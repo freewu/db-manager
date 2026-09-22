@@ -714,7 +714,11 @@ export function ConnectionSidebar() {
   )
 
   /**
-   * A database's children, with the Queries folder in front of them.
+   * A database's children, with the Queries folder after them.
+   *
+   * It closes the list — under `Indexes`, which is the last object folder — so
+   * the folders the engine actually holds stay together at the top. On an
+   * engine with schemas the same rule puts it after the schemas.
    *
    * The folder cannot simply be added while the object list is still on its way:
    * rc-tree only calls `loadData` for a node that has no children, so a node that
@@ -729,7 +733,7 @@ export function ConnectionSidebar() {
     ): TreeDataNode[] | undefined => {
       if (!children) return undefined
       const folder = buildQueriesFolder(session, database)
-      return folder ? [folder, ...children] : children
+      return folder ? [...children, folder] : children
     },
     [buildQueriesFolder],
   )
