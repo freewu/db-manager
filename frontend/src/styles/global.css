@@ -569,6 +569,26 @@ body {
   font-size: 12px;
 }
 
+/* A ticked row is the one that will be sent, so it carries the accent tint that
+   the selected-row class already implies; an unticked row is dimmed rather than
+   hidden, because its mock is still worth reading. */
+.dm-datagen-grid .ant-table-row-selected > td,
+.dm-datagen-grid .ant-table-row-selected:hover > td {
+  background: var(--dm-accent-soft);
+}
+
+.dm-datagen-off > td {
+  color: var(--dm-null);
+}
+
+.dm-datagen-off .ant-input {
+  opacity: 0.55;
+}
+
+.dm-datagen-off .dm-datagen-note {
+  opacity: 0.75;
+}
+
 .dm-datagen-note {
   font-size: 12px;
   line-height: 1.5;

@@ -7,6 +7,12 @@
  * columns and what each of them gets: a mock, written in mock.js syntax, with a
  * sample of what it produces.
  *
+ * A column takes part in a run only while its box is ticked. Every column
+ * starts ticked except the auto-increment ones, whose keys the engine has to
+ * hand out — a run that invented them would collide with itself. The tick, not
+ * the text, is what decides the INSERT's column list: a ticked column with no
+ * mock stops the run rather than being sent as an empty string.
+ *
  * Nothing is written until Generate is pressed, and what it then does is send
  * batches of rendered rows to the backend, which binds every value as a
  * parameter and reports what landed. The loop lives here rather than in Go so
@@ -164,6 +170,13 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
   const [reloadToken, setReloadToken] = useState(0)
   /** The mocks written so far, per table, so switching tables keeps them. */
   const [overrides, setOverrides] = useState<Record<string, Record<string, string>>>({})
+  /**
+   * Which columns are ticked, per table. An absent entry means "the default":
+   * every column but the auto-increment ones. Only the tables that were touched
+   * are stored, so a table nobody has ticked anything in still follows its
+   * structure when that is reloaded.
+   */
+  const [chosen, setChosen] = useState<Record<string, Record<string, boolean>>>({})
   const [pickerField, setPickerField] = useState<string>()
   const [rowsToWrite, setRowsToWrite] = useState(DEFAULT_ROWS)
   const [running, setRunning] = useState(false)
@@ -173,8 +186,20 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
   const stopRef = useRef(false)
 
   const rows = useMemo(() => fieldRowsOf(structure, overrides[currentKey]), [structure, overrides, currentKey])
-  const broken = useMemo(() => rows.filter((row) => row.compiled.error), [rows])
-  const filled = useMemo(() => rows.filter((row) => row.template.trim() !== ''), [rows])
+
+  // The tick is the window's own state rather than a reading of the mock: an
+  // empty mock is a value decision, the tick is the decision that the column
+  // takes part at all.
+  const selectedOf = useCallback(
+    (column: ColumnInfo) => chosen[currentKey]?.[column.name] ?? !column.autoIncrement,
+    [chosen, currentKey],
+  )
+  const ticked = useMemo(() => rows.filter((row) => selectedOf(row.column)), [rows, selectedOf])
+  const tickedNames = useMemo(() => ticked.map((row) => row.name), [ticked])
+  // Only the ticked columns can stop a run: an unticked field's mock is not
+  // read, so a mistake in it is not a mistake yet.
+  const broken = useMemo(() => ticked.filter((row) => row.compiled.error), [ticked])
+  const missing = useMemo(() => ticked.filter((row) => row.template.trim() === ''), [ticked])
 
   /* --- the structure of the picked table -------------------------------- */
 
@@ -391,8 +416,24 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
     [currentKey],
   )
 
+  /** Ticks a column on or off; the whole table is snapshotted on the first toggle. */
+  const chooseFields = useCallback(
+    (names: string[]) => {
+      const picked = new Set(names)
+      setChosen((previous) => ({
+        ...previous,
+        [currentKey]: Object.fromEntries(rows.map((row) => [row.name, picked.has(row.name)])),
+      }))
+    },
+    [rows, currentKey],
+  )
+
   const resetMocks = useCallback(() => {
+    // The ticks go back to their defaults too: this button restores the table's
+    // starting point, and half a reset would leave a column out that the
+    // structure says should be in.
     setOverrides((previous) => ({ ...previous, [currentKey]: {} }))
+    setChosen((previous) => ({ ...previous, [currentKey]: {} }))
   }, [currentKey])
 
   /* --- the run ----------------------------------------------------------- */
@@ -405,9 +446,11 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
         ? 'Pick a table on the left'
         : broken.length > 0
           ? `Fix the mock in ${broken.map((row) => row.name).join(', ')}`
-          : filled.length === 0
-            ? 'Every column is left empty'
-            : undefined
+          : missing.length > 0
+            ? `Write a mock for ${missing.map((row) => row.name).join(', ')} or untick the field`
+            : ticked.length === 0
+              ? 'No field is ticked'
+              : undefined
 
   const generate = useCallback(() => {
     if (blocker || !structure || !object) return
@@ -416,8 +459,8 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
       content: (
         <div style={{ fontSize: 12 }}>
           <div>
-            {filled.length} of {structure.columns.length} column(s) are sent:{' '}
-            <span className="mono">{filled.map((row) => row.name).join(', ')}</span>
+            {ticked.length} of {structure.columns.length} column(s) are sent:{' '}
+            <span className="mono">{ticked.map((row) => row.name).join(', ')}</span>
           </div>
           <div style={{ marginTop: 6 }}>
             The rows go straight into the table in batches of {INSERT_BATCH}. There is no undo —
@@ -429,7 +472,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
       onOk: async () => {
         const rng = createRng()
         const total = rowsToWrite
-        const columns = filled.map((row) => row.name)
+        const columns = ticked.map((row) => row.name)
         stopRef.current = false
         setResult(undefined)
         setRunning(true)
@@ -445,7 +488,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
             const batch: unknown[][] = []
             for (let i = 0; i < size; i += 1) {
               batch.push(
-                filled.map((row) =>
+                ticked.map((row) =>
                   coerceMockValue(row.compiled.render(rng) as MockValue, row.kind),
                 ),
               )
@@ -484,7 +527,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
     structure,
     object,
     rowsToWrite,
-    filled,
+    ticked,
     modal,
     sessionId,
     database,
@@ -531,8 +574,8 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
               size="small"
               className="mono"
               value={row.template}
-              status={row.compiled.error ? 'error' : undefined}
-              placeholder="(left empty — not sent)"
+              status={selectedOf(row.column) && row.compiled.error ? 'error' : undefined}
+              placeholder="(no mock)"
               onChange={(event) => setMock(row.name, event.target.value)}
             />
             <Tooltip title="Pick a placeholder">
@@ -548,10 +591,10 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
       {
         title: 'Description',
         dataIndex: 'name',
-        render: (_name: string, row) => <DescriptionCell row={row} />,
+        render: (_name: string, row) => <DescriptionCell row={row} selected={selectedOf(row.column)} />,
       },
     ],
-    [setMock],
+    [selectedOf, setMock],
   )
 
   if (!insertable) {
@@ -635,7 +678,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                   >
                     Reload
                   </Button>
-                  <Tooltip title="Put every column back to the mock this table's types suggest">
+                  <Tooltip title="Put every column back to the mock this table's types suggest, and tick them the way they start">
                     <Button size="small" disabled={!object} onClick={resetMocks}>
                       Reset mocks
                     </Button>
@@ -765,6 +808,14 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                   dataSource={rows}
                   pagination={false}
                   scroll={{ x: 'max-content' }}
+                  // The tick is what puts a column in the INSERT, so it leads
+                  // the row; the header box is the table-wide all / none.
+                  rowSelection={{
+                    selectedRowKeys: tickedNames,
+                    onChange: (keys) => chooseFields(keys.map(String)),
+                    columnWidth: 40,
+                  }}
+                  rowClassName={(row) => (selectedOf(row.column) ? '' : 'dm-datagen-off')}
                 />
               ) : null}
             </div>
@@ -787,19 +838,23 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
 /* --- the description column ------------------------------------------------ */
 
 /** The description column: what the column is, and what the mock makes of it. */
-function DescriptionCell({ row }: { row: FieldRow }) {
+function DescriptionCell({ row, selected }: { row: FieldRow; selected: boolean }) {
   const sample = useMemo(() => {
-    if (row.compiled.error || row.template.trim() === '') return undefined
+    if (!selected || row.compiled.error || row.template.trim() === '') return undefined
     const value = row.compiled.render(createRng(seedOf(row.name)))
     if (value === null || value === undefined || value === '') return undefined
     return String(value)
-  }, [row])
+  }, [row, selected])
 
   return (
     <div className="dm-datagen-note">
       {row.column.comment ? <div>{row.column.comment}</div> : null}
-      <div className={row.compiled.error ? 'dm-datagen-bad' : undefined}>
-        {mockDescription(row.column, row.template, row.compiled)}
+      <div className={selected && row.compiled.error ? 'dm-datagen-bad' : undefined}>
+        {selected
+          ? mockDescription(row.column, row.template, row.compiled)
+          : row.column.autoIncrement
+            ? 'Auto-increment — the engine assigns this column'
+            : 'Not sent — this column is left out of the INSERT'}
       </div>
       {sample ? <div className="dm-datagen-sample">e.g. {sample}</div> : null}
     </div>

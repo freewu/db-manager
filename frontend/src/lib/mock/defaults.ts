@@ -139,9 +139,10 @@ export function defaultMock(column: ColumnInfo): string {
  * The line the window's description column shows for a field.
  *
  * It answers "what will this column get?", which is not always the same
- * question as "what does this placeholder do" — an empty mock is a decision,
- * not a missing value, and saying so is the difference between a table that
- * will insert and one that will fail halfway.
+ * question as "what does this placeholder do" — an auto-increment column's key
+ * is the engine's business, and a ticked column with no mock is a run that
+ * cannot start rather than a value that is somehow empty. Whether the column is
+ * sent at all is the tick's decision, not this line's (see the window).
  */
 export function mockDescription(
   column: ColumnInfo,
@@ -152,7 +153,7 @@ export function mockDescription(
   if (template.trim() === '') {
     return column.autoIncrement
       ? 'Auto-increment — the engine assigns this column'
-      : 'Left empty — this column is not sent'
+      : 'No mock written — write one, or untick the field'
   }
   if (compiled.note) return compiled.note
   return 'Literal value, used as is'
