@@ -9,13 +9,21 @@ import type { ReactNode } from 'react'
 
 import type { AppPage } from '../store/appStore'
 
-/** What each item says when the pointer rests on it. */
-const RAIL_HINTS: Record<AppPage, string> = {
-  connections: 'The connections, and the windows they open',
-  datagen: 'Fill a table with generated rows',
-  changelog: 'Every change this application has run, newest first',
-  settings: 'Theme, code generation, mock placeholders, the data folder',
-}
+/**
+ * The four pages this application has, in the order they are listed.
+ *
+ * The name is what the item is called in two places at once: the accessible name,
+ * and the tip the pointer shows. A tip that has to explain the icon in a sentence
+ * is a tip the icon did not need — the rail is four pictures, and the four things
+ * this program can show are four short names. A page that is locked, or whose
+ * click does something else right now, still says so through the overrides below.
+ */
+const RAIL_ITEMS: { page: AppPage; icon: ReactNode; name: string }[] = [
+  { page: 'connections', icon: <DatabaseOutlined />, name: 'Connections' },
+  { page: 'datagen', icon: <ExperimentOutlined />, name: 'Data generation' },
+  { page: 'changelog', icon: <HistoryOutlined />, name: 'Change log' },
+  { page: 'settings', icon: <SettingOutlined />, name: 'Settings' },
+]
 
 /**
  * The rail along the far left: the four pages this application has.
@@ -45,49 +53,23 @@ export function ActivityBar({
   /** Why a page cannot be opened, or nothing when it can. */
   disabledReason?: Partial<Record<AppPage, string>>
 }) {
-  // A page that cannot be opened has to say so on the item itself: a door that
-  // is there but locked reads better than one that has been taken away.
-  const hintOf = (target: AppPage) =>
-    disabledReason?.[target] ?? hints?.[target] ?? RAIL_HINTS[target]
-
   return (
     <nav className="dm-rail" aria-label="Pages">
-      <RailItem
-        page="connections"
-        current={page}
-        icon={<DatabaseOutlined />}
-        label="Connections"
-        hint={hintOf('connections')}
-        disabledReason={disabledReason?.connections}
-        onSelect={onSelect}
-      />
-      <RailItem
-        page="datagen"
-        current={page}
-        icon={<ExperimentOutlined />}
-        label="Data generation"
-        hint={hintOf('datagen')}
-        disabledReason={disabledReason?.datagen}
-        onSelect={onSelect}
-      />
-      <RailItem
-        page="changelog"
-        current={page}
-        icon={<HistoryOutlined />}
-        label="Change log"
-        hint={hintOf('changelog')}
-        disabledReason={disabledReason?.changelog}
-        onSelect={onSelect}
-      />
-      <RailItem
-        page="settings"
-        current={page}
-        icon={<SettingOutlined />}
-        label="Settings"
-        hint={hintOf('settings')}
-        disabledReason={disabledReason?.settings}
-        onSelect={onSelect}
-      />
+      {RAIL_ITEMS.map((item) => (
+        <RailItem
+          key={item.page}
+          page={item.page}
+          current={page}
+          icon={item.icon}
+          name={item.name}
+          // A page that cannot be opened has to say so on the item itself: a door
+          // that is there but locked reads better than one that has been taken
+          // away, and a locked door has to explain itself.
+          hint={disabledReason?.[item.page] ?? hints?.[item.page] ?? item.name}
+          disabledReason={disabledReason?.[item.page]}
+          onSelect={onSelect}
+        />
+      ))}
     </nav>
   )
 }
@@ -96,7 +78,7 @@ function RailItem({
   page,
   current,
   icon,
-  label,
+  name,
   hint,
   disabledReason,
   onSelect,
@@ -104,7 +86,7 @@ function RailItem({
   page: AppPage
   current: AppPage
   icon: ReactNode
-  label: string
+  name: string
   hint: string
   disabledReason?: string
   onSelect: (page: AppPage) => void
@@ -119,7 +101,7 @@ function RailItem({
         <button
           type="button"
           className={active ? 'dm-rail-item is-active' : 'dm-rail-item'}
-          aria-label={label}
+          aria-label={name}
           aria-current={active ? 'page' : undefined}
           disabled={Boolean(disabledReason)}
           onClick={() => onSelect(page)}

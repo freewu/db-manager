@@ -1251,6 +1251,61 @@ body.dm-col-resizing * {
   word-break: break-all;
 }
 
+.dm-row-detail-label {
+  display: flex;
+  align-items: center;
+}
+
+/* A field that differs from what the row arrived with: the marker says a write
+   is waiting on it, and the rule under the field says which one. */
+.dm-row-detail-item.is-dirty {
+  border-bottom-color: var(--dm-accent);
+}
+
+.dm-row-detail-dirty {
+  margin-inline-start: auto;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--dm-accent);
+}
+
+.dm-row-detail-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  border-top: 1px solid var(--dm-border);
+  background: var(--dm-chrome-bg);
+}
+
+.dm-row-detail-footer > :last-child {
+  margin-inline-start: auto;
+}
+
+/* The statement shown before an edit is agreed to. Scrolled inside the dialog so
+   a wide UPDATE stays readable instead of widening the dialog. */
+.dm-row-detail-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dm-row-detail-plan pre {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--dm-border);
+  border-radius: 6px;
+  background: var(--dm-chrome-bg);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 /* --------------------------------------------------------------- welcome */
 
 .dm-welcome {

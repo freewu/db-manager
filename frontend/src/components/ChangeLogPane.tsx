@@ -49,6 +49,7 @@ const SOURCE_LABEL: Record<string, string> = {
   script: 'A script that was run',
   design: 'The structure page',
   create: 'The table designer',
+  grid: 'The data grid',
 }
 
 /**

@@ -38,6 +38,10 @@ func (MySQLDialect) LimitOffset(limit, offset int) string {
 	return " LIMIT " + strconv.Itoa(limit) + " OFFSET " + strconv.Itoa(offset)
 }
 
+// spellsBackslash tells the literal renderer that a backslash in a MySQL string
+// is an escape character, so it has to be doubled. See literal.go.
+func (MySQLDialect) spellsBackslash() bool { return true }
+
 // --- PostgreSQL ------------------------------------------------------------
 
 // PostgresDialect implements drivers.Dialect for PostgreSQL.

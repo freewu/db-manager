@@ -34,6 +34,7 @@ import type {
   RowDelete,
   RowInsert,
   RowInsertResult,
+  RowUpdate,
   SaveFileRequest,
   SavedQuery,
   QueryFile,
@@ -231,6 +232,13 @@ export const api = {
     invoke<ServerOverview>('GetServerOverview', sessionId),
   updateCell: (req: CellUpdate) => invoke<number>('UpdateCell', req),
   deleteRow: (req: RowDelete) => invoke<number>('DeleteRow', req),
+  /**
+   * The statement an edit of this row would run, rendered by the engine that
+   * would run it. Nothing is executed, so it is safe to ask before agreeing.
+   */
+  planRowUpdate: (req: RowUpdate) => invoke<string>('PlanRowUpdate', req),
+  /** Applies an edit of several columns of one row, as a single statement. */
+  updateRow: (req: RowUpdate) => invoke<number>('UpdateRow', req),
   /**
    * Appends one batch of generated rows. A batch the engine refuses comes back
    * as a result naming the row that stopped it, not as a rejection.

@@ -64,3 +64,8 @@ build/windows/icon.ico
 # Scratch file for a long commit message (`git commit -F`), written by hand
 # during a round of work. It is not part of the project.
 .git-commit-msg.txt
+
+# A workbench for driving headless Chrome against one component (built while
+# tuning the result grid's column drag). It hard-codes a local Chrome path and
+# its own debugging port, so it is not something another machine could run.
+frontend/.smoke/

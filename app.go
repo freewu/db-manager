@@ -406,6 +406,17 @@ func (a *App) UpdateCell(req models.CellUpdate) (int64, error) {
 	return a.manager.UpdateCell(req)
 }
 
+// PlanRowUpdate renders the statement the row detail layer is about to run, so
+// the window can show it before the user agrees to it. Nothing is executed.
+func (a *App) PlanRowUpdate(req models.RowUpdate) (string, error) {
+	return a.manager.PlanRowUpdate(req)
+}
+
+// UpdateRow applies an edit of one row made in the row detail layer.
+func (a *App) UpdateRow(req models.RowUpdate) (int64, error) {
+	return a.manager.UpdateRow(req)
+}
+
 // DeleteRow removes one row from the data grid.
 func (a *App) DeleteRow(req models.RowDelete) (int64, error) {
 	return a.manager.DeleteRow(req)

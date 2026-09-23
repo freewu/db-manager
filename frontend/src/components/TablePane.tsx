@@ -48,6 +48,7 @@ import { downloadText, resultToCSV, resultToJSON, toInsertScript } from '../lib/
 import { formatDuration, qualifiedName } from '../lib/format'
 import { useAppStore, type TableView, type WorkspaceTab } from '../store/appStore'
 import { DataGrid } from './DataGrid'
+import { RowDetail } from './RowDetail'
 import { StructureView } from './StructurePane'
 
 const PAGE_SIZES = [50, 100, 200, 500, 1000]
@@ -514,12 +515,19 @@ export function TablePane({ tab }: TablePaneProps) {
                 detailRow={detailKey}
                 onDetailRowChange={setDetailKey}
                 renderRowDetail={(row, index) => (
-                  <>
-                    <div className="dm-row-detail-head">
-                      <span className="dm-row-detail-title">
-                        Row {(page - 1) * pageSize + index + 1}
-                      </span>
-                      <div className="dm-row-detail-actions">
+                  <RowDetail
+                    row={row}
+                    columns={data.columns}
+                    keyValues={rowKey(index)}
+                    sessionId={tab.sessionId}
+                    database={database}
+                    schema={schema}
+                    object={object}
+                    readOnly={readOnly}
+                    title={`Row ${(page - 1) * pageSize + index + 1}`}
+                    onChanged={refresh}
+                    actions={
+                      <>
                         <Tooltip title="Copy as JSON">
                           <Button
                             size="small"
@@ -553,32 +561,9 @@ export function TablePane({ tab }: TablePaneProps) {
                             }}
                           />
                         </Tooltip>
-                      </div>
-                    </div>
-                    <div className="dm-row-detail-scroll">
-                      <div className="dm-row-detail">
-                        {data.columns.map((column, at) => (
-                          <div key={column.name} className="dm-row-detail-item">
-                            <div className="dm-row-detail-label">
-                              {column.name}
-                              {column.isPrimaryKey ? (
-                                <Tag color="gold" style={{ marginLeft: 6 }}>
-                                  PK
-                                </Tag>
-                              ) : null}
-                            </div>
-                            <div className="dm-row-detail-value mono">
-                              {row[at] === null || row[at] === undefined ? (
-                                <span className="dm-null">NULL</span>
-                              ) : (
-                                String(row[at])
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </>
+                      </>
+                    }
+                  />
                 )}
               />
               <div className="dm-statusbar" style={{ borderTop: '1px solid var(--dm-border)', background: 'transparent' }}>

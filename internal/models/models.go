@@ -757,6 +757,24 @@ type RowDelete struct {
 	Key       []KeyValue `json:"key"`
 }
 
+// RowUpdate edits several columns of a single row at once.
+//
+// It is one statement with one WHERE clause, which is what makes the row detail
+// layer safe to use on a table whose primary key is a compound: the row is
+// identified once, and the values are bound — the same guarantee CellUpdate
+// gives, for the case where more than one field changed.
+//
+// Values uses KeyValue because a change is exactly a column and a value, and the
+// key is exactly a list of them.
+type RowUpdate struct {
+	SessionID string     `json:"sessionId"`
+	Database  string     `json:"database,omitempty"`
+	Schema    string     `json:"schema,omitempty"`
+	Object    string     `json:"object"`
+	Key       []KeyValue `json:"key"`
+	Values    []KeyValue `json:"values"`
+}
+
 // RowInsert appends a batch of generated rows to one table.
 //
 // The values arrive from the data generation window as JSON scalars (strings,
@@ -910,6 +928,9 @@ const (
 	ChangeSourceDesign = "design"
 	// ChangeSourceCreate is the table designer creating one.
 	ChangeSourceCreate = "create"
+	// ChangeSourceGrid is the data grid editing or deleting a row: a change
+	// asked for from the result table, not from a script or a design.
+	ChangeSourceGrid = "grid"
 )
 
 // ChangeLogEntry is one statement this application ran that changed schema or

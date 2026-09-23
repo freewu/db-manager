@@ -583,22 +583,47 @@ func describeFetch(req drivers.FetchRequest, filter bson.D, sort bson.D, limit, 
 
 // UpdateCell implements drivers.Conn.
 func (c *Conn) UpdateCell(ctx context.Context, req models.CellUpdate) (int64, error) {
-	column := strings.TrimSpace(req.Column)
-	if column == "" {
+	if strings.TrimSpace(req.Column) == "" {
 		return 0, apperr.New(apperr.CodeInvalidConfig, "no field given")
 	}
-	if column == idField {
-		return 0, apperr.New(apperr.CodeInvalidConfig, "_id is immutable in MongoDB")
+	return c.UpdateRow(ctx, models.RowUpdate{
+		SessionID: req.SessionID,
+		Database:  req.Database,
+		Schema:    req.Schema,
+		Object:    req.Object,
+		Key:       req.Key,
+		Values:    []models.KeyValue{{Column: req.Column, Value: req.Value}},
+	})
+}
+
+// UpdateRow implements drivers.Conn: one $set covering every changed field.
+//
+// Only top level scalars can arrive here — the result grid offers nothing else
+// as editable, and _id is immutable — so a change is one element per field.
+func (c *Conn) UpdateRow(ctx context.Context, req models.RowUpdate) (int64, error) {
+	set := bson.D{}
+	for _, value := range req.Values {
+		column := strings.TrimSpace(value.Column)
+		if column == "" {
+			return 0, apperr.New(apperr.CodeInvalidConfig, "no field given")
+		}
+		if column == idField {
+			return 0, apperr.New(apperr.CodeInvalidConfig, "_id is immutable in MongoDB")
+		}
+		set = append(set, bson.E{Key: column, Value: writeValue(column, value.Value)})
+	}
+	if len(set) == 0 {
+		return 0, apperr.New(apperr.CodeInvalidConfig, "no fields were changed")
 	}
 	filter, err := keyFilter(req.Key)
 	if err != nil {
-		return 0, apperr.Wrap(apperr.CodeInvalidConfig, err, "update cell")
+		return 0, apperr.Wrap(apperr.CodeInvalidConfig, err, "update row")
 	}
 
-	update := bson.D{{Key: "$set", Value: bson.D{{Key: column, Value: writeValue(column, req.Value)}}}}
+	update := bson.D{{Key: "$set", Value: set}}
 	res, err := c.database(req.Database).Collection(req.Object).UpdateOne(ctx, filter, update)
 	if err != nil {
-		return 0, apperr.Wrap(apperr.CodeQueryFailed, err, "update %s", column)
+		return 0, apperr.Wrap(apperr.CodeQueryFailed, err, "update %s", req.Object)
 	}
 	return res.ModifiedCount, nil
 }
@@ -614,6 +639,41 @@ func (c *Conn) DeleteRow(ctx context.Context, req models.RowDelete) (int64, erro
 		return 0, apperr.Wrap(apperr.CodeQueryFailed, err, "delete document")
 	}
 	return res.DeletedCount, nil
+}
+
+// PlanRowUpdate implements drivers.Conn: the shell command UpdateRow would run.
+// The statement is rendered from the same filter and values, so the preview is
+// what the change log keeps.
+func (c *Conn) PlanRowUpdate(req models.RowUpdate) (string, error) {
+	set := bson.D{}
+	for _, value := range req.Values {
+		column := strings.TrimSpace(value.Column)
+		if column == "" {
+			return "", apperr.New(apperr.CodeInvalidConfig, "no field given")
+		}
+		if column == idField {
+			return "", apperr.New(apperr.CodeInvalidConfig, "_id is immutable in MongoDB")
+		}
+		set = append(set, bson.E{Key: column, Value: writeValue(column, value.Value)})
+	}
+	if len(set) == 0 {
+		return "", apperr.New(apperr.CodeInvalidConfig, "no fields were changed")
+	}
+	filter, err := keyFilter(req.Key)
+	if err != nil {
+		return "", apperr.Wrap(apperr.CodeInvalidConfig, err, "update row")
+	}
+	return collectionRef(req.Object) + ".updateOne(" + describe(filter) + ", " +
+		describe(bson.D{{Key: "$set", Value: set}}) + ")", nil
+}
+
+// PlanRowDelete implements drivers.Conn.
+func (c *Conn) PlanRowDelete(req models.RowDelete) (string, error) {
+	filter, err := keyFilter(req.Key)
+	if err != nil {
+		return "", apperr.Wrap(apperr.CodeInvalidConfig, err, "delete row")
+	}
+	return collectionRef(req.Object) + ".deleteOne(" + describe(filter) + ")", nil
 }
 
 // Execute implements drivers.Conn: it runs the shell language described in

@@ -48,30 +48,82 @@ export interface DataGridProps {
 }
 
 const MIN_COLUMN_WIDTH = 90
-const MAX_COLUMN_WIDTH = 420
+const MAX_COLUMN_WIDTH = 320
+/** Where a column of unbounded text stops growing — see `looksLikeParagraph`. */
+const PARAGRAPH_COLUMN_WIDTH = 200
+/** …and where a column of ordinary values does. */
+const VALUE_COLUMN_WIDTH = 260
+/** Roughly one character of the grid's monospace font, and a cell's padding. */
+const CHAR_WIDTH = 7.2
+const CELL_PADDING = 26
 
-/** Estimates a readable column width from the header and the first rows. */
+/**
+ * Whether a database type holds text of an unbounded length.
+ *
+ * A length is not a paragraph: `varchar(120)` is a label, while a `text` column —
+ * or a `varchar` with no length at all — is a document.
+ */
+const PARAGRAPH_TYPES = new Set([
+  'text',
+  'tinytext',
+  'mediumtext',
+  'longtext',
+  'ntext',
+  'blob',
+  'tinyblob',
+  'mediumblob',
+  'longblob',
+  'bytea',
+  'image',
+  'json',
+  'jsonb',
+  'clob',
+  'nclob',
+  'xml',
+])
+
+export function looksLikeParagraph(databaseType?: string): boolean {
+  const type = (databaseType ?? '').trim().toLowerCase()
+  const base = type.split('(')[0].trim()
+  if (PARAGRAPH_TYPES.has(base)) return true
+  return !type.includes('(') && (base === 'varchar' || base === 'character varying')
+}
+
+/**
+ * Estimates a readable column width from the header and the first rows.
+ *
+ * The longest value is the wrong thing to measure: one essay in a column of
+ * labels would set the width of every row, and the grid would scroll sideways for
+ * good. The upper quartile is what most rows need, and a column of unbounded text
+ * is capped lower still — its long values are there to be read, on hover or in the
+ * row detail, not to be laid out in the grid.
+ */
 function estimateWidth(column: ColumnMeta, rows: CellValue[][], index: number): number {
-  let longest = column.name.length
+  const lengths: number[] = []
   const sample = Math.min(rows.length, 50)
   for (let i = 0; i < sample; i += 1) {
     const value = rows[i]?.[index]
-    if (value === null || value === undefined) continue
-    const text = typeof value === 'string' ? value : String(value)
-    if (text.length > longest) longest = text.length
-    if (longest > 40) break
+    // NULL is rendered as a word, so it measures as one.
+    lengths.push((value === null || value === undefined ? 'NULL' : String(value)).length)
   }
-  const estimated = longest * 7.2 + 26
-  return Math.max(MIN_COLUMN_WIDTH, Math.min(MAX_COLUMN_WIDTH, Math.round(estimated)))
+  lengths.sort((a, b) => a - b)
+  const quartile = lengths[Math.max(0, Math.ceil(lengths.length * 0.75) - 1)] ?? 0
+  const header = column.name.length * CHAR_WIDTH + CELL_PADDING
+  const value = quartile * CHAR_WIDTH + CELL_PADDING
+  const cap = looksLikeParagraph(column.databaseType) ? PARAGRAPH_COLUMN_WIDTH : VALUE_COLUMN_WIDTH
+  const wanted = Math.max(header, Math.min(cap, value))
+  return Math.max(MIN_COLUMN_WIDTH, Math.min(MAX_COLUMN_WIDTH, Math.round(wanted)))
 }
 
 /**
  * Renders one cell value.
  *
  * Long values are clipped with the full text available on hover, and NULL gets
- * its own style so it can never be confused with the string "NULL".
+ * its own style so it can never be confused with the string "NULL". The clip is
+ * the column's own width when the caller knows it: a long value must not be able
+ * to widen the column it sits in beyond what the column asked for.
  */
-function CellContent({ value }: { value: CellValue }) {
+function CellContent({ value, width = 360 }: { value: CellValue; width?: number }) {
   if (value === null || value === undefined) {
     return <span className="dm-null">NULL</span>
   }
@@ -79,6 +131,19 @@ function CellContent({ value }: { value: CellValue }) {
     return <span className="mono">{value ? 'true' : 'false'}</span>
   }
   const text = String(value)
+  // A number is never clipped: its digits are the value, and an ellipsis would
+  // hide the one thing the cell has to say. Text is clipped to the column.
+  if (typeof value === 'number') {
+    return <span className="mono">{text}</span>
+  }
+  const cap = Math.max(60, width - 16)
+  const clipped = text.length * CHAR_WIDTH > cap
+  const span = (
+    <span className="dm-truncate" style={{ maxWidth: cap }}>
+      {text.length > 400 ? `${text.slice(0, 400)}…` : text}
+    </span>
+  )
+  if (!clipped) return span
   if (text.length > 400) {
     return (
       <Tooltip
@@ -89,30 +154,21 @@ function CellContent({ value }: { value: CellValue }) {
           </div>
         }
       >
-        <span className="dm-truncate" style={{ maxWidth: 'min(360px, 100%)' }}>
-          {text.slice(0, 400)}…
-        </span>
+        {span}
       </Tooltip>
     )
   }
-  if (text.length > 40) {
-    return (
-      <Tooltip title={text}>
-        <span className="dm-truncate" style={{ maxWidth: 'min(360px, 100%)' }}>
-          {text}
-        </span>
-      </Tooltip>
-    )
-  }
-  return <span className="mono">{text}</span>
+  return <Tooltip title={text}>{span}</Tooltip>
 }
 
 /** A cell that becomes an input on double click. */
 function EditableCell({
   value,
+  width,
   onCommit,
 }: {
   value: CellValue
+  width: number
   onCommit: (next: string | null) => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
@@ -144,7 +200,7 @@ function EditableCell({
   if (!editing) {
     return (
       <div className="dm-grid-cell" onDoubleClick={begin} title="Double click to edit">
-        <CellContent value={value} />
+        <CellContent value={value} width={width} />
       </div>
     )
   }
@@ -218,6 +274,7 @@ export function DataGrid({
 
     return result.columns.map((column, index) => {
       const sortSpec = sort?.find((entry) => entry.column === column.name)
+      const width = Math.round(widths[index] * scale)
       return {
         key: column.name,
         title: (
@@ -227,7 +284,7 @@ export function DataGrid({
           </span>
         ),
         dataIndex: index,
-        width: Math.round(widths[index] * scale),
+        width,
         sorter: onSortChange ? true : false,
         sortOrder: sortSpec ? (sortSpec.desc ? 'descend' : 'ascend') : null,
         render: (value: CellValue, _row: CellValue[], rowIndex: number) => {
@@ -235,11 +292,12 @@ export function DataGrid({
             return (
               <EditableCell
                 value={value}
+                width={width}
                 onCommit={(next) => onEditCell(rowIndex, column.name, next, value)}
               />
             )
           }
-          return <CellContent value={value} />
+          return <CellContent value={value} width={width} />
         },
       } satisfies TableColumnsType<CellValue[]>[number]
     })

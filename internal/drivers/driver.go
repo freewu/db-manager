@@ -65,8 +65,19 @@ type Conn interface {
 	// UpdateCell changes one column of one row identified by its primary key.
 	// The statement is always parameterised; values are never interpolated.
 	UpdateCell(ctx context.Context, req models.CellUpdate) (int64, error)
+	// UpdateRow changes several columns of one row identified by its primary
+	// key, in one statement.
+	UpdateRow(ctx context.Context, req models.RowUpdate) (int64, error)
 	// DeleteRow removes one row identified by its primary key.
 	DeleteRow(ctx context.Context, req models.RowDelete) (int64, error)
+
+	// PlanRowUpdate and PlanRowDelete render the statement those two would run,
+	// without running it: what the row detail layer shows before it is applied.
+	// They are pure, so the previewed text is the statement the run uses — the
+	// service renders it once and hands the same text to the engine and to the
+	// change log.
+	PlanRowUpdate(req models.RowUpdate) (string, error)
+	PlanRowDelete(req models.RowDelete) (string, error)
 
 	// Dialect exposes the SQL flavour for identifier quoting and pagination.
 	Dialect() Dialect

@@ -10,20 +10,50 @@ import (
 	"dbmanager/internal/models"
 )
 
+// The two ways a row identity can be unusable. They are values rather than
+// literals so that the preview and the run refuse a request with the same error.
+var (
+	errEmptyKeyColumn = apperr.New(apperr.CodeInvalidConfig, "a primary key column name is empty")
+	errNoKey          = apperr.New(apperr.CodeInvalidConfig, "the row has no primary key to identify it")
+)
+
 // UpdateCell implements drivers.Conn.
 //
 // Every value is bound as a parameter: the only text spliced into the statement
 // is an identifier, and that goes through the dialect's quoting.
 func (c *Conn) UpdateCell(ctx context.Context, req models.CellUpdate) (int64, error) {
-	column := strings.TrimSpace(req.Column)
-	if column == "" {
+	if strings.TrimSpace(req.Column) == "" {
 		return 0, apperr.New(apperr.CodeInvalidConfig, "a column name is required")
 	}
+	return c.UpdateRow(ctx, models.RowUpdate{
+		SessionID: req.SessionID,
+		Database:  req.Database,
+		Schema:    req.Schema,
+		Object:    req.Object,
+		Key:       req.Key,
+		Values:    []models.KeyValue{{Column: req.Column, Value: req.Value}},
+	})
+}
+
+// UpdateRow implements drivers.Conn: one UPDATE covering every changed column.
+func (c *Conn) UpdateRow(ctx context.Context, req models.RowUpdate) (int64, error) {
 	if strings.TrimSpace(req.Object) == "" {
 		return 0, apperr.New(apperr.CodeInvalidConfig, "an object name is required")
 	}
-	if len(req.Key) == 0 {
-		return 0, apperr.New(apperr.CodeInvalidConfig, "the row has no primary key to identify it")
+	if len(req.Values) == 0 {
+		return 0, apperr.New(apperr.CodeInvalidConfig, "no columns were changed")
+	}
+
+	assignments := make([]string, 0, len(req.Values))
+	args := make([]any, 0, len(req.Values)+len(req.Key))
+	d := c.spec.Dialect
+	for _, value := range req.Values {
+		column := strings.TrimSpace(value.Column)
+		if column == "" {
+			return 0, apperr.New(apperr.CodeInvalidConfig, "a column name is required")
+		}
+		args = append(args, value.Value)
+		assignments = append(assignments, d.Quote(column)+" = "+d.Placeholder(len(args)))
 	}
 
 	db, err := c.DB(ctx, req.Database)
@@ -31,10 +61,7 @@ func (c *Conn) UpdateCell(ctx context.Context, req models.CellUpdate) (int64, er
 		return 0, err
 	}
 
-	d := c.spec.Dialect
 	target := d.Qualify(c.resolveDatabase(req.Database), req.Schema, req.Object)
-
-	args := []any{req.Value}
 	where, err := keyPredicate(d, req.Key, &args)
 	if err != nil {
 		return 0, err
@@ -43,7 +70,7 @@ func (c *Conn) UpdateCell(ctx context.Context, req models.CellUpdate) (int64, er
 	ctx, cancel := withTimeout(ctx, 0)
 	defer cancel()
 
-	query := "UPDATE " + target + " SET " + d.Quote(column) + " = " + d.Placeholder(1) + where
+	query := "UPDATE " + target + " SET " + strings.Join(assignments, ", ") + where
 	res, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, apperr.Wrap(apperr.CodeQueryFailed, err, "update row")
@@ -53,6 +80,46 @@ func (c *Conn) UpdateCell(ctx context.Context, req models.CellUpdate) (int64, er
 		return 0, nil
 	}
 	return affected, nil
+}
+
+// PlanRowUpdate implements drivers.Conn: the statement UpdateRow would run, with
+// its values spelled out, for a person to read before it is applied.
+func (c *Conn) PlanRowUpdate(req models.RowUpdate) (string, error) {
+	if strings.TrimSpace(req.Object) == "" {
+		return "", apperr.New(apperr.CodeInvalidConfig, "an object name is required")
+	}
+	if len(req.Values) == 0 {
+		return "", apperr.New(apperr.CodeInvalidConfig, "no columns were changed")
+	}
+	d := c.spec.Dialect
+	assignments := make([]string, 0, len(req.Values))
+	for _, value := range req.Values {
+		column := strings.TrimSpace(value.Column)
+		if column == "" {
+			return "", apperr.New(apperr.CodeInvalidConfig, "a column name is required")
+		}
+		assignments = append(assignments, d.Quote(column)+" = "+sqlLiteral(d, value.Value))
+	}
+	where, err := literalWhere(d, req.Key)
+	if err != nil {
+		return "", err
+	}
+	target := d.Qualify(c.resolveDatabase(req.Database), req.Schema, req.Object)
+	return "UPDATE " + target + " SET " + strings.Join(assignments, ", ") + where, nil
+}
+
+// PlanRowDelete implements drivers.Conn.
+func (c *Conn) PlanRowDelete(req models.RowDelete) (string, error) {
+	if strings.TrimSpace(req.Object) == "" {
+		return "", apperr.New(apperr.CodeInvalidConfig, "an object name is required")
+	}
+	d := c.spec.Dialect
+	where, err := literalWhere(d, req.Key)
+	if err != nil {
+		return "", err
+	}
+	target := d.Qualify(c.resolveDatabase(req.Database), req.Schema, req.Object)
+	return "DELETE FROM " + target + where, nil
 }
 
 // DeleteRow implements drivers.Conn.
@@ -213,7 +280,7 @@ func keyPredicate(d drivers.Dialect, key []models.KeyValue, args *[]any) (string
 	for _, kv := range key {
 		column := strings.TrimSpace(kv.Column)
 		if column == "" {
-			return "", apperr.New(apperr.CodeInvalidConfig, "a primary key column name is empty")
+			return "", errEmptyKeyColumn
 		}
 		if kv.Value == nil {
 			parts = append(parts, d.Quote(column)+" IS NULL")
@@ -223,7 +290,7 @@ func keyPredicate(d drivers.Dialect, key []models.KeyValue, args *[]any) (string
 		parts = append(parts, d.Quote(column)+" = "+d.Placeholder(len(*args)))
 	}
 	if len(parts) == 0 {
-		return "", apperr.New(apperr.CodeInvalidConfig, "the row has no primary key to identify it")
+		return "", errNoKey
 	}
 	return " WHERE " + strings.Join(parts, " AND "), nil
 }

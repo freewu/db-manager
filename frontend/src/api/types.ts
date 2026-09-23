@@ -544,6 +544,22 @@ export interface RowDelete {
 }
 
 /**
+ * An edit of several columns of one row, made in the row detail layer.
+ *
+ * `values` reuses `KeyValue`: a change is a column and a value, and that is what
+ * the pair is. They go into one statement with one WHERE clause, so a table whose
+ * primary key spans several columns is still identified once.
+ */
+export interface RowUpdate {
+  sessionId: string
+  database?: string
+  schema?: string
+  object: string
+  key: KeyValue[]
+  values: KeyValue[]
+}
+
+/**
  * A batch of rows to append to one table, as the data generation window sends
  * them.
  *

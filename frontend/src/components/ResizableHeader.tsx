@@ -64,6 +64,60 @@ const FALLBACK_WIDTH = 160
  */
 const FILLER_KEY = '__dm-filler__'
 
+/**
+ * What a drag writes into while it is going on.
+ *
+ * The width of the column being dragged could be held in React state, and that is
+ * what this started out as — but a state update rebuilds the column set, which
+ * re-renders every cell of every row, once per pointer move. On a 200-row result
+ * that measured ~80ms a move: the edge arrived well behind the cursor, which is
+ * what "laggy" means. So while the pointer is down the width is written straight
+ * to the `<col>` elements of the tables on screen, and the gesture is committed to
+ * state once, when it ends. The browser lays the table out once per frame however
+ * many moves arrive in it, so those writes cost a style property each.
+ */
+interface LiveDrag {
+  /** The tables this header's columns are drawn in — see `tablesOf`. */
+  roots: HTMLTableElement[]
+  /** Where the dragged column sits in a row, so its `<col>` can be picked. */
+  index: number
+  /** The last width asked for; what gets committed when the gesture ends. */
+  width: number
+}
+
+/**
+ * The tables whose `<col>`s stand for this header's columns.
+ *
+ * One table answers for an ordinary grid. A grid whose header row is fixed draws
+ * two — the header is a table of its own above the body — and both colgroups have
+ * to move together, or the header would disagree with the rows below it.
+ */
+function tablesOf(cell: HTMLTableCellElement): HTMLTableElement[] {
+  const root = cell.closest('.ant-table')
+  if (!root) return []
+  return Array.from(root.querySelectorAll('table'))
+}
+
+/** Keeps a dragged width inside the range an edge may be pulled to. */
+function clampWidth(width: number): number {
+  return Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width)))
+}
+
+/**
+ * The `<col>` elements of one table, in the order the row's cells are in.
+ *
+ * The index of the dragged column comes from the header cell itself (`cellIndex`),
+ * so a table that has an extra cell in front of it — the checkbox column antd
+ * injects, which this hook never sees — needs no special case.
+ */
+function colsOf(table: HTMLTableElement): HTMLTableColElement[] | null {
+  const cols = Array.from(table.querySelectorAll('colgroup > col')) as HTMLTableColElement[]
+  // A colgroup that does not match the header row means the index names some other
+  // column: rc-table leaves a `<col>` out for a column that has no width at all.
+  if (cols.length !== table.querySelectorAll('thead th').length) return null
+  return cols
+}
+
 /** What a header cell needs in order to run the drag gesture for its column. */
 interface ResizeHandle {
   /** The column this header belongs to, as the hook remembers widths by. */
@@ -71,8 +125,10 @@ interface ResizeHandle {
   /** Tells the hook which `<th>` is on screen for a column, so it can measure it. */
   register: (column: string, cell: HTMLTableCellElement | null) => void
   /** Starts a gesture: freezes the layout if needed, and answers where it starts. */
-  begin: (column: string, cell: HTMLTableCellElement) => number
+  begin: (cell: HTMLTableCellElement) => number
   apply: (column: string, width: number) => void
+  /** Ends the gesture: what is on screen becomes what React remembers. */
+  end: (column: string) => void
 }
 
 /**
@@ -133,6 +189,7 @@ function ResizableHeaderCell({ dmResize, children, ...rest }: HeaderCellProps) {
 
   const begin = dmResize?.begin
   const apply = dmResize?.apply
+  const end = dmResize?.end
 
   const onPointerDown = (event: ReactPointerEvent<HTMLSpanElement>) => {
     const th = cell.current
@@ -145,7 +202,7 @@ function ResizableHeaderCell({ dmResize, children, ...rest }: HeaderCellProps) {
     // header — over the rows, over another column, out of the window — without a
     // listener on `window` to take down again afterwards.
     event.currentTarget.setPointerCapture(event.pointerId)
-    drag.current = { fromX: event.clientX, fromWidth: begin(column, th) }
+    drag.current = { fromX: event.clientX, fromWidth: begin(th) }
     document.body.classList.add('dm-col-resizing')
   }
 
@@ -157,15 +214,17 @@ function ResizableHeaderCell({ dmResize, children, ...rest }: HeaderCellProps) {
     apply(column, started.fromWidth + event.clientX - started.fromX)
   }
 
-  const onLostPointerCapture = () => {
+  const finish = () => {
+    if (!drag.current) return
     drag.current = null
     document.body.classList.remove('dm-col-resizing')
+    if (column && end) end(column)
   }
 
   return (
     <th {...rest} ref={cell}>
       {children}
-      {begin && apply && column ? (
+      {begin && apply && end && column ? (
         <span
           className="dm-col-resizer"
           role="separator"
@@ -173,8 +232,8 @@ function ResizableHeaderCell({ dmResize, children, ...rest }: HeaderCellProps) {
           aria-label="Resize column"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
-          onPointerUp={onLostPointerCapture}
-          onLostPointerCapture={onLostPointerCapture}
+          onPointerUp={finish}
+          onLostPointerCapture={finish}
           onClick={(event) => event.stopPropagation()}
         />
       ) : null}
@@ -217,32 +276,88 @@ export function useColumnResize<T>(columns: ResizableColumns<T>): ColumnResize<T
   const [widths, setWidths] = useState<Record<string, number>>({})
   const cells = useRef(new Map<string, HTMLTableCellElement>())
   const frozen = useRef(false)
+  /** The gesture in progress, if any — see `LiveDrag`. */
+  const drag = useRef<LiveDrag | null>(null)
 
   const register = useCallback((column: string, cell: HTMLTableCellElement | null) => {
     if (cell) cells.current.set(column, cell)
     else cells.current.delete(column)
   }, [])
 
-  const apply = useCallback((column: string, width: number) => {
-    const next = Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, width)))
-    setWidths((previous) => (previous[column] === next ? previous : { ...previous, [column]: next }))
+  /**
+   * Writes one width to the tables' `<col>` elements, and answers whether it
+   * reached any. A table whose colgroup does not line up is left alone; the caller
+   * then falls back to state, which is slower but cannot write to the wrong column.
+   */
+  const paint = useCallback((targets: LiveDrag, width: number) => {
+    let painted = false
+    for (const table of targets.roots) {
+      const columns = colsOf(table)
+      const col = columns?.[targets.index]
+      if (!col) continue
+      col.style.width = `${width}px`
+      painted = true
+    }
+    return painted
   }, [])
 
-  const begin = useCallback((column: string, cell: HTMLTableCellElement) => {
-    const startWidth = cell.getBoundingClientRect().width
-    if (frozen.current) return startWidth
-    frozen.current = true
-    // Freeze what is on screen: every column of this table, as the browser laid it
-    // out a moment ago — which is also the only honest width for a column that was
-    // never given one.
-    const snapshot: Record<string, number> = {}
-    for (const [key, element] of cells.current) {
-      const width = Math.round(element.getBoundingClientRect().width)
-      if (width > 0) snapshot[key] = width
-    }
-    setWidths(snapshot)
-    return snapshot[column] ?? startWidth
-  }, [])
+  const apply = useCallback(
+    (column: string, width: number) => {
+      const next = clampWidth(width)
+      const targets = drag.current
+      if (!targets) {
+        // No gesture to write into — a caller driving this by hand — so state is
+        // the only place the width can go.
+        setWidths((previous) => (previous[column] === next ? previous : { ...previous, [column]: next }))
+        return
+      }
+      targets.width = next
+      if (!paint(targets, next)) {
+        // The colgroup does not line up after all, so state is the fallback.
+        setWidths((previous) => (previous[column] === next ? previous : { ...previous, [column]: next }))
+      }
+    },
+    [paint],
+  )
+
+  const begin = useCallback(
+    (cell: HTMLTableCellElement) => {
+      const startWidth = cell.getBoundingClientRect().width
+      if (!frozen.current) {
+        frozen.current = true
+        // Freeze what is on screen: every column of this table, as the browser
+        // laid it out a moment ago — which is also the only honest width for a
+        // column that was never given one.
+        const snapshot: Record<string, number> = {}
+        for (const [key, element] of cells.current) {
+          const width = Math.round(element.getBoundingClientRect().width)
+          if (width > 0) snapshot[key] = width
+        }
+        setWidths(snapshot)
+      }
+      drag.current = {
+        roots: tablesOf(cell),
+        // The header cell's own position is the column's position in a row — the
+        // checkbox column antd injects is counted by the browser, not by us.
+        index: cell.cellIndex,
+        width: clampWidth(startWidth),
+      }
+      return startWidth
+    },
+    [],
+  )
+
+  const end = useCallback(
+    (column: string) => {
+      const targets = drag.current
+      if (!targets) return
+      drag.current = null
+      setWidths((previous) =>
+        previous[column] === targets.width ? previous : { ...previous, [column]: targets.width },
+      )
+    },
+    [],
+  )
 
   const resized = Object.keys(widths).length > 0
   const keys = useMemo(() => keysOf(columns), [columns])
@@ -250,7 +365,7 @@ export function useColumnResize<T>(columns: ResizableColumns<T>): ColumnResize<T
   const merged = useMemo(() => {
     const mapped = columns.map((column, index) => {
       const key = keys[index]
-      const handle: ResizeHandle = { column: key, register, begin, apply }
+      const handle: ResizeHandle = { column: key, register, begin, apply, end }
       // A leaf column, so that `onHeaderCell` is the one the cell gets. The
       // result is a leaf column set either way: a group's own header has no
       // data column to resize.
@@ -273,7 +388,7 @@ export function useColumnResize<T>(columns: ResizableColumns<T>): ColumnResize<T
       render: () => null,
     }
     return [...mapped, filler]
-  }, [apply, begin, columns, keys, register, resized, widths])
+  }, [apply, begin, columns, end, keys, register, resized, widths])
 
   const tableProps = useMemo<ColumnResizeTableProps>(
     () => ({

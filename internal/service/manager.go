@@ -930,41 +930,114 @@ func (m *Manager) applyPlan(s *session, design models.TableDesign, plan *models.
 
 // UpdateCell applies a single-cell edit from the data grid.
 func (m *Manager) UpdateCell(req models.CellUpdate) (int64, error) {
-	s, err := m.session(req.SessionID)
-	if err != nil {
-		return 0, err
-	}
-	if s.readOnly {
-		return 0, apperr.New(apperr.CodeReadOnly, "this connection is read-only")
-	}
 	if strings.TrimSpace(req.Column) == "" {
 		return 0, apperr.New(apperr.CodeInvalidConfig, "a column name is required")
 	}
-	if len(req.Key) == 0 {
-		return 0, apperr.New(apperr.CodeInvalidConfig, "the row has no primary key to identify it")
+	return m.UpdateRow(models.RowUpdate{
+		SessionID: req.SessionID,
+		Database:  req.Database,
+		Schema:    req.Schema,
+		Object:    req.Object,
+		Key:       req.Key,
+		Values:    []models.KeyValue{{Column: req.Column, Value: req.Value}},
+	})
+}
+
+// PlanRowUpdate renders the statement UpdateRow would run, for the row detail
+// layer to show before anything is applied.
+//
+// It checks what the run checks — the session, read-only, the row identity — so
+// a request that could not be applied does not get a preview that looks like it
+// would. Nothing is executed, and nothing is logged: a statement that was only
+// read is not a change.
+func (m *Manager) PlanRowUpdate(req models.RowUpdate) (string, error) {
+	s, err := m.editable(req.SessionID, req.Key)
+	if err != nil {
+		return "", err
+	}
+	return s.conn.PlanRowUpdate(req)
+}
+
+// UpdateRow applies an edit of one row made in the row detail layer.
+//
+// The statement is rendered first and executed second, and it is the rendered
+// text — not a second rendering made for the log — that the change log keeps. So
+// what the layer previewed, what ran and what the log says are the same string
+// by construction. An edit the engine refuses still leaves that line behind,
+// with the engine's message on it: the log answers "what was this database asked
+// to do", and a statement that was sent and failed was asked for.
+func (m *Manager) UpdateRow(req models.RowUpdate) (int64, error) {
+	s, err := m.editable(req.SessionID, req.Key)
+	if err != nil {
+		return 0, err
+	}
+
+	statement, err := s.conn.PlanRowUpdate(req)
+	if err != nil {
+		return 0, err
 	}
 
 	ctx, cancel := m.ctx(QueryTimeout(0))
 	defer cancel()
-	return s.conn.UpdateCell(ctx, req)
+	affected, runErr := s.conn.UpdateRow(ctx, req)
+	m.logStatement(s, statementPlace{
+		database: req.Database,
+		schema:   req.Schema,
+		object:   req.Object,
+		source:   models.ChangeSourceGrid,
+	}, statement, "update", runErr)
+	if runErr != nil {
+		return 0, runErr
+	}
+	return affected, nil
 }
 
 // DeleteRow removes one row selected in the data grid.
 func (m *Manager) DeleteRow(req models.RowDelete) (int64, error) {
-	s, err := m.session(req.SessionID)
+	s, err := m.editable(req.SessionID, req.Key)
 	if err != nil {
 		return 0, err
 	}
-	if s.readOnly {
-		return 0, apperr.New(apperr.CodeReadOnly, "this connection is read-only")
-	}
-	if len(req.Key) == 0 {
-		return 0, apperr.New(apperr.CodeInvalidConfig, "the row has no primary key to identify it")
+
+	statement, err := s.conn.PlanRowDelete(req)
+	if err != nil {
+		return 0, err
 	}
 
 	ctx, cancel := m.ctx(QueryTimeout(0))
 	defer cancel()
-	return s.conn.DeleteRow(ctx, req)
+	affected, runErr := s.conn.DeleteRow(ctx, req)
+	m.logStatement(s, statementPlace{
+		database: req.Database,
+		schema:   req.Schema,
+		object:   req.Object,
+		source:   models.ChangeSourceGrid,
+	}, statement, "delete", runErr)
+	if runErr != nil {
+		return 0, runErr
+	}
+	return affected, nil
+}
+
+// editable is the gate every row edit goes through: a live session on a
+// connection that may write, and a row that can be identified again.
+//
+// A row without a primary key cannot be named in a WHERE clause without
+// matching whatever else happens to look like it, so it is refused rather than
+// guessed at — that refusal is the same error the drivers raise, so the preview
+// and the run agree.
+func (m *Manager) editable(sessionID string, key []models.KeyValue) (*session, error) {
+	s, err := m.session(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if s.readOnly {
+		return nil, apperr.New(apperr.CodeReadOnly, "this connection is read-only")
+	}
+	if len(key) == 0 {
+		return nil, apperr.New(apperr.CodeInvalidConfig, "the row has no primary key to identify it")
+	}
+	return s, nil
 }
 
 // InsertRows appends a batch of rows produced by the data generation window.
