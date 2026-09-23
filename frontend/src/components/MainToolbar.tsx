@@ -6,11 +6,8 @@ import {
   CloudUploadOutlined,
   CodeOutlined,
   DisconnectOutlined,
-  ExperimentOutlined,
   EyeOutlined,
-  HistoryOutlined,
   ReloadOutlined,
-  SettingOutlined,
   SwapOutlined,
   SyncOutlined,
   TableOutlined,
@@ -20,7 +17,7 @@ import {
 import { ConnectionTypeDropdown } from './ConnectionTypeMenu'
 import { useAppStore } from '../store/appStore'
 import { useConnect } from '../hooks/useConnect'
-import { capabilitiesOf, findDriver, objectKindsOf } from '../lib/capabilities'
+import { findDriver, objectKindsOf } from '../lib/capabilities'
 import { FOLDER_LABEL } from '../lib/tree'
 
 /**
@@ -40,24 +37,17 @@ const PARKED = 'Temporarily unavailable'
  *
  * The button set mirrors Navicat's main window one-for-one so the layout reads
  * the same, but only *Connection*, *Open*, *Close*, *New Query*, *Refresh*,
- * *Table*, *View*, *Change Log*, *Data Generation* and *Settings* are live.
- * Everything else is disabled and says why — a dead button is worse than an
- * honest gap, but an empty toolbar is not the layout we are after.
+ * *Table* and *View* are live. Everything else is disabled and says why — a dead
+ * button is worse than an honest gap, but an empty toolbar is not the layout we
+ * are after.
  *
- * Two of those commands also fold the explorer away, because they open windows
- * that are wider than they are deep: the change log puts a list beside the
- * statement it opens on, and the data generation window puts every column's
- * template in one grid. Neither reads the tree to be used, and both are opened
- * for a table that has already been picked. The explorer comes back from the
- * arrow on the splitter bar, where it has always been.
+ * The commands that stand outside the explorer — the connections it lists, the
+ * generation windows, the change log, the settings — are not here: they are the
+ * pages the rail names (see `AppPage`), and a command that switches page belongs
+ * on the far left, next to the page it switches to. This ribbon stops at what
+ * acts on the connection the explorer is standing on.
  */
-export function MainToolbar({
-  onOpenSettings,
-  onCollapseSidebar,
-}: {
-  onOpenSettings: () => void
-  onCollapseSidebar: () => void
-}) {
+export function MainToolbar() {
   const connections = useAppStore((s) => s.connections)
   const drivers = useAppStore((s) => s.drivers)
   const sessions = useAppStore((s) => s.sessions)
@@ -65,8 +55,6 @@ export function MainToolbar({
   const activeNamespace = useAppStore((s) => s.activeNamespace)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const openObjectsTab = useAppStore((s) => s.openObjectsTab)
-  const openDataGenTab = useAppStore((s) => s.openDataGenTab)
-  const openChangeLog = useAppStore((s) => s.openChangeLog)
   const closeSession = useAppStore((s) => s.closeSession)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
   const loadDatabases = useAppStore((s) => s.loadDatabases)
@@ -144,18 +132,6 @@ export function MainToolbar({
 
   const tableButton = listButton('table')
   const viewButton = listButton('view')
-
-  // Data generation acts on a live session rather than on a namespace: the
-  // window is opened per connection, and it can pick its own table. The
-  // namespace the explorer is standing in is handed over only to open the
-  // window on that database.
-  const datagenSession = focusedSession ?? namespaceSession
-  const datagenDriver = findDriver(drivers, datagenSession?.driver)
-  const datagenHint = !datagenSession
-    ? 'Pick an open connection in the tree first'
-    : capabilitiesOf(datagenDriver).insertable
-      ? `Fill a table of ${datagenSession.name} with generated rows`
-      : `${datagenDriver?.displayName ?? 'This engine'} cannot insert rows`
 
   return (
     <div className="dm-ribbon">
@@ -261,40 +237,6 @@ export function MainToolbar({
       <RibbonButton icon={<ClockCircleOutlined />} label="Auto Run" hint={PARKED} disabled />
       <RibbonButton icon={<SwapOutlined />} label="Transfer" hint={PARKED} disabled />
       <RibbonButton icon={<SyncOutlined />} label="Data Sync" hint={PARKED} disabled />
-      <RibbonButton
-        icon={<HistoryOutlined />}
-        label="Change Log"
-        // Live, and global: the log records what this application ran against
-        // every connection it has touched, so it does not depend on what the
-        // explorer is standing on — which is why it needs no session.
-        hint="Every change this application has run, newest first"
-        onClick={() => {
-          onCollapseSidebar()
-          openChangeLog()
-        }}
-      />
-      <RibbonButton
-        icon={<ExperimentOutlined />}
-        label="Data Generation"
-        // Live, and the one command in this group that is: it opens the window
-        // that writes rows, standing on the database the explorer is in when
-        // there is one. A document store says why it cannot, through the same
-        // capability the window itself reads.
-        hint={datagenHint}
-        disabled={!datagenSession || !capabilitiesOf(datagenDriver).insertable}
-        onClick={() => {
-          if (!datagenSession) return
-          const scope = namespaceSession?.id === datagenSession.id ? focusedNamespace : undefined
-          onCollapseSidebar()
-          openDataGenTab(datagenSession.id, scope?.database, scope?.schema)
-        }}
-      />
-      <RibbonButton
-        icon={<SettingOutlined />}
-        label="Settings"
-        hint="Theme, data folder and about"
-        onClick={onOpenSettings}
-      />
     </div>
   )
 }

@@ -66,10 +66,17 @@ const SOURCE_LABEL: Record<string, string> = {
  * started, so nothing is ever dropped and the older statements are still here.
  * The picker in the toolbar is that shelf: it lists every file with how much is
  * in it, and the lists below show the one that is open.
+ *
+ * It is a page rather than a window in the working area: the log covers every
+ * connection this application has touched, so it is not a document about the
+ * table a tab strip would be pointing at, and it is the one thing here that can
+ * be read with nothing connected.
  */
 export function ChangeLogPane() {
   const drivers = useAppStore((s) => s.drivers)
-  const activeTabId = useAppStore((s) => s.activeTabId)
+  // The pane is mounted once and then kept behind the other pages, so "showing"
+  // is a fact about the store rather than about being built.
+  const showing = useAppStore((s) => s.page === 'changelog')
 
   const [entries, setEntries] = useState<ChangeLogEntry[]>([])
   const [files, setFiles] = useState<ChangeLogFile[]>([])
@@ -102,16 +109,16 @@ export function ChangeLogPane() {
     [],
   )
 
-  // Re-read when the window comes to the front: a statement is run from another
-  // tab, and the only honest answer about a log of what has been run is the one
+  // Re-read when the page comes to the front: a statement is run from another
+  // page, and the only honest answer about a log of what has been run is the one
   // that was read after the last statement was. Re-reading also refreshes the
   // picker, so an archive a rotation just created is offered.
   useEffect(() => {
-    if (activeTabId === 'changelog') void load(file)
+    if (showing) void load(file)
     // `file` is deliberately not a dependency: the file is re-read when it is
     // switched below, and re-reading it here would fight the switch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTabId, load])
+  }, [showing, load])
 
   const shown = useMemo(() => {
     const needle = filter.trim().toLowerCase()

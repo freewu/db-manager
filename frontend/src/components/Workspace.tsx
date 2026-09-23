@@ -1,11 +1,9 @@
 import { useMemo } from 'react'
 import { App as AntApp, Button, Space, Tabs, Tag, Tooltip, Typography } from 'antd'
 import type { TabsProps } from 'antd'
-import { CodeOutlined, DashboardOutlined, ExperimentOutlined, FileTextOutlined, FolderOutlined, HistoryOutlined, PartitionOutlined, PlusOutlined, TableOutlined } from '@ant-design/icons'
+import { CodeOutlined, DashboardOutlined, FileTextOutlined, FolderOutlined, PartitionOutlined, PlusOutlined, TableOutlined } from '@ant-design/icons'
 
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
-import { ChangeLogPane } from './ChangeLogPane'
-import { DataGenPane } from './DataGenPane'
 import { DdlPane } from './DdlPane'
 import { CodegenPane } from './CodegenPane'
 import { ErDiagramPane } from './ErDiagramPane'
@@ -16,9 +14,19 @@ import { RuntimePane } from './RuntimePane'
 import { TablePane } from './TablePane'
 import { WelcomePane } from './WelcomePane'
 
-/** Tab bar + pane host for the whole workspace. */
+/**
+ * Tab bar + pane host for the working area — the windows the connections open.
+ *
+ * This pane shows the connection windows and nothing else. The two things that
+ * are not a window on a connection — the change log and the settings — are pages
+ * of their own, and the data generation windows, which are grouped per
+ * connection rather than per connection *and* table, stand on a page as well
+ * (see `DataGenWorkspace`). Filtering them out here keeps each of them to the
+ * one place that shows it, so a window is never built twice.
+ */
 export function Workspace() {
-  const tabs = useAppStore((s) => s.tabs)
+  const allTabs = useAppStore((s) => s.tabs)
+  const tabs = useMemo(() => allTabs.filter((tab) => tab.kind !== 'datagen'), [allTabs])
   const activeTabId = useAppStore((s) => s.activeTabId)
   const sessions = useAppStore((s) => s.sessions)
   const setActiveTab = useAppStore((s) => s.setActiveTab)
@@ -68,14 +76,10 @@ export function Workspace() {
             <DdlPane tab={tab} />
           ) : tab.kind === 'codegen' ? (
             <CodegenPane tab={tab} />
-          ) : tab.kind === 'datagen' ? (
-            <DataGenPane tab={tab} />
           ) : tab.kind === 'er' ? (
             <ErDiagramPane tab={tab} />
           ) : tab.kind === 'runtime' ? (
             <RuntimePane tab={tab} />
-          ) : tab.kind === 'changelog' ? (
-            <ChangeLogPane />
           ) : (
             <TablePane tab={tab} />
           ),
@@ -152,14 +156,10 @@ function TabLabel({ tab, sessionName }: { tab: WorkspaceTab; sessionName?: strin
         <FileTextOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'codegen' ? (
         <CodeOutlined style={{ opacity: 0.7 }} />
-      ) : tab.kind === 'datagen' ? (
-        <ExperimentOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'er' ? (
         <PartitionOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'runtime' ? (
         <DashboardOutlined style={{ opacity: 0.7 }} />
-      ) : tab.kind === 'changelog' ? (
-        <HistoryOutlined style={{ opacity: 0.7 }} />
       ) : (
         <TableOutlined style={{ opacity: 0.7 }} />
       )}

@@ -126,6 +126,12 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
 
 ## 2. 动手前必须知道的约定
 
+- **前端是「四页 + 窗口」两层**：主区域分 `connections`（工作区）/ `datagen` / `changelog` / `settings`
+  四页（`AppPage`），由最左边那条图标栏（`ActivityBar`）切；页面**先挂载、之后一直挂着（只隐藏）**，
+  所以别靠卸载去重置一页内的状态，也别指望 effect 会在每次切回来时重跑（要重新读的话用
+  `page === '…'` 当依赖，见 `ChangeLogPane` / `SettingsPane`）。**开窗口必须走 store 的
+  `front(kind, id)`**（把窗口和它的页面一起切过去），`activeTabId` 只属于工作区页、`datagenTabId`
+  只属于数据生成页 —— 新增一种窗口时两者都要顺着这套走，否则会出现「窗口开了但看不见」。
 - **品牌素材唯一来源是 `asserts/`**（注意目录名就是 `asserts`，不是 `assets`，不要"顺手改正"）。
   `frontend/public/logo.png` 与 `build/appicon.png` 是它的副本，由 `just icons` 生成；
   `build/windows/icon.ico` 被 gitignore —— Wails 只在它**不存在**时才由 `appicon.png` 重新生成，

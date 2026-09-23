@@ -6,7 +6,6 @@ import {
   Descriptions,
   Empty,
   InputNumber,
-  Modal,
   Segmented,
   Select,
   Space,
@@ -14,7 +13,7 @@ import {
   Tooltip,
   Typography,
 } from 'antd'
-import { FolderOpenOutlined, ReloadOutlined, SwapOutlined } from '@ant-design/icons'
+import { FolderOpenOutlined, ReloadOutlined, SettingOutlined, SwapOutlined } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
 import type { ChangeLogSettings, DataDirInfo, DataDirMoveResult } from '../api/types'
@@ -24,7 +23,7 @@ import { useAppStore } from '../store/appStore'
 import { CODE_LANGUAGES } from '../lib/codegen'
 import { THEME_MODES, type ThemeMode } from '../lib/theme'
 
-/** The pages of the dialog, in the order they are shown. */
+/** The pages of the settings, in the order they are shown. */
 type SettingsTab = 'appearance' | 'code' | 'mock' | 'data' | 'about'
 
 const TABS: { key: SettingsTab; label: string }[] = [
@@ -41,18 +40,26 @@ const LANGUAGE_OPTIONS = [...CODE_LANGUAGES]
   .map((language) => ({ value: language.id, label: language.label }))
 
 /**
- * Program settings: how the window looks, where the data is kept, and what this
- * build is.
+ * Program settings: how the window looks, where the data is kept, what mock
+ * placeholders exist, and what this build is.
  *
- * The dialog owns no preference of its own — the theme and the code language go
- * to the state file through the store and the data directory is the backend's —
- * so closing it can never lose a choice, and the values it shows are the ones the
- * app is using.
+ * This is a page rather than a dialog, like the other three the rail names: it is
+ * somewhere the user goes and comes back from, not something that opens over
+ * what they were doing. Everything on it is applied as it is changed — the theme
+ * and the code language go to the state file through the store and the data
+ * directory is the backend's — so there is nothing to cancel and no choice can be
+ * lost by walking away from it.
+ *
  * The one operation with a real consequence is the data-directory move, and its
  * answer (which files moved, what was left behind, what could not be deleted) is
  * shown in full rather than being reduced to a success message.
  */
-export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function SettingsPane() {
+  // The page is mounted once and then kept behind the others, so reading it again
+  // is tied to coming back to the front rather than to being built: the directory
+  // can have changed behind our back (a second window, a pointer file edited by
+  // hand), and the listing carries file sizes.
+  const active = useAppStore((s) => s.page === 'settings')
   const theme = useAppStore((s) => s.theme)
   const setTheme = useAppStore((s) => s.setTheme)
   const codegenLanguage = useAppStore((s) => s.codegenLanguage)
@@ -67,14 +74,14 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const [outcome, setOutcome] = useState<DataDirMoveResult | undefined>()
   const [error, setError] = useState<string | undefined>()
 
-  // Re-read on open: the directory can have changed behind our back (a second
-  // window, a pointer file edited by hand), and the listing carries file sizes.
+  // Re-read on coming back to the front, and whenever a move left something to
+  // report: what the folder holds is what the page is about.
   useEffect(() => {
-    if (!open) return
+    if (!active) return
     setOutcome(undefined)
     setError(undefined)
     void refreshDataDir().catch((err) => setError(toMessage(err)))
-  }, [open, refreshDataDir])
+  }, [active, refreshDataDir])
 
   const pickAndMove = useCallback(
     async (reset: boolean) => {
@@ -108,32 +115,30 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   )
 
   return (
-    <Modal
-      open={open}
-      title="Settings"
-      width="90%"
-      onCancel={onClose}
-      destroyOnHidden
-      footer={
-        <Space>
-          <Button onClick={onClose}>Close</Button>
-        </Space>
-      }
-    >
-      <nav className="dm-form-tabs" role="tablist" aria-label="Settings">
-        {TABS.map((entry) => (
-          <button
-            key={entry.key}
-            type="button"
-            role="tab"
-            aria-selected={tab === entry.key}
-            className={`dm-form-tab${tab === entry.key ? ' is-active' : ''}`}
-            onClick={() => setTab(entry.key)}
-          >
-            {entry.label}
-          </button>
-        ))}
-      </nav>
+    <div className="dm-pane">
+      <div className="dm-editor-toolbar">
+        <SettingOutlined style={{ opacity: 0.7 }} />
+        <Typography.Text strong>Settings</Typography.Text>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          Theme, code generation, mock placeholders, the data folder and this build
+        </Typography.Text>
+      </div>
+
+      <div className="dm-settings-page">
+        <nav className="dm-form-tabs" role="tablist" aria-label="Settings">
+          {TABS.map((entry) => (
+            <button
+              key={entry.key}
+              type="button"
+              role="tab"
+              aria-selected={tab === entry.key}
+              className={`dm-form-tab${tab === entry.key ? ' is-active' : ''}`}
+              onClick={() => setTab(entry.key)}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </nav>
 
       {tab === 'appearance' ? (
         <div className="dm-settings-pane">
@@ -226,7 +231,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           <AboutProject />
         </div>
       ) : null}
-    </Modal>
+      </div>
+    </div>
   )
 }
 
@@ -270,9 +276,13 @@ function ChangeLogSize() {
   const [value, setValue] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
-  // Read on mount rather than kept in the app store: this is the only place that
-  // shows it, and the dialog is rebuilt every time it is opened.
+  // Read when the page comes to the front rather than kept in the app store:
+  // this is the only place that shows it, and the threshold is the backend's to
+  // hold — it reads it at append time, so what is on screen has to be read back
+  // rather than remembered.
+  const active = useAppStore((s) => s.page === 'settings')
   useEffect(() => {
+    if (!active) return
     void api
       .changeLogSettings()
       .then((current) => {
@@ -280,7 +290,7 @@ function ChangeLogSize() {
         setValue(current.maxEntries)
       })
       .catch((err) => setError(toMessage(err)))
-  }, [])
+  }, [active])
 
   const save = async (maxEntries: number) => {
     if (!settings) return

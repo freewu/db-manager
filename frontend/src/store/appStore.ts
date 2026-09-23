@@ -64,7 +64,24 @@ export type TabKind =
   | 'datagen'
   | 'er'
   | 'runtime'
-  | 'changelog'
+
+/**
+ * The rail's four pages, which are also the four things the main area can show.
+ *
+ * Three of them are pages that stand by themselves — the change log, the
+ * settings, and the data generation windows — and *Connections* is the working
+ * area: the explorer beside the windows the connections open.
+ */
+export type AppPage = 'connections' | 'datagen' | 'changelog' | 'settings'
+
+/**
+ * The page a window belongs to. Every window has exactly one, and a window is
+ * only ever shown by its own page: the connection windows sit in the working
+ * area, the generation windows in the page that writes rows.
+ */
+export function pageOfKind(kind: TabKind): AppPage {
+  return kind === 'datagen' ? 'datagen' : 'connections'
+}
 
 /**
  * The id of a saved-script window.
@@ -231,6 +248,27 @@ interface AppState {
   reveal?: RevealTarget
   tabs: WorkspaceTab[]
   activeTabId?: string
+  /**
+   * The data generation window in front, if any.
+   *
+   * The generation windows are the one kind of window that is not shown
+   * alongside the others: they stand on a page of their own (see `page`), so
+   * they need a front window of their own as well — otherwise picking
+   * *Connections* and coming back would have to guess which connection's window
+   * the user was writing mocks in.
+   */
+  datagenTabId?: string
+  /**
+   * Which of the rail's four pages the main area is showing.
+   *
+   * The rail on the far left picks it: *Connections* is the working area the
+   * tree opens windows into, and the other three are pages that stand by
+   * themselves — the change log, the settings, and the data generation windows.
+   * It lives here rather than in the shell because commands open pages too: the
+   * ribbon's *Settings*, and *Data Generation* from a table's context menu,
+   * both have to put the page they open in front of the user (see `front`).
+   */
+  page: AppPage
   /** The preference: light, dark, or follow the system. */
   theme: ThemeMode
   /** Which language the code window opens in; the settings page moves it. */
@@ -425,10 +463,13 @@ interface AppState {
   /** Opens the live status page of a connection (one per session). */
   openRuntimeTab: (sessionId: string) => void
   /**
-   * Opens the change log: what this application has run against the databases
-   * it was pointed at, newest first.
+   * Shows one of the rail's four pages.
+   *
+   * *Data Generation* is not simply shown — it has a window per connection, so
+   * the rail asks for a window rather than for the page (see `openDataGenTab`);
+   * everything else the rail does is this one call.
    */
-  openChangeLog: () => void
+  setPage: (page: AppPage) => void
   setTabView: (tabId: string, view: TableView) => void
 
   /**
@@ -495,6 +536,23 @@ const focused = (state: AppState, sessionId: string) => ({
 })
 
 /**
+ * The connection a data generation window would be opened on, if the user asks.
+ *
+ * The window is opened per connection and picks its own table, so the connection
+ * it opens on is the one the user is standing on: the focused one when it has a
+ * session behind it, and otherwise the one whose namespace is focused (picking a
+ * table in the tree points at both). This is written once because the rail's icon
+ * and the reason that icon can be greyed out are two readings of one rule, and
+ * two copies of it would drift apart.
+ */
+export function datagenTarget(state: AppState): SessionInfo | undefined {
+  const byConnection = state.sessions.find(
+    (s) => s.id === state.activeConnectionId || s.connectionId === state.activeConnectionId,
+  )
+  return byConnection ?? state.sessions.find((s) => s.id === state.activeNamespace?.sessionId)
+}
+
+/**
  * The explorer request that belongs to bringing a window to the front.
  *
  * An object list *is* one folder of one namespace, so the tree is asked to show
@@ -506,6 +564,64 @@ const revealOf = (tab: WorkspaceTab): RevealTarget | undefined => {
   return { sessionId: tab.sessionId, database: tab.database, schema: tab.schema, kind: tab.list }
 }
 
+/**
+ * The patch that brings a window to the front.
+ *
+ * Doing it in one place is what keeps a window and its page from disagreeing: a
+ * window that came to the front while the user was reading another page would be
+ * a window they never see, so opening one — from the tree, from the ribbon, from
+ * a double-click — also shows the page that owns it. The generation windows are
+ * kept apart from `activeTabId` because they are the front window of a page of
+ * their own (see `datagenTabId`).
+ */
+const front = (kind: TabKind, id: string) =>
+  kind === 'datagen'
+    ? { datagenTabId: id, page: 'datagen' as AppPage }
+    : { activeTabId: id, page: 'connections' as AppPage }
+
+/**
+ * The newest window on one page, for when the front one is gone.
+ *
+ * A page may only ever show windows of its own — its tab strip would lie
+ * otherwise — so a page's next front window has to come from the same page. When
+ * there is none left, `undefined` is the honest answer.
+ */
+const newestOn = (tabs: WorkspaceTab[], page: AppPage): string | undefined => {
+  for (let i = tabs.length - 1; i >= 0; i -= 1) {
+    if (pageOfKind(tabs[i].kind) === page) return tabs[i].id
+  }
+  return undefined
+}
+
+/**
+ * The window that takes over when one is closed: the next one on the same page,
+ * or the one before it — which is what closing a tab in a strip is expected to
+ * do. `at` is where the closed window used to sit in `tabs`.
+ */
+const neighbourOn = (tabs: WorkspaceTab[], at: number, page: AppPage): string | undefined => {
+  for (let i = at; i < tabs.length; i += 1) {
+    if (pageOfKind(tabs[i].kind) === page) return tabs[i].id
+  }
+  for (let i = Math.min(at, tabs.length) - 1; i >= 0; i -= 1) {
+    if (pageOfKind(tabs[i].kind) === page) return tabs[i].id
+  }
+  return undefined
+}
+
+/**
+ * The window in front of a page, if it still belongs to it.
+ *
+ * The two fronts are kept apart so that leaving a page and coming back lands on
+ * the window that was open, but a stored id can go stale — the window can be
+ * closed from another page — so it is checked against the list before it is
+ * believed.
+ */
+const frontOf = (state: AppState, page: AppPage): string | undefined => {
+  const id = page === 'datagen' ? state.datagenTabId : state.activeTabId
+  const tab = state.tabs.find((t) => t.id === id)
+  return tab && pageOfKind(tab.kind) === page ? id : undefined
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   boot: 'loading',
   drivers: [],
@@ -513,6 +629,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   connectionLayout: { groups: [], items: [] },
   sessions: [],
   tabs: [],
+  page: 'connections',
   theme: 'light',
   resolvedTheme: 'light',
   codegenLanguage: DEFAULT_CODE_LANGUAGE,
@@ -769,7 +886,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         const activeTabId =
           state.activeTabId && tabs.some((t) => t.id === state.activeTabId)
             ? state.activeTabId
-            : tabs[tabs.length - 1]?.id
+            : newestOn(tabs, 'connections')
+        const datagenTabId =
+          state.datagenTabId && tabs.some((t) => t.id === state.datagenTabId)
+            ? state.datagenTabId
+            : newestOn(tabs, 'datagen')
         const activeSessionId =
           state.activeSessionId === sessionId
             ? sessions[sessions.length - 1]?.id
@@ -779,7 +900,22 @@ export const useAppStore = create<AppState>((set, get) => ({
         // to list the objects of a connection that is no longer open.
         const activeNamespace =
           state.activeNamespace?.sessionId === sessionId ? undefined : state.activeNamespace
-        return { sessions, tabs, designs, activeTabId, activeSessionId, activeNamespace }
+        return {
+          sessions,
+          tabs,
+          designs,
+          activeTabId,
+          datagenTabId,
+          // A page whose windows all belonged to this connection is left with
+          // nothing to show, so the working area takes the screen back. A page
+          // with no windows of its own — the change log, the settings — is left
+          // alone: it was open because the user asked for it, not because of a
+          // connection.
+          page:
+            state.page === 'datagen' && datagenTabId === undefined ? 'connections' : state.page,
+          activeSessionId,
+          activeNamespace,
+        }
       })
     }
   },
@@ -1083,7 +1219,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set((state) => ({
       tabs: [...state.tabs, tab],
-      activeTabId: id,
+      ...front('query', id),
       ...focused(state, sessionId),
     }))
   },
@@ -1106,7 +1242,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const existing = state.tabs.find((t) => isQueryFileTab(t, connectionId, database, name))
       return {
         tabs: existing ? state.tabs : [...state.tabs, tab],
-        activeTabId: existing ? existing.id : tab.id,
+        ...front('query', existing ? existing.id : tab.id),
         ...focused(state, sessionId),
       }
     })
@@ -1125,7 +1261,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
-      activeTabId: id,
+      ...front('objects', id),
       ...focused(state, sessionId),
       // Opening (or re-using) a list window is also a request to show where it
       // came from, so the ribbon and the tree agree without the ribbon writing
@@ -1156,7 +1292,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         : [...state.tabs, tab]
       return {
         tabs,
-        activeTabId: id,
+        ...front('table', id),
         ...focused(state, sessionId),
       }
     })
@@ -1177,7 +1313,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const driver = get().driverOf(sessionId)?.type
     set((state) => ({
       tabs: [...state.tabs, tab],
-      activeTabId: id,
+      ...front('newtable', id),
       ...focused(state, sessionId),
       designs: {
         ...state.designs,
@@ -1202,7 +1338,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
-      activeTabId: id,
+      ...front('ddl', id),
       ...focused(state, sessionId),
     }))
   },
@@ -1221,7 +1357,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
-      activeTabId: id,
+      ...front('codegen', id),
       ...focused(state, sessionId),
     }))
   },
@@ -1246,7 +1382,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                 }
               : tab,
           ),
-          activeTabId: id,
+          ...front('datagen', id),
           ...focused(state, sessionId),
         }
       }
@@ -1261,7 +1397,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       return {
         tabs: [...state.tabs, tab],
-        activeTabId: id,
+        ...front('datagen', id),
         ...focused(state, sessionId),
       }
     })
@@ -1279,7 +1415,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
-      activeTabId: id,
+      ...front('er', id),
       ...focused(state, sessionId),
     }))
   },
@@ -1297,26 +1433,29 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
-      activeTabId: id,
+      ...front('runtime', id),
       ...focused(state, sessionId),
     }))
   },
 
-  openChangeLog() {
-    // One window, not one per connection: the log covers every connection this
-    // application has touched, so a copy per session would be the same file read
-    // twice. It is also the one window that opens with nothing connected.
-    const id = 'changelog'
-    const tab: WorkspaceTab = {
-      id,
-      kind: 'changelog',
-      sessionId: '',
-      title: 'Change Log',
-    }
-    set((state) => ({
-      tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
-      activeTabId: id,
-    }))
+  setPage(page) {
+    set((state) => {
+      // Entering a page means entering the window that was in front on it, so a
+      // page the user left and came back to looks the way they left it. A window
+      // can be gone by then — it can be closed from the other page — in which
+      // case the newest one on this page takes its place, and a page with no
+      // window at all simply has none.
+      if (page === 'datagen') {
+        return { page, datagenTabId: frontOf(state, 'datagen') ?? newestOn(state.tabs, 'datagen') }
+      }
+      if (page === 'connections') {
+        return {
+          page,
+          activeTabId: frontOf(state, 'connections') ?? newestOn(state.tabs, 'connections'),
+        }
+      }
+      return { page }
+    })
   },
 
   setTabView(tabId, view) {
@@ -1359,17 +1498,34 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => {
       const index = state.tabs.findIndex((t) => t.id === tabId)
       if (index < 0) return state
+      const tab = state.tabs[index]
       const tabs = state.tabs.filter((t) => t.id !== tabId)
-      let activeTabId = state.activeTabId
-      if (state.activeTabId === tabId) {
-        activeTabId = tabs[Math.min(index, tabs.length - 1)]?.id
+      // The window that takes over comes from the same page as the one that went
+      // away, because a page only ever shows windows of its own. Closing the last
+      // generation window therefore hands the screen back to the working area
+      // instead of leaving an empty page behind.
+      const page = pageOfKind(tab.kind)
+      const frontLeft =
+        (page === 'datagen' ? state.datagenTabId : state.activeTabId) === tabId
+      const next = frontLeft ? neighbourOn(tabs, index, page) : undefined
+      return {
+        tabs,
+        activeTabId: page === 'connections' && frontLeft ? next : state.activeTabId,
+        datagenTabId: page === 'datagen' && frontLeft ? next : state.datagenTabId,
+        page:
+          page === 'datagen' && state.page === 'datagen' && next === undefined
+            ? 'connections'
+            : state.page,
+        designs: withoutKey(state.designs, tabId),
       }
-      return { tabs, activeTabId, designs: withoutKey(state.designs, tabId) }
     })
   },
 
   closeAllTabs() {
-    set({ tabs: [], activeTabId: undefined, designs: {} })
+    // Every page is emptied at once, so the fronts go with the windows they
+    // pointed at — and the working area, the one page that is always there, is
+    // what is left to show.
+    set({ tabs: [], activeTabId: undefined, datagenTabId: undefined, page: 'connections', designs: {} })
   },
 
   setActiveTab(tabId) {
@@ -1378,7 +1534,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (!tab) return { activeTabId: tabId }
       const reveal = revealOf(tab)
       return {
-        activeTabId: tabId,
+        // Switching tabs is also a way of opening a window, so it shows the page
+        // the window belongs to (see `front`).
+        ...front(tab.kind, tabId),
         ...focused(state, tab.sessionId),
         // Switching to a list window points the explorer at its folder as well.
         ...(reveal ? { reveal } : {}),
