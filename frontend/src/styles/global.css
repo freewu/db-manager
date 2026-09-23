@@ -485,6 +485,10 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* The row detail layer is positioned against this box and slides in from just
+     outside its right edge, so the box has to clip what is off screen. */
+  position: relative;
+  overflow: hidden;
 }
 
 .dm-toolbar-right {
@@ -1036,13 +1040,12 @@ body.dm-col-resizing * {
   user-select: none !important;
 }
 
-/* A grid whose edges have been dragged has exact widths, so it stops stretching
-   its columns across the pane — the gap that leaves on the right of a narrow
-   table is what "this column is 200px wide" means. `min-width: 100%` is antd's
-   own inline style on the table, and `!important` is what outranks inline. */
-.dm-grid-resized table {
-  min-width: 0 !important;
-}
+/* A grid whose edges have been dragged lays its columns out `fixed`, with the
+   widths that were frozen for it. The table itself keeps antd's own inline
+   `min-width: 100%`, and everything the columns leave over goes to the empty
+   column `useColumnResize` appends (see `FILLER_KEY` in `ResizableHeader.tsx`) —
+   which is how a narrowed table still fills the pane instead of leaving a strip
+   of background on its right. */
 
 /* keep the result grid dense */
 .dm-grid .ant-table-tbody > tr > td,
@@ -1063,6 +1066,13 @@ body.dm-col-resizing * {
 
 .dm-grid .ant-table-tbody > tr.dm-grid-row:hover > td {
   background: var(--dm-tree-hover);
+}
+
+/* The row whose detail is on screen, so that the layer and the grid agree about
+   which record is being read. Kept distinct from the checkbox selection, which
+   is a list of rows to act on rather than a row to look at. */
+.dm-grid .ant-table-tbody > tr.dm-grid-row.is-detail > td {
+  background: var(--dm-accent-soft);
 }
 
 /* ------------------------------------------------------- object list windows */
@@ -1128,6 +1138,91 @@ body.dm-col-resizing * {
 }
 
 /* ------------------------------------------------------------ row detail */
+
+/* The row you clicked slides in over the right of the grid rather than beside
+   it. A layer that took its width out of the table would re-lay out every column
+   the moment a row was looked at, and push the row being read out from under the
+   pointer; laid over the top, the grid underneath keeps its columns, its widths
+   and its scroll. It is a sibling of the scrolling body, so it covers the sticky
+   header too — hence a z-index above the header row's own. */
+.dm-row-detail-layer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: min(420px, 62%);
+  display: flex;
+  flex-direction: column;
+  background: var(--dm-surface);
+  border-inline-start: 1px solid var(--dm-border);
+  box-shadow: -6px 0 18px rgba(0, 0, 0, 0.12);
+  transform: translateX(100%);
+  /* `visibility` follows the slide on the way out, so the layer is still on
+     screen while it leaves, and is out of the way (and out of reach of the
+     keyboard) once it has. */
+  visibility: hidden;
+  transition: transform 0.18s ease, visibility 0s linear 0.18s;
+  z-index: 200;
+}
+
+.dm-row-detail-layer.is-open {
+  transform: translateX(0);
+  visibility: visible;
+  transition: transform 0.18s ease;
+}
+
+.dm-row-detail-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  /* Room for the close button that sits in the corner of the layer. */
+  padding-inline-end: 34px;
+  border-bottom: 1px solid var(--dm-border);
+  background: var(--dm-chrome-bg);
+}
+
+.dm-row-detail-title {
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+.dm-row-detail-actions {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dm-row-detail-close {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.dm-row-detail-close:hover {
+  background: var(--dm-tree-hover);
+  opacity: 1;
+}
+
+.dm-row-detail-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
 
 .dm-row-detail {
   display: flex;

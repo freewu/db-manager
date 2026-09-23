@@ -4,7 +4,6 @@ import {
   App as AntApp,
   Badge,
   Button,
-  Drawer,
   Dropdown,
   Empty,
   Input,
@@ -173,6 +172,9 @@ export function TablePane({ tab }: TablePaneProps) {
         if (cancelled) return
         setData(result)
         setSelected([])
+        // A page of rows replaces the last one, so the row that was open is not
+        // the row it was any more: index 3 of this page is another record.
+        setDetailKey(null)
       })
       .catch((err: unknown) => {
         if (cancelled) return
@@ -348,8 +350,6 @@ export function TablePane({ tab }: TablePaneProps) {
     return <Empty description="No object selected" style={{ marginTop: 80 }} />
   }
 
-  const detailRow = detailKey !== null ? data?.rows[detailKey] : undefined
-
   const exportMenu: MenuProps = {
     items: [
       { key: 'csv', label: 'Export CSV', onClick: () => void exportData('csv') },
@@ -398,12 +398,12 @@ export function TablePane({ tab }: TablePaneProps) {
                   <LockOutlined /> read-only
                 </Typography.Text>
               ) : null}
-              <Tooltip title="Show the selected row as JSON">
+              <Tooltip title="Show the selected row">
                 <Button
                   size="small"
                   icon={<InfoCircleOutlined />}
                   disabled={selected.length !== 1}
-                  onClick={() => setDetailKey(selected[0])}
+                  onClick={() => setDetailKey(selected[0] - (page - 1) * pageSize)}
                 />
               </Tooltip>
               <Popconfirm
@@ -511,7 +511,75 @@ export function TablePane({ tab }: TablePaneProps) {
                 onEditCell={editCell}
                 selectedKeys={selected}
                 onSelectionChange={setSelected}
-                onOpenRow={(rowIndex) => setDetailKey(rowIndex)}
+                detailRow={detailKey}
+                onDetailRowChange={setDetailKey}
+                renderRowDetail={(row, index) => (
+                  <>
+                    <div className="dm-row-detail-head">
+                      <span className="dm-row-detail-title">
+                        Row {(page - 1) * pageSize + index + 1}
+                      </span>
+                      <div className="dm-row-detail-actions">
+                        <Tooltip title="Copy as JSON">
+                          <Button
+                            size="small"
+                            icon={<CopyOutlined />}
+                            onClick={() => {
+                              const record: Record<string, CellValue> = {}
+                              data.columns.forEach((column, at) => {
+                                record[column.name] = row[at]
+                              })
+                              void navigator.clipboard
+                                .writeText(JSON.stringify(record, null, 2))
+                                .then(() => message.success('Row copied'))
+                                .catch((err: unknown) => message.error(toMessage(err)))
+                            }}
+                          />
+                        </Tooltip>
+                        <Tooltip title={scriptExport.copyLabel}>
+                          <Button
+                            size="small"
+                            icon={<DownloadOutlined />}
+                            onClick={() => {
+                              const script = toInsertScript(
+                                { driver: session?.driver ?? '', database, schema, object },
+                                data.columns,
+                                [row],
+                              )
+                              void navigator.clipboard
+                                .writeText(script)
+                                .then(() => message.success('INSERT copied'))
+                                .catch((err: unknown) => message.error(toMessage(err)))
+                            }}
+                          />
+                        </Tooltip>
+                      </div>
+                    </div>
+                    <div className="dm-row-detail-scroll">
+                      <div className="dm-row-detail">
+                        {data.columns.map((column, at) => (
+                          <div key={column.name} className="dm-row-detail-item">
+                            <div className="dm-row-detail-label">
+                              {column.name}
+                              {column.isPrimaryKey ? (
+                                <Tag color="gold" style={{ marginLeft: 6 }}>
+                                  PK
+                                </Tag>
+                              ) : null}
+                            </div>
+                            <div className="dm-row-detail-value mono">
+                              {row[at] === null || row[at] === undefined ? (
+                                <span className="dm-null">NULL</span>
+                              ) : (
+                                String(row[at])
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               />
               <div className="dm-statusbar" style={{ borderTop: '1px solid var(--dm-border)', background: 'transparent' }}>
                 <span className="dm-statusbar-item">
@@ -555,73 +623,6 @@ export function TablePane({ tab }: TablePaneProps) {
           </button>
         ))}
       </nav>
-
-      <Drawer
-        title={detailKey !== null && data ? `Row ${(page - 1) * pageSize + detailKey + 1}` : 'Row'}
-        placement="right"
-        width={520}
-        open={detailKey !== null}
-        onClose={() => setDetailKey(null)}
-        extra={
-          <Space size={4}>
-            <Tooltip title="Copy as JSON">
-              <Button
-                size="small"
-                icon={<CopyOutlined />}
-                onClick={() => {
-                  if (!data || !detailRow) return
-                  const record: Record<string, CellValue> = {}
-                  data.columns.forEach((column, index) => {
-                    record[column.name] = detailRow[index]
-                  })
-                  void navigator.clipboard
-                    .writeText(JSON.stringify(record, null, 2))
-                    .then(() => message.success('Row copied'))
-                    .catch((err: unknown) => message.error(toMessage(err)))
-                }}
-              />
-            </Tooltip>
-            <Tooltip title={scriptExport.copyLabel}>
-              <Button
-                size="small"
-                icon={<DownloadOutlined />}
-                onClick={() => {
-                  if (!data || !detailRow || detailKey === null) return
-                  const script = toInsertScript(
-                    { driver: session?.driver ?? '', database, schema, object },
-                    data.columns,
-                    [detailRow],
-                  )
-                  void navigator.clipboard
-                    .writeText(script)
-                    .then(() => message.success('INSERT copied'))
-                    .catch((err: unknown) => message.error(toMessage(err)))
-                }}
-              />
-            </Tooltip>
-          </Space>
-        }
-      >
-        {data && detailRow ? (
-          <div className="dm-row-detail">
-            {data.columns.map((column, index) => (
-              <div key={column.name} className="dm-row-detail-item">
-                <div className="dm-row-detail-label">
-                  {column.name}
-                  {column.isPrimaryKey ? <Tag color="gold" style={{ marginLeft: 6 }}>PK</Tag> : null}
-                </div>
-                <div className="dm-row-detail-value mono">
-                  {detailRow[index] === null || detailRow[index] === undefined ? (
-                    <span className="dm-null">NULL</span>
-                  ) : (
-                    String(detailRow[index])
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </Drawer>
     </div>
   )
 }

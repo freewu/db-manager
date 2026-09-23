@@ -150,6 +150,14 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
   第一次拖动会把**当前屏幕上所有列**的宽度量下来定死并改用 `table-layout: fixed`（列少、内容长时的
   「拖不动 / 打滑」都是这一条在管），宽度不落盘；列多了重复的 `key`/`dataIndex` 会被自动区分，
   编辑表（`DataGenPane`）里同 `dataIndex` 的两列务必自己给 `key`。
+  定死宽度之后就由 `FILLER_KEY` 那一列（宽度 `auto`、内容为空）去接剩下的空间，所以表格仍旧填满窗格 ——
+  **不要**再加 `.dm-grid-resized table { min-width: 0 }` 这种覆盖，那会连 antd 的 `min-width: 100%` 一起废掉，
+  变成所有列平分剩余宽度（拖动就不准了）。
+- **行详情是网格自己的一层，不是 antd `Drawer`**：`DataGrid` 管壳（绝对定位在 `.dm-result-area` 上、
+  `transform` 滑入滑出、右上角关闭、`Esc`、`dm-grid-row is-detail` 高亮），内容由调用方用
+  `renderRowDetail(row, rowIndex)` 给（`detailRow` / `onDetailRowChange` 控开关）。触发是**单击一行**（不是双击、
+  也不是勾选框 —— 看一行不该顺手把它勾上）；`.dm-result-area` 必须有 `position: relative; overflow: hidden`，
+  层要盖住钉住的表头（表头 `z-index: 100`，层是 `200`）。
 - **表设计器（结构页）发送的是「完整目标定义」，不是 diff**：`TableDesign` 是用户想要的样子，
   后端 `sqlbase.PlanAlter` 拿实时 catalog 结构对比后渲染语句 —— **预览与保存走同一条代码路径**。
   由此派生几条硬规则：

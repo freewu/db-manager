@@ -1,7 +1,8 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Button, Input, Pagination, Space, Table, Tooltip, Typography } from 'antd'
 import type { TableColumnsType, TableProps } from 'antd'
-import { LeftOutlined, RightOutlined } from '@ant-design/icons'
+import { CloseOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons'
 
 import type { CellValue, ColumnMeta, QueryResult, SortSpec } from '../api/types'
 import { useColumnResize } from './ResizableHeader'
@@ -31,8 +32,19 @@ export interface DataGridProps {
   ) => Promise<void>
   selectedKeys?: readonly number[]
   onSelectionChange?: (keys: number[]) => void
-  /** Fired when a row is double clicked and the grid is not editable. */
-  onOpenRow?: (rowIndex: number) => void
+  /**
+   * The row whose detail layer is on screen, as an index into the page, and the
+   * way to open or close it. The two belong together: a grid that is told which
+   * row is open is a grid whose rows can be clicked.
+   */
+  detailRow?: number | null
+  onDetailRowChange?: (rowIndex: number | null) => void
+  /**
+   * The detail of one row, rendered into the layer that slides in from the right.
+   * Passing it is what makes rows clickable; the content is the caller's, because
+   * only the caller knows what the columns of this result mean.
+   */
+  renderRowDetail?: (row: CellValue[], rowIndex: number) => ReactNode
 }
 
 const MIN_COLUMN_WIDTH = 90
@@ -170,9 +182,31 @@ export function DataGrid({
   onEditCell,
   selectedKeys,
   onSelectionChange,
-  onOpenRow,
+  detailRow,
+  onDetailRowChange,
+  renderRowDetail,
 }: DataGridProps) {
   const canEdit = Boolean(editable && onEditCell && primaryKey && primaryKey.length > 0)
+
+  // Which row's detail is on screen, and which one the layer is showing right
+  // now: they differ while the layer slides out, when the row that was open has
+  // to stay in it until it is out of sight. The layer itself is always there — an
+  // element that appears already in its open state does not slide, it blinks.
+  const openAt = detailRow ?? null
+  const [lastAt, setLastAt] = useState<number | null>(null)
+  useEffect(() => {
+    if (openAt !== null) setLastAt(openAt)
+  }, [openAt])
+  const shownAt = openAt ?? lastAt
+
+  useEffect(() => {
+    if (openAt === null || !onDetailRowChange) return undefined
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onDetailRowChange(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onDetailRowChange, openAt])
 
   const columns = useMemo<TableColumnsType<CellValue[]>>(() => {
     const pk = new Set((primaryKey ?? []).map((column) => column.toLowerCase()))
@@ -255,10 +289,22 @@ export function DataGrid({
               : undefined
           }
           onRow={(_record, index) => ({
-            onDoubleClick: () => {
-              if (!canEdit && onOpenRow && index !== undefined) onOpenRow(index)
+            onClick: (event) => {
+              if (!onDetailRowChange || !renderRowDetail || index === undefined) return
+              // A click on a control is a click on the control: a link or button in
+              // a cell, or a cell that has already opened its editor, must not be
+              // read as "show me this row". A click on a cell that is merely
+              // editable still is one — the editor opens on the second click.
+              const target = event.target as HTMLElement
+              if (target.closest('button, a, textarea, .ant-select, .dm-grid-cell input')) {
+                return
+              }
+              onDetailRowChange(index)
             },
           })}
+          rowClassName={(_record, index) =>
+            index === openAt && openAt !== null ? 'dm-grid-row is-detail' : 'dm-grid-row'
+          }
           pagination={false}
           locale={{ emptyText: loading ? ' ' : 'No rows' }}
         />
@@ -272,6 +318,23 @@ export function DataGrid({
           rowCount={result.rows.length}
           onChange={onPageChange}
         />
+      ) : null}
+      {renderRowDetail ? (
+        <aside
+          className={openAt !== null ? 'dm-row-detail-layer is-open' : 'dm-row-detail-layer'}
+        >
+          <button
+            type="button"
+            className="dm-row-detail-close"
+            aria-label="Close row detail"
+            onClick={() => onDetailRowChange?.(null)}
+          >
+            <CloseOutlined />
+          </button>
+          {shownAt !== null && result.rows[shownAt]
+            ? renderRowDetail(result.rows[shownAt], shownAt)
+            : null}
+        </aside>
       ) : null}
     </div>
   )

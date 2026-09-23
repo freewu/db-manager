@@ -47,6 +47,23 @@ const MAX_WIDTH = 1200
  */
 const FALLBACK_WIDTH = 160
 
+/**
+ * The column that takes whatever the other columns leave over.
+ *
+ * A grid laid out `fixed` with exact widths no longer fills its pane by itself:
+ * the table is as wide as the sum of its columns, so narrowing one leaves a strip
+ * of background on the right — the table would look boxed into a corner instead of
+ * lying in the window. So one extra, empty column is appended, with an `auto`
+ * width: a fixed layout gives the space left over to the columns that have no
+ * width of their own (and to nobody else), and the table's `min-width: 100%`
+ * (antd's own inline style) then makes it fill the pane exactly.
+ *
+ * Nothing is measured for this: the leftover goes to the empty column, never to a
+ * real one, which is also what keeps a drag exact — pulling one column's edge by
+ * ten pixels widens that column by ten and shrinks this one by ten.
+ */
+const FILLER_KEY = '__dm-filler__'
+
 /** What a header cell needs in order to run the drag gesture for its column. */
 interface ResizeHandle {
   /** The column this header belongs to, as the hook remembers widths by. */
@@ -172,7 +189,8 @@ export interface ColumnResize<T> {
   tableProps: ColumnResizeTableProps
   /**
    * True once an edge has been dragged. The caller is expected to add a class so
-   * the table can stop stretching — see `.dm-grid-resized` in `global.css`.
+   * the table can borrow the frozen layout — see `.dm-grid-resized` in
+   * `global.css`.
    */
   resized: boolean
 }
@@ -229,24 +247,33 @@ export function useColumnResize<T>(columns: ResizableColumns<T>): ColumnResize<T
   const resized = Object.keys(widths).length > 0
   const keys = useMemo(() => keysOf(columns), [columns])
 
-  const merged = useMemo(
-    () =>
-      columns.map((column, index) => {
-        const key = keys[index]
-        const handle: ResizeHandle = { column: key, register, begin, apply }
-        // A leaf column, so that `onHeaderCell` is the one the cell gets. The
-        // result is a leaf column set either way: a group's own header has no
-        // data column to resize.
-        const next = { ...column } as TableColumnType<T>
-        next.width = widths[key] ?? column.width ?? (resized ? FALLBACK_WIDTH : undefined)
-        if (column.resizable !== false) {
-          const own = next.onHeaderCell
-          next.onHeaderCell = (col, at) => ({ ...(own?.(col, at) ?? {}), dmResize: handle })
-        }
-        return next
-      }),
-    [apply, begin, columns, keys, register, resized, widths],
-  )
+  const merged = useMemo(() => {
+    const mapped = columns.map((column, index) => {
+      const key = keys[index]
+      const handle: ResizeHandle = { column: key, register, begin, apply }
+      // A leaf column, so that `onHeaderCell` is the one the cell gets. The
+      // result is a leaf column set either way: a group's own header has no
+      // data column to resize.
+      const next = { ...column } as TableColumnType<T>
+      next.width = widths[key] ?? column.width ?? (resized ? FALLBACK_WIDTH : undefined)
+      if (column.resizable !== false) {
+        const own = next.onHeaderCell
+        next.onHeaderCell = (col, at) => ({ ...(own?.(col, at) ?? {}), dmResize: handle })
+      }
+      return next
+    })
+    if (!resized) return mapped
+    const filler: TableColumnType<T> = {
+      key: FILLER_KEY,
+      // `auto`, rather than no width at all: an explicit auto column is what the
+      // remaining space goes to, and it keeps the colgroup's column count equal to
+      // the number of cells in a row.
+      width: 'auto',
+      title: '',
+      render: () => null,
+    }
+    return [...mapped, filler]
+  }, [apply, begin, columns, keys, register, resized, widths])
 
   const tableProps = useMemo<ColumnResizeTableProps>(
     () => ({
