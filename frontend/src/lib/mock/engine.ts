@@ -20,6 +20,12 @@
  * Everything here is pure and seeded: `createRng` can be given a seed, so a run
  * can be repeated in a test, and rendering a row touches nothing but the
  * functions below.
+ *
+ * Beside the built-in catalogue there is a second, user-defined one: the
+ * placeholders kept in the settings page (see CustomPlaceholder). They are not a
+ * second engine — a custom placeholder is a name for a template of the built-in
+ * ones, and it is expanded where it is written, so a template that is exactly one
+ * custom placeholder keeps that value's own type just as a built-in would.
  */
 import type { ColumnKind } from '../codegen'
 import { PLACEHOLDER_NOTES } from './catalog'
@@ -50,6 +56,25 @@ export type MockValue = string | number | boolean | null
 
 /** The random source every generator is handed. */
 export type Rng = () => number
+
+/**
+ * One placeholder the user defined, as the settings page stores it and the
+ * engine reads it.
+ *
+ * It is a whole template under a name: `orderNo` may be
+ * `SO@date(yyyy)@natural(1000, 9999)`, and a mock then writes `@orderNo`. It
+ * takes no arguments — the arguments belong to the built-in placeholder at the
+ * bottom of it — so a custom placeholder cannot surprise a reader with a second
+ * kind of call syntax.
+ */
+export interface CustomPlaceholder {
+  /** The bare name: what a template writes after `@`. */
+  name: string
+  /** The template it stands for. */
+  template: string
+  /** What it produces, shown next to it in the picker and the settings page. */
+  description?: string
+}
 
 /** A placeholder argument: a number, or text (quoted or bare). */
 type Arg = string | number
@@ -617,6 +642,17 @@ const GENERATORS = new Map<string, Generator>([
   ],
 ])
 
+/**
+ * Every name the engine knows by itself.
+ *
+ * The settings page refuses a custom placeholder that takes one of them: a
+ * built-in is what a template means by that name (the engine looks there first),
+ * so a custom copy would be an entry the picker offers and no mock ever reaches.
+ * Derived from the generators rather than from the catalogue, because this is
+ * about what the engine can resolve, not about what the picker happens to show.
+ */
+export const BUILT_IN_NAMES: ReadonlySet<string> = new Set(GENERATORS.keys())
+
 function randomMoment(rng: Rng): Date {
   return dateBetween(rng, new Date(RANDOM_DATE_FROM), new Date(RANDOM_DATE_TO))
 }
@@ -676,16 +712,62 @@ export interface CompiledTemplate {
 
 const NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*/
 
-/** Compiles a template, reporting what is wrong with it instead of throwing. */
-export function compileTemplate(source: string): CompiledTemplate {
-  const text = source.trim()
-  const nodes: Node[] = []
-  const names: string[] = []
+/** A seed that depends only on a string: FNV-1a over its code units. */
+export function seedOf(text: string): number {
+  let hash = 2166136261
+  for (let i = 0; i < text.length; i += 1) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619)
+  return hash >>> 0
+}
+
+/** What one level of a template turned into. */
+interface Parsed {
+  /** Why it could not be read, if it could not. */
+  error?: string
+  /** The catalogue lines of the placeholders at this level, in the order met. */
+  notes: string[]
+}
+
+/** What a parse needs besides the text: the custom placeholders, and the chain
+ * of them currently being expanded, which is what a cycle looks like. */
+interface ParseContext {
+  custom: Map<string, CustomPlaceholder>
+  chain: string[]
+}
+
+/**
+ * Reads one template into nodes, appending to `nodes` as it goes.
+ *
+ * Recursive, because a custom placeholder is expanded in place: its own nodes
+ * take its place, so the surrounding text keeps its order and a template that
+ * is nothing but one custom placeholder still ends up as one node (which is
+ * what lets it keep the underlying value's type).
+ *
+ * The notes of a custom placeholder are its own description rather than the
+ * ones inside it — "订单号" says more in the description column than
+ * "@date + @natural" — so the notes of a nested parse are only used as the
+ * fallback when the user wrote no description.
+ */
+function parseInto(text: string, ctx: ParseContext, nodes: Node[]): Parsed {
+  const notes: string[] = []
+  const seen = new Set<string>()
   let literal = ''
-  let error: string | undefined
   let i = 0
 
-  while (i < text.length && !error) {
+  const note = (name: string) => {
+    if (seen.has(name)) return
+    seen.add(name)
+    notes.push(PLACEHOLDER_NOTES.get(name) ?? `@${name}`)
+  }
+
+  // Text held back until something is known to follow it: pushing it early would
+  // put a custom placeholder's first node after text that came before it.
+  const flush = () => {
+    if (!literal) return
+    nodes.push({ kind: 'text', text: literal })
+    literal = ''
+  }
+
+  while (i < text.length) {
     const char = text[i]
     if (char !== '@') {
       literal += char
@@ -699,59 +781,83 @@ export function compileTemplate(source: string): CompiledTemplate {
     }
 
     const name = NAME_PATTERN.exec(text.slice(i + 1))?.[0]
-    if (!name) {
-      error = "'@' must start a placeholder name — write @@ for a literal @"
-      break
-    }
+    if (!name) return { error: "'@' must start a placeholder name — write @@ for a literal @", notes }
     i += 1 + name.length
 
     let args: Arg[] = []
     if (text[i] === '(') {
       const close = matchingParen(text, i)
-      if (close < 0) {
-        error = `the arguments of @${name} have no closing ')'`
-        break
-      }
+      if (close < 0) return { error: `the arguments of @${name} have no closing ')'`, notes }
       const parsed = parseArgs(text.slice(i + 1, close))
-      if (typeof parsed === 'string') {
-        error = parsed
-        break
-      }
+      if (typeof parsed === 'string') return { error: parsed, notes }
       args = parsed
       i = close + 1
     }
 
     const generator = GENERATORS.get(name)
     if (!generator) {
-      error = `@${name} is not a placeholder this app knows`
-      break
+      const custom = ctx.custom.get(name)
+      if (!custom) return { error: `@${name} is not a placeholder this app knows`, notes }
+      if (ctx.chain.includes(name)) {
+        const path = [...ctx.chain, name].map((part) => `@${part}`).join(' → ')
+        return { error: `@${name} expands into itself (${path})`, notes }
+      }
+      if (args.length > 0) {
+        return { error: `@${name} takes no arguments — a custom placeholder is a whole template`, notes }
+      }
+      const body = custom.template.trim()
+      if (body === '') return { error: `@${name} has no template to render`, notes }
+
+      flush()
+      const nested = parseInto(body, { ...ctx, chain: [...ctx.chain, name] }, nodes)
+      if (nested.error) return { error: `in @${name}: ${nested.error}`, notes }
+      // The description says more than the parts it is made of; with no
+      // description, the parts are the next best answer.
+      if (!seen.has(name)) {
+        seen.add(name)
+        notes.push(custom.description?.trim() || nested.notes.join(' + ') || `@${name}`)
+      }
+      continue
     }
+
     const [least, most] = generator.arity
     if (args.length < least || args.length > most) {
-      error = `@${name} ${arityText(generator.arity)}`
-      break
+      return { error: `@${name} ${arityText(generator.arity)}`, notes }
     }
     const badIndex = (generator.numeric ?? []).find(
       (index) => args[index] !== undefined && !readsAsNumber(args[index]),
     )
     if (badIndex !== undefined) {
-      error = `@${name} expects a number as argument ${badIndex + 1}, not “${String(args[badIndex])}”`
-      break
+      return {
+        error: `@${name} expects a number as argument ${badIndex + 1}, not “${String(args[badIndex])}”`,
+        notes,
+      }
     }
 
-    if (literal) {
-      nodes.push({ kind: 'text', text: literal })
-      literal = ''
-    }
+    flush()
     nodes.push({ kind: 'placeholder', name, args, generator, state: generator.create?.() })
-    names.push(name)
+    note(name)
   }
 
-  if (literal && !error) nodes.push({ kind: 'text', text: literal })
-  const note = notesOf(names)
+  flush()
+  return { notes }
+}
 
-  if (error) {
-    return { source: text, error, note, render: () => null }
+/** Compiles a template, reporting what is wrong with it instead of throwing. */
+export function compileTemplate(
+  source: string,
+  placeholders?: readonly CustomPlaceholder[],
+): CompiledTemplate {
+  const text = source.trim()
+  const custom = new Map<string, CustomPlaceholder>()
+  for (const placeholder of placeholders ?? []) custom.set(placeholder.name, placeholder)
+
+  const nodes: Node[] = []
+  const parsed = parseInto(text, { custom, chain: [] }, nodes)
+  const note = parsed.notes.filter(Boolean).join(' + ')
+
+  if (parsed.error) {
+    return { source: text, error: parsed.error, note, render: () => null }
   }
 
   // A template that is exactly one placeholder keeps that value's own type, so
@@ -774,22 +880,42 @@ export function compileTemplate(source: string): CompiledTemplate {
   }
 }
 
+/** One rendered example of a template, for the picker's tiles and the settings
+ * page's debug panel. */
+export interface Sample {
+  /** What the template produced, as text. Missing when it produced nothing. */
+  value?: string
+  /** Why it produced nothing. */
+  error?: string
+  /** The catalogue line: what the placeholders in it are. */
+  note: string
+}
+
+/**
+ * Renders one example of a template.
+ *
+ * The seed is the caller's (by default a hash of the template itself), so the
+ * same template gives the same example every time the window redraws, while a
+ * different one gets a different example. An example that flickered while the
+ * user read it would be worse than none at all, and a template that cannot be
+ * rendered reports the error rather than an empty box.
+ */
+export function sampleOf(
+  source: string,
+  placeholders?: readonly CustomPlaceholder[],
+  seed: number = seedOf(source),
+): Sample {
+  const compiled = compileTemplate(source, placeholders)
+  if (compiled.error) return { error: compiled.error, note: compiled.note }
+  if (source.trim() === '') return { note: compiled.note }
+  const value = compiled.render(createRng(seed))
+  if (value === null || value === undefined || value === '') return { note: compiled.note }
+  return { value: String(value), note: compiled.note }
+}
+
 function arityText([least, most]: [number, number]): string {
   if (least === most) return least === 0 ? 'takes no arguments' : `takes ${least} argument(s)`
   return `takes between ${least} and ${most} arguments`
-}
-
-/** The catalogue descriptions of every placeholder a template names. */
-function notesOf(names: string[]): string {
-  const seen = new Set<string>()
-  const notes: string[] = []
-  for (const name of names) {
-    if (seen.has(name)) continue
-    seen.add(name)
-    const note = PLACEHOLDER_NOTES.get(name)
-    notes.push(note ?? `@${name}`)
-  }
-  return notes.join(' + ')
 }
 
 /* --- coercion ------------------------------------------------------------- */

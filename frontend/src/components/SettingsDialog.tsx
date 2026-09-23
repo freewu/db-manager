@@ -17,16 +17,18 @@ import { FolderOpenOutlined, ReloadOutlined, SwapOutlined } from '@ant-design/ic
 import { api, toMessage } from '../api/client'
 import type { DataDirInfo, DataDirMoveResult } from '../api/types'
 import { AboutProject } from './AboutProject'
+import { MockPlaceholderSettings } from './MockPlaceholderSettings'
 import { useAppStore } from '../store/appStore'
 import { CODE_LANGUAGES } from '../lib/codegen'
 import { THEME_MODES, type ThemeMode } from '../lib/theme'
 
 /** The pages of the dialog, in the order they are shown. */
-type SettingsTab = 'appearance' | 'code' | 'data' | 'about'
+type SettingsTab = 'appearance' | 'code' | 'mock' | 'data' | 'about'
 
 const TABS: { key: SettingsTab; label: string }[] = [
   { key: 'appearance', label: 'Appearance' },
   { key: 'code', label: 'Code generation' },
+  { key: 'mock', label: 'Mock placeholders' },
   { key: 'data', label: 'Data folder' },
   { key: 'about', label: 'About' },
 ]
@@ -107,7 +109,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
     <Modal
       open={open}
       title="Settings"
-      width={720}
+      width="90%"
       onCancel={onClose}
       destroyOnHidden
       footer={
@@ -170,6 +172,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </SettingRow>
         </div>
       ) : null}
+
+      {tab === 'mock' ? <MockPlaceholderSettings /> : null}
 
       {tab === 'data' ? (
         <div className="dm-settings-pane">
@@ -312,6 +316,9 @@ function DataDirFiles({ info }: { info?: DataDirInfo }) {
       {info.files.map((file) => (
         <Descriptions.Item key={file.name} label={<span className="mono">{file.name}</span>}>
           {FILE_PURPOSE[file.name] ?? 'Written by this program'} · {formatBytes(file.bytes)}
+          {/* A folder says how much is in it as well: its size counts the files
+              but not how many there are, which is what a reader wants to know. */}
+          {file.dir && file.count ? ` · ${file.count} file${file.count === 1 ? '' : 's'}` : ''}
         </Descriptions.Item>
       ))}
     </Descriptions>
@@ -325,6 +332,8 @@ const FILE_PURPOSE: Record<string, string> = {
   'layout.json': 'Groups and order of the connection tree',
   'state.json': 'Window state and preferences',
   'secret.key': 'Key that opens the saved passwords — unreadable on another machine',
+  '.mock': 'Custom mock placeholders, one file each',
+  '.query': 'Saved scripts, one file each',
 }
 
 function formatBytes(bytes: number): string {

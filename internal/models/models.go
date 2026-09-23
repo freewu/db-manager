@@ -856,6 +856,31 @@ type QueryFileRename struct {
 	To           string `json:"to"`
 }
 
+// --- custom mock placeholders ----------------------------------------------
+
+// MockPlaceholder is one placeholder the user defined for the data generation
+// window, kept as a file of its own under the `.mock` folder of the data
+// directory.
+//
+// Template is a mock template in the same syntax the window's mock column takes,
+// written out of the built-in placeholders (@string, @natural, …) and the other
+// custom ones; Name is what a template then says as `@name`. The name is also
+// the file name, so it is the identity of the entry rather than a label stuck on
+// it — which is why the settings page only lets it be typed while creating one.
+//
+// Nothing here is rendered by the backend: the engine that reads a template lives
+// in the window, so Go stores the text and the window is the one that judges it.
+type MockPlaceholder struct {
+	Name        string `json:"name"`
+	Template    string `json:"template"`
+	Description string `json:"description,omitempty"`
+	UpdatedAt   int64  `json:"updatedAt"`
+	// Broken explains why the file could not be read. The entry is still listed,
+	// so a placeholder that was hand-edited into something unparseable can be
+	// seen — and deleted — from the settings page instead of quietly vanishing.
+	Broken string `json:"broken,omitempty"`
+}
+
 // AppInfo is static metadata rendered on the welcome screen.
 type AppInfo struct {
 	Name       string `json:"name"`

@@ -37,11 +37,11 @@ const locationFile = "location.json"
 
 // dataFiles are the files this build keeps in the data directory: the profiles,
 // the query favourites, the explorer arrangement, the UI state and the key the
-// saved passwords are sealed with.
+// saved passwords are sealed with. The folders beside them are in dataDirs.
 //
 // A feature that starts writing a new file (or a new folder) here has to add it
-// to this list, or a move will leave it behind — and now *say* it did, through
-// DataDirMoveResult.LeftBehind, rather than quietly dropping it.
+// to one of those lists, or a move will leave it behind — and now *say* it did,
+// through DataDirMoveResult.LeftBehind, rather than quietly dropping it.
 var dataFiles = []string{
 	fileName,
 	queriesFile,
@@ -52,10 +52,11 @@ var dataFiles = []string{
 
 // dataDirs are the folders this build keeps in the data directory, next to the
 // files above. They travel with a move exactly like the files do. The query tree
-// is one folder per connection and database, so it is copied by walking it — but
-// only *these* folders are ever walked, never the whole data directory, which is
-// what keeps "one directory may hold another" true (see MoveData).
-var dataDirs = []string{queryDirName}
+// is one folder per connection and database, and the custom mock placeholders
+// are one file per placeholder, so both are copied by walking them — but only
+// *these* folders are ever walked, never the whole data directory, which is what
+// keeps "one directory may hold another" true (see MoveData).
+var dataDirs = []string{queryDirName, mockDirName}
 
 type locationFormat struct {
 	Version int    `json:"version"`
@@ -435,8 +436,9 @@ func plural(count int, noun string) string {
 	return fmt.Sprintf("%d %ss", count, noun)
 }
 
-// copyTree copies a folder this build owns (the query files) and verifies every
-// file on the way, the same way copyVerified proves a single file arrived.
+// copyTree copies a folder this build owns (the query files, the custom mock
+// placeholders) and verifies every file on the way, the same way copyVerified
+// proves a single file arrived.
 //
 // Nothing outside src is read: only the folders listed in dataDirs are ever
 // walked, which is what makes a nested data directory safe.

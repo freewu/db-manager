@@ -622,33 +622,72 @@ body {
   font-size: 12px;
 }
 
-/* --- the placeholder picker ---------------------------------------------- */
-.dm-mock-list {
-  display: flex;
-  flex-direction: column;
-  max-height: 46vh;
+/* --- the placeholder picker ----------------------------------------------
+   The groups are tabs down the left and the placeholders are tiles, because the
+   useful part of a placeholder is the example in it: a name alone makes two
+   similar placeholders look alike. The tile grid fills whatever width the modal
+   has, so the same markup works in a narrow window and a wide one. */
+.dm-mock-tabs {
+  min-height: 320px;
+}
+
+/* The tab strip is the long part — forty placeholders are six groups — so it
+   scrolls on its own rather than pushing the pane off the modal. */
+.dm-mock-tabs > .ant-tabs-nav {
+  max-height: 52vh;
   overflow: auto;
 }
 
-/* A row is a button: picking one is the whole gesture, and a hover tint is the
-   only affordance it needs. */
-.dm-mock-item {
-  display: flex;
-  align-items: baseline;
+.dm-mock-tabs > .ant-tabs-nav .ant-tabs-nav-list {
+  gap: 2px;
+}
+
+/* The pane is what scrolls, so a long group keeps the tab strip in place. */
+.dm-mock-tabs > .ant-tabs-content-holder {
+  max-height: 52vh;
+  overflow: auto;
+  padding-left: 4px;
+}
+
+.dm-mock-pane {
+  max-height: 52vh;
+  overflow: auto;
+}
+
+.dm-mock-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 8px;
-  width: 100%;
-  padding: 5px 8px;
-  border: 0;
-  border-radius: 4px;
+}
+
+/* A tile is a button: picking it is the whole gesture. It is a card rather than
+   a row so that a long description wraps inside its own box instead of pushing
+   the next placeholder down the list. */
+.dm-mock-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--dm-border);
+  border-radius: 6px;
   background: transparent;
   color: inherit;
   text-align: left;
   cursor: pointer;
   font: inherit;
+  overflow: hidden;
 }
 
-.dm-mock-item:hover {
+.dm-mock-tile:hover {
+  border-color: var(--dm-accent);
   background: var(--dm-tree-hover);
+}
+
+.dm-mock-tile-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 
 .dm-mock-value {
@@ -657,10 +696,29 @@ body {
   white-space: nowrap;
 }
 
+/* The example is the tile's reason to exist, so it is the roomiest line: a
+   value that is cut off is worse than one that wraps to a second line. */
+.dm-mock-sample {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.dm-mock-sample-bad {
+  font-size: 12px;
+  color: #d4380d;
+  overflow-wrap: anywhere;
+}
+
 .dm-mock-desc {
   font-size: 12px;
   color: var(--dm-null);
   overflow-wrap: anywhere;
+}
+
+.dm-mock-note {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
 }
 
 /* --- syntax highlighting -------------------------------------------------
@@ -1712,6 +1770,166 @@ body {
 .dm-link-icon {
   margin-inline-end: 5px;
   opacity: 0.75;
+}
+
+/* ---- settings: custom mock placeholders ---------------------------------- */
+
+/* The pane scrolls rather than the modal growing: a user with twenty
+   placeholders should not push the footer off the screen. */
+.dm-custom-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 260px;
+  max-height: 62vh;
+  overflow: auto;
+}
+
+.dm-custom-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dm-custom-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dm-custom-hint {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--dm-null);
+}
+
+/* One placeholder per line: the name, then what it produces, then the two
+   buttons. The name column is fixed so the templates line up and can be
+   compared by eye. */
+.dm-custom-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dm-custom-list > li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--dm-border);
+  border-radius: 6px;
+}
+
+.dm-custom-list > li.is-broken {
+  border-color: #d4380d;
+}
+
+.dm-custom-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  max-width: 320px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.dm-custom-name {
+  font-size: 12.5px;
+  color: var(--dm-accent-text);
+  white-space: nowrap;
+}
+
+.dm-custom-template {
+  font-size: 12px;
+  color: var(--dm-null);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dm-custom-row-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.dm-custom-sample {
+  overflow-wrap: anywhere;
+}
+
+.dm-custom-desc {
+  color: var(--dm-null);
+}
+
+.dm-custom-bad {
+  color: #d4380d;
+  overflow-wrap: anywhere;
+}
+
+.dm-custom-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dm-custom-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* The debug panel: a frame around the rows, so it reads as output rather than
+   as another field of the form. */
+.dm-custom-debug {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--dm-border);
+  border-radius: 6px;
+  background: var(--dm-tree-hover);
+}
+
+.dm-custom-debug-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dm-custom-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.dm-custom-rows > li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+/* The row number is what makes five similar values comparable; it is muted
+   because it is a label, not part of the value. */
+.dm-custom-row-no {
+  flex: 0 0 16px;
+  text-align: end;
+  color: var(--dm-null);
+  font-family: var(--dm-mono);
+  font-size: 11px;
 }
 
 /* ---- connection form ------------------------------------------------------ */

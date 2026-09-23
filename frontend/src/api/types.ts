@@ -586,6 +586,11 @@ export interface AppInfo {
 export interface DataFileInfo {
   name: string
   bytes: number
+  /** True for a folder this program owns rather than a file it wrote. */
+  dir?: boolean
+  /** How many files such a folder holds, so a count can be shown instead of a
+   * size that says nothing about how much is in it. */
+  count?: number
 }
 
 /**
@@ -658,6 +663,26 @@ export interface QueryFileRename {
   database: string
   from: string
   to: string
+}
+
+/**
+ * One placeholder the user defined for the data generation window's mock column.
+ *
+ * It is a name for a template of the built-in ones: a mock writes `@orderNo` and
+ * the engine renders whatever `template` says. The Go side stores one JSON file
+ * per placeholder under the `.mock` folder of the data directory, so this shape
+ * is also the file's contents.
+ */
+export interface MockPlaceholder {
+  /** The bare name — what a template writes after `@`. */
+  name: string
+  /** The template it stands for; may itself use built-in placeholders. */
+  template: string
+  description?: string
+  /** Milliseconds since the epoch, for the settings list. */
+  updatedAt?: number
+  /** Set when the file could not be read: it is listed so it can be deleted. */
+  broken?: string
 }
 
 /** One labelled number on a runtime status page. */

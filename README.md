@@ -28,7 +28,8 @@
 - **DDL 编辑器**：把对象的定义开成可编辑的脚本窗口（MongoDB 下就是集合的定义脚本与 shell 查询） —— 工具条、对象树右键「Edit DDL…」或结构页的「Edit in DDL editor」都能进；编辑器下方是**后端算出来的干跑结果**（逐条语句标出 query / DDL / DML、标红 DROP、TRUNCATE、无 WHERE 的 DELETE/UPDATE，MongoDB 下则是 `drop()` / `dropDatabase()` / 无 filter 的 `deleteMany`，并说明只读连接会拒掉几条），真正点「Run script」时只对破坏性脚本弹二次确认；执行完顺手刷新目录树与索引缓存。
 - **代码生成**：表的右键菜单里多了 `Generate code…`（表 / 视图 / 物化视图 / 集合都有，序列与存储过程没有字段，所以菜单里不摆），开出来的窗口把这个对象的字段与类型翻成这个语言的类 / 结构体 / 记录 —— 一共 18 种（python、c、cpp、java、csharp、javascript、rust、php、go、ruby、swift、perl、objectivec、julia、kotlin、typescript、erlang、lua），Java 分两档：`Java (Lombok)` 用 `@Data`，素写的那个把 getter / setter 展开。**生成在前端做**（`frontend/src/lib/codegen/`），所以工具条上的语言下拉一换就当场重画 —— 不过桥、不发请求（结构只读一次，跟 DDL 生成不同：那是引擎自己的事，`PlanAlter` 在后端），窗口里换语言也只换这个窗口，要换新窗口开出来的那一档就去 **Settings → Code generation** 改（默认 `Java (Lombok)`）。类型映射是一张**有序的规则表**收成 14 类（`tinyint(1)` 是布尔、`character varying` 与 `nvarchar` 都是字符串、`numeric` / `money` 是定点数、MongoDB 的 `int32 | string` 这种联合类型取读得懂的那一半），不认识的落到该语言自己的兜底类型而不是瞎猜；**可空按各语言的写法给**（Java 换包装类型、Python `Optional[T]`、Kotlin `T?`、Rust `Option<T>`、Go 指针、TS `T | null`、Erlang `T | undefined`…），字段名按该语言的命名习惯收（Go / C# 用 Pascal、Java 一族用 camel、Python 一族用 snake），Go 的字段名还按 Go 的规矩把缩写拼全（`user_id` → `UserID`）并带上 `json` / `db` 两个 tag（可空加 `,omitempty`）—— 生成的 Go 是 `gofmt` 之后一个字节不长不短的样子（有注释的字段会打断对齐组，所以补对齐是按段算的）。字段注释只来自这个列自己的注释，主键与自增不另加标记；文件名与后缀按语言给（`Users.java` / `users.py` / `users.go` / `users.erl`…），Copy 与 Save 在工具条上。生成的文本是**带语法高亮的**：每种语言在 `frontend/src/lib/codegen/lexis.ts` 里写一行「行注释拿什么标、引号怎么配对、哪些词算关键字 / 类型」，`codegen/highlight.ts` 拿这行扫一遍字符（跟 SQL 那个一样：不引第三方词法库、也不把代码拼成 HTML —— 注释或字符串里的 `<img>` 就只是那几个字符），换语言时连颜色一起换。颜色就是 DDL / SQL 预览那套 `--dm-syntax-*`，所以同一个关键字在哪个窗口都是同一个紫；那边的读法按**引擎**分（PostgreSQL 的 `"…"` 是名字而 MySQL 的是字符串），这边的读法按**语言**分，两件事互不干扰。
 - **数据生成**：命令条的 **Data Generation**、或表右键的 `Data generation…`，开一个「填表」窗口 —— 左边挑一张表（连接 → 库 → schema → 表，只列**表**：视图没有自己的 INSERT，集合没有列清单），右边就是那张表的字段表（Field / Type / Mock / Description）。**每行左侧有一个勾选框，勾上的列才会进 INSERT** —— 默认全勾，**自增列默认不勾**（那个键得由引擎发，自己编的值一轮写完就撞上了），表头那个框是全选 / 全不选。**空 mock 与不勾是两件事**：不勾 = 这一列不参与（描述列会写明），勾了却没写 mock 会被拦下来并点名是哪个字段，而不是拿空字符串冒充一个值 —— 勾中的行带品牌色底纹、未勾的行变淡（但 mock 仍可读可改）。**一个连接一个窗口**：表里写好的 mock 在同一个连接里换表不丢，从别的连接选一张表会切到**那个连接自己的窗口**（每个窗口只写它自己连上的那个库）。
-  - **Mock 是模板，不是固定值**：写的是 mock.js 语法 —— 字面文本里夹 `@` 占位符，`user_@natural(1, 999)@tld` 也是一个值。窗口里的取色器按 Person / Web / Basic / Time / Character / Number 分了六组（`@cname`、`@id` 带校验位、`@bankcard` 走 Luhn、`@address` 是省市区 + 街道 + 门牌号、`@guid`、`@now(day)`… 一共 40 多个），也能直接手打；**认不出的 `@name` 是错误而不是原样输出**（mock.js 会把 `@nope` 留下来，于是打错一个字就得到一列同样的错字符串），单元格当场标红、Generate 拒绝执行并点名是哪个字段，要写一个真正的 `@` 就用 `@@`。模板引擎在 `frontend/src/lib/mock/`（词表、校验位、参数解析都是本地实现，一处纯函数、可给种子复现）。
+  - **Mock 是模板，不是固定值**：写的是 mock.js 语法 —— 字面文本里夹 `@` 占位符，`user_@natural(1, 999)@tld` 也是一个值。窗口里的取色器把分组摆在**左边**、**可滚动**（Person / Web / Basic / Time / Character / Number，`@cname`、`@id` 带校验位、`@bankcard` 走 Luhn、`@address` 是省市区 + 街道 + 门牌号、`@guid`、`@now(day)`… 一共 40 多个；最后那一页 **Custom** 是用户自己攒的），每个占位符是**一块平铺的卡片**而不是一行 —— 卡片上除了名字，直接用同一个引擎渲染一行**示例值**（同一种模板给同一种样本，重开窗口也不会乱跳）：光看名字分不出两个相似的占位符，看样本就分得出来。也可以直接手打；**认不出的 `@name` 是错误而不是原样输出**（mock.js 会把 `@nope` 留下来，于是打错一个字就得到一列同样的错字符串），单元格当场标红、Generate 拒绝执行并点名是哪个字段，要写一个真正的 `@` 就用 `@@`。模板引擎在 `frontend/src/lib/mock/`（词表、校验位、参数解析都是本地实现，一处纯函数、可给种子复现）。
+  - **自定义占位符**：取色器最后那一页 **Custom** 里是用户自己的占位符 —— 一个名字换一段模板（`orderNo` = `SO@date(yyyy)@natural(1000, 9999)`，mock 里就写 `@orderNo`），在 **Settings → Mock placeholders** 里增删改。存法是**一个占位符一个文件**：`<数据目录>/.mock/<名字>.json`（`{"version","name","template","description"}`），名字就是文件名（过的是查询树那套 `escapeSegment`），所以它跟着**数据目录**一起搬。自定义占位符是**无参数的整段模板别名**（参数属于底下那些内置的），与内置重名时**内置赢**（表单直接不让存），写错名字仍是错误；展开在编译期**就地**完成并带**循环检测**（`@a` → `@b` → `@a` 会把整条链报出来），于是「整段就是一个占位符」的自定义保持着那个值的类型（`@dice` 给整数列的是整数，不是字符串）。设置页的编辑器**边写边判**（名字形状、与内置或别的自定义重名、模板能不能编译），下面还有一个**调试面板**：拿一个显示在面板上的种子渲染 5 行（`Reroll` 换一组），一眼看出「能编译」与「生成了我想要的东西」是两回事。手改坏了、读不出来的文件不会被取色器摆出来（点了只会失败），但在设置页里以 `Unreadable` 列出并可删除 —— 消失得无影无踪才是最难查的。
   - **初值从列名与列型来**：列名先说话（`email` / `phone` / `身份证` / `address`… 对不上列的长度就把提示丢掉，免得 `@cname` 塞进 `char(2)`），列名说不出话时按类型给（`int` → `@integer(1, 100)`、`datetime` → `@datetime(…)`、`json` → `{"key": "@word"}`）；**自增列留空且默认不勾**（这个键必须由引擎发，否则一轮写完自己就撞上了），非自增的整数主键拿 `@increment(1)`（唯一值靠「会数数」的那个占位符，不靠运气）。Description 列会写出这个字段会得到什么、并给一行**样本** —— 样本的随机源只跟字段名有关，所以在别的行里打字时它不会乱跳。工具条上的 **Reset mocks** 把这张表的 mock 与勾选一起恢复成初值。
   - **写下去之前先问一次**：确认框说明要写多少行、发哪几列、进的是哪张表，并写明**没有 undo**（撤不回来，要删就按普通行删）。生成在前端、分批过桥：每批 200 行（后端上限 500），一个批次一条多行 `INSERT`，进度条在两批之间走、**Stop 也在两批之间生效**，所以停下来时报的数就是真的写进去的数。后端 `InsertRows` 只把标识符（表名、列名）按方言引号拼进语句，**每一个值都是绑定参数**，前端生成的任何文本都不可能变成 SQL；JSON 过桥后整数都成了 `float64`，落库前把**整数值折回 int64**（PostgreSQL 会把 `float64` 绑到 `int4` 上直接拒收，MySQL 则默默四舍五入），小数原样交给列去判断。引擎拒掉一批时，后端**逐行重放**找出是哪一行并把引擎自己的话带回来，窗口如实报「第 N 行被拒，前面 m 行已进表」，不会把一半说成全部。
 - **窗口即应用**：右键不再弹出 WebView 自带的那套菜单（后退 / 刷新 / 另存为 / 打印 / 检查），
@@ -38,7 +39,7 @@
 - **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（只画一个 GitHub 头像，悬停显示昵称、点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection，以及连接树的右键菜单。
 - **导出**：CSV / JSON / INSERT 脚本（MongoDB 下是 `insertMany` 脚本，按列的 BSON 类型还原 `$oid` / `$date` / 文档字面量），可写入文件或复制到剪贴板。
 - **外观**：Navicat 式窗口骨架（icon-over-label 命令条 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏 —— 表格的表头**固定不动**：数据网格、对象列表、设计器的字段表都一样，纵向滚动时表头留在容器顶上，横向滚动也带不走它（钉住的列仍旧钉在原处）。主题有三档：`Light` / `Dark` / `System`，在命令条的 **Settings → Appearance** 里选，状态栏那格点一下也能循环切换（跟随系统时它会写成 `system (dark)`，把当前系统给的那一档一起说出来）；选**跟随系统**时窗口真的跟着操作系统走 —— 操作系统在运行期间切深浅色，界面当场就变，不用重启也不用再点一次。命令条上目前只有 **Connection**、**Open**、**Close**、**New Query**、**Refresh**、**Table**、**View**、**Data Generation** 与 **Settings** 是活的，其余按钮保持原来的位置但禁用并在提示里说明 —— 摆着的空位比消失的按钮更好认（`Data Generation` 也一样：没有打开的会话、或这个引擎写不了行时它是灰的，提示里说的是哪一种）。
-- **设置**：命令条上的 **Settings** 开一个四页的窗口 —— `Appearance` 选主题，`Code generation` 选代码窗口默认用哪种语言，`Data folder` 看数据存在哪、里面有哪些文件（每个文件写的是干什么的、多大）、从这里**打开目录**、**换一个目录**或**恢复默认**，`About` 就是原来那页项目信息（技术栈徽章、项目地址、开发者）。换目录是真的**把数据搬过去**：连接配置、查询收藏、树的排法、窗口状态与密码密钥一起复制到新目录（逐个读回校验，对不上就不动原文件），然后才改指针、最后才删旧文件；没能删掉的（被占用、只读）会**如实列出来**，而不是回一句「已移动」。目标目录里已经有**非空的**本程序数据时会被拒绝并点名是哪个文件（同名但零字节的不算数据，照常覆盖），选到当前目录本身也会被拒绝；那些**不是本程序写的**文件留在原地并在结果里注明。目录就绪后不需要重启 —— 会话照旧连着，新的保存当场写进新目录。
+- **设置**：命令条上的 **Settings** 开一个五页的窗口（宽度是当前窗口的 **90%**）—— `Appearance` 选主题，`Code generation` 选代码窗口默认用哪种语言，`Mock placeholders` 管自己的占位符（见上），`Data folder` 看数据存在哪、里面有哪些文件（每个文件写的是干什么的、多大；`.query` / `.mock` 这类文件夹按「一个文件夹、里面几个文件」列出来）、从这里**打开目录**、**换一个目录**或**恢复默认**，`About` 就是原来那页项目信息（技术栈徽章、项目地址、开发者）。换目录是真的**把数据搬过去**：连接配置、查询收藏、树的排法、窗口状态与密码密钥一起复制到新目录（逐个读回校验，对不上就不动原文件），然后才改指针、最后才删旧文件；没能删掉的（被占用、只读）会**如实列出来**，而不是回一句「已移动」。目标目录里已经有**非空的**本程序数据时会被拒绝并点名是哪个文件（同名但零字节的不算数据，照常覆盖），选到当前目录本身也会被拒绝；那些**不是本程序写的**文件留在原地并在结果里注明。目录就绪后不需要重启 —— 会话照旧连着，新的保存当场写进新目录。
 - **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（头像加昵称整个是一条链接，昵称就是显示出来的文字，也是链接的标题，点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。这页在没连库时显示，**Settings → About** 里也是同一份（同一个组件，两处不会各说一套）。连库的入口在命令条的 Connection，以及连接树的右键菜单。
 - **托盘**（Windows）：关掉窗口是**收进托盘**，不是退出；托盘图标左键单击等于把窗口叫回来，右键的菜单从上到下是 `Show window` / `Project page` / `Report an issue` / 版本号（灰色，只是给你看的）/ `Quit`。`Quit` 走的是正常退出（连接池照常关），而**图标没能建出来时关窗照旧直接退出** —— 一个没能出现的托盘不该留下一个看不见的进程。其它平台没有通知区域，行为保持原样（关窗即退出）。
 
@@ -118,6 +119,7 @@ wails build
 │   ├── apperr/               # 错误码 + 脱敏（打码 password=... 与 URI userinfo）
 │   ├── config/location.go    # 数据目录的指针（location.json）与搬家：复制 → 校验 → 改指针 → 删旧文件
 │   ├── config/store.go       # %APPDATA%/db-manager/{connections,queries,state,layout}.json（0600）
+│   ├── config/mockplaceholders.go # 自定义 mock 占位符：<数据目录>/.mock/<名字>.json，一个占位符一个文件
 │   ├── secret/               # AES-256-GCM 封装连接的密码；密钥 secret.key（0600，首次用时生成）
 │   ├── models/               # 跨层 DTO，时间统一为 int64 unix ms
 │   ├── drivers/
@@ -138,12 +140,15 @@ wails build
         ├── api/              # 手写类型 + 手写 window.go.main.App 桥接（不依赖生成代码）
         ├── components/       # AppShell / Sidebar / Workspace / TablePane / QueryPane / DataGrid …
         │   ├── AboutProject.tsx   # 项目信息（技术栈徽章 / 项目地址 / 开发者），空态页与 Settings → About 共用
-        │   ├── SettingsDialog.tsx # 设置窗口：外观 / 代码生成 / 数据目录 / 关于
+        │   ├── SettingsDialog.tsx # 设置窗口：外观 / 代码生成 / Mock 占位符 / 数据目录 / 关于
+        │   ├── MockPickerModal.tsx # 占位符取色器（左侧分组 + 平铺卡片，卡片带示例值）
+        │   ├── MockPlaceholderSettings.tsx # 自定义占位符：列表 + 编辑器（带种子的调试面板）
         │   └── overview/     # 运行情况：每个引擎一个视图 + 共用的指标卡片与数据表
         ├── connection/       # 每种驱动一页连接表单（Mysql / Postgres / Sqlite / Mongodb / Tidb / Doris）+ 注册表
         ├── hooks/useConnect  # 先试后问的连接流程
         ├── lib/              # tree key 编解码、格式化、导出、代码生成（codegen/，见下）、驱动能力（capabilities.ts）、项目信息（about.ts）、主题（theme.ts）、品牌素材（assets.ts，@asserts 别名）
-        │   └── codegen/      # 代码生成：types.ts（类型归类与渲染契约）/ languages.ts（每种语言的数据）/ lexis.ts（每种语言怎么读）/ highlight.ts（生成代码的高亮）/ index.ts（入口）
+        │   ├── codegen/      # 代码生成：types.ts（类型归类与渲染契约）/ languages.ts（每种语言的数据）/ lexis.ts（每种语言怎么读）/ highlight.ts（生成代码的高亮）/ index.ts（入口）
+        │   └── mock/         # 模板引擎：engine.ts（解析、渲染、种子）/ words.ts（词表与校验位）/ catalog.ts（取色器目录）/ defaults.ts（列名、列型猜初值）/ custom.ts（自定义占位符的校验）
         ├── store/            # zustand 全局状态（连接 / 会话 / 标签页 / 浏览器缓存）
         └── styles/global.css
 ```
@@ -505,7 +510,39 @@ PostgreSQL `… ENCODING '…' LOCALE '…' TEMPLATE template0`、MongoDB `use <
 一个脚本对应一个窗口：标签页的 id 由「连接 + 库 + 名字」拼出来，所以同一个脚本打开两次是切回原来那一页，
 而不是两个窗口抢同一个文件。
 
-### 设置：主题、代码语言与数据目录
+### 自定义 Mock 占位符
+
+数据生成窗口的 mock 列是一段 mock.js 模板，能用的占位符由构建定死。但「订单号 = 前缀 + 日期 + 4 位流水」
+这种片段是每个库都有的，人手抄一遍不算什么，抄错一个字（`@nope`）就是当场一条错误 —— 所以用户自己可
+以攒一批：`<数据目录>/.mock/<名字>.json`，一个占位符一个文件：
+
+```json
+{"version":1,"name":"orderNo","template":"SO@date(yyyy)@natural(1000, 9999)","description":"订单号"}
+```
+
+一个占位符一个文件的理由和脚本文件一样：这东西是一个人写的、可能要改、可能想用别的工具看，一文件夹的
+小 JSON 能 diff，一大份不能。名字**就是文件名**（过 `escapeSegment`，跟查询树共用一把转义），所以名字
+跑不出文件夹、撞不上 Windows 的保留设备名，也不会因为 `a/b` 落到别处；反过来说，**改名就是换文件**，
+所以编辑已有占位符时名字那一栏是灰的（要改名字就删了重建），大小写只差一个的文件在 Windows / macOS
+上本来就是同一个，保存时会把旧拼写删掉（同一条路径，同一个 `caseVariant`）。一份数据文件多出来就得多
+进名单：`.mock` 已经加进 `dataDirs`，换数据目录时整棵树跟着搬、读不回来就报错，这个在
+「数据目录」那节里说。
+
+**自定义占位符是无参数的整段模板别名**，不是第二个引擎：它由内置占位符组成，不接参数（参数属于底下那
+个内置的），既不能与内置重名（内置赢，表单直接不让存），也不能与自己兜圈。展开在**编译期就地**完成 ——
+它的节点直接顶到父模板里，所以前后文字的顺序不变，而「整段就是一个占位符」的自定义仍旧只产生一个节
+点，于是那个值的类型不变（`@dice` 给整数列一个整数）。循环靠一条**展开链**发现，报出来的是整条路径
+（`in @a: in @b: @a expands into itself (@a → @b → @a)`），而不是一句「出错了」。描述栏里的说明来自自
+定义的**描述**（没写描述时退回它内部那些占位符的说明）—— 在描述列里写「订单号」比写「@date + @natural」
+有用。
+
+校验是分开的：后端只管**形状**（名字能不能写成 `@name`、模板非空、长度、最多 200 个），因为模板语法
+的唯一实现是前端那个引擎，在 Go 里再写一个差一些的解析器只会让两边对同一段模板有不同看法；**能不能
+编译**由编辑器当场判（`checkCustomPlaceholder`，把草稿自己叠进去编译，所以 `@loop` 里写 `@loop` 会被
+抓成循环），**会不会生成想要的东西**则由调试面板回答：一个显示在面板上的种子、一次渲染 5 行、`Reroll`
+换一组。另有一个上限 200 条的理由很实际：取色器要把它们全画出来。
+
+### 设置：主题、代码语言、Mock 占位符与数据目录
 
 设置窗口自己**不存**任何偏好：主题与代码窗口的默认语言经过 store 落进 `state.json`，数据目录本来就是后端的事，所以关掉窗口
 不会丢选择，两个窗口看到的也永远是同一份值。`state.json` 是**整份替换**而不是合并写，所以落盘只有
@@ -529,10 +566,12 @@ PostgreSQL `… ENCODING '…' LOCALE '…' TEMPLATE template0`、MongoDB `use <
 Windows 上还认大小写）、相对路径、以及目标里已经有**非空的**本程序数据（点名是哪个文件）。目录**可以
 互相嵌套** —— 只搬名单里的文件、从不递归，所以谁在谁里面都行。不是本程序写的文件（`LeftBehind`）留着
 不动并如实报告，其中不算指针文件与 `*.tmp`；目标目录如果正好在源目录里面，也不会被误报成「留下没搬」。
-名单写死在 `dataFiles`（五个文件）与 `dataDirs`（`Queries` 文件夹那棵树，即 `.query/`），
+名单写死在 `dataFiles`（五个文件）与 `dataDirs`（`Queries` 文件夹那棵树即 `.query/`，加上自定义占位符那
+个 `.mock/`），
 **新增一份数据文件 / 文件夹必须同时加进对应的名单**，否则搬家会把它落下（并因此在结果里报出来）；
 目录是按文件逐个复制校验的（`copyTree` + `copyVerified`，跳过 `*.tmp`），目标目录里已经有一份非空的
-`.query` 同样算「已有本程序数据」而被拒绝。不这么搬的话，换一次数据目录就会把用户存的脚本全部丢在原地。
+`.query` 或 `.mock` 同样算「已有本程序数据」而被拒绝。不这么搬的话，换一次数据目录就会把用户存的脚本
+与占位符全部丢在原地。
 
 搬完不重启：`MoveDataDir` 会重新 `config.New()` 并把新的 store 换进 `Manager`。整个搬家过程持写锁
 （`m.mu.Lock()`，`m.storeRef()` 读锁）—— 否则这一步复制、下一步删除之间落进来的一次保存会丢在旧

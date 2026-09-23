@@ -25,6 +25,7 @@ import type {
   FetchRequest,
   FetchResult,
   IndexEntry,
+  MockPlaceholder,
   ObjectInfo,
   OpenRequest,
   QueryResult,
@@ -134,6 +135,14 @@ export const api = {
     invoke<QueryFile>('RenameQueryFile', rename),
   deleteQueryFile: (connectionId: string, database: string, name: string) =>
     invoke<void>('DeleteQueryFile', connectionId, database, name),
+
+  // --- custom mock placeholders -------------------------------------------
+  /** Every placeholder the user defined, for the mock picker's Custom tab. */
+  listMockPlaceholders: () => invoke<MockPlaceholder[]>('ListMockPlaceholders'),
+  /** Creates or updates one, keyed by its name. */
+  saveMockPlaceholder: (placeholder: MockPlaceholder) =>
+    invoke<MockPlaceholder>('SaveMockPlaceholder', placeholder),
+  deleteMockPlaceholder: (name: string) => invoke<void>('DeleteMockPlaceholder', name),
 
   // --- profiles -----------------------------------------------------------
   listConnections: () => invoke<ConnectionConfig[]>('ListConnections'),

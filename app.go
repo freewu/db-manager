@@ -248,6 +248,28 @@ func (a *App) DeleteQueryFile(connectionID, database, name string) error {
 	return a.manager.DeleteQueryFile(connectionID, database, name)
 }
 
+// --- custom mock placeholders ----------------------------------------------
+//
+// The placeholders a user defines for the data generation window's mock column.
+// They are kept as one file per placeholder under the `.mock` folder of the data
+// directory, so they travel with it (see the settings page).
+
+// ListMockPlaceholders returns every custom placeholder.
+func (a *App) ListMockPlaceholders() ([]models.MockPlaceholder, error) {
+	return a.manager.ListMockPlaceholders()
+}
+
+// SaveMockPlaceholder writes one custom placeholder, creating it when it does
+// not exist yet.
+func (a *App) SaveMockPlaceholder(placeholder models.MockPlaceholder) (models.MockPlaceholder, error) {
+	return a.manager.SaveMockPlaceholder(placeholder)
+}
+
+// DeleteMockPlaceholder removes one custom placeholder.
+func (a *App) DeleteMockPlaceholder(name string) error {
+	return a.manager.DeleteMockPlaceholder(name)
+}
+
 // --- metadata --------------------------------------------------------------
 
 // ListDatabases returns the catalogs of a session.

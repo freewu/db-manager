@@ -20,6 +20,7 @@ import type {
   DataDirMoveResult,
   DriverInfo,
   IndexEntry,
+  MockPlaceholder,
   ObjectInfo,
   ObjectKind,
   OpenRequest,
@@ -240,6 +241,12 @@ interface AppState {
   tree: TreeCache
   designs: Record<string, DesignState>
   savedQueries: SavedQuery[]
+  /**
+   * The placeholders the user defined, as the data generation window and the
+   * settings page read them. They live in the data directory, so moving the data
+   * directory moves them too.
+   */
+  mockPlaceholders: MockPlaceholder[]
   editorOpen: boolean
   editorDraft?: ConnectionDraft
 
@@ -261,6 +268,11 @@ interface AppState {
   refreshSavedQueries: () => Promise<void>
   saveSavedQuery: (query: SavedQuery) => Promise<SavedQuery>
   deleteSavedQuery: (id: string) => Promise<void>
+  /** Re-reads the custom mock placeholders; returns what is there now. */
+  refreshMockPlaceholders: () => Promise<MockPlaceholder[]>
+  /** Creates or updates one custom placeholder, keyed by its name. */
+  saveMockPlaceholder: (placeholder: MockPlaceholder) => Promise<MockPlaceholder>
+  deleteMockPlaceholder: (name: string) => Promise<void>
 
   refreshConnections: () => Promise<void>
   /** Re-reads the arrangement alone, for changes the profiles do not show
@@ -501,6 +513,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   tree: emptyTree(),
   designs: {},
   savedQueries: [],
+  mockPlaceholders: [],
   editorOpen: false,
 
   openConnectionEditor(draft) {
@@ -513,8 +526,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async bootstrap() {
     try {
-      const [appInfo, drivers, connections, connectionLayout, savedQueries, persisted, dataDir] =
-        await Promise.all([
+      const [
+        appInfo,
+        drivers,
+        connections,
+        connectionLayout,
+        savedQueries,
+        mockPlaceholders,
+        persisted,
+        dataDir,
+      ] = await Promise.all([
           api.appInfo(),
           api.listDrivers(),
           api.listConnections(),
@@ -522,6 +543,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           api.listConnectionLayout().catch(() => ({ groups: [], items: [] }) as ConnectionLayout),
           // A missing or unreadable favourites file must not block startup.
           api.listSavedQueries().catch(() => [] as SavedQuery[]),
+          // Nor may a placeholder file someone hand-edited into nonsense: the
+          // mock column simply has no custom entries until it is fixed.
+          api.listMockPlaceholders().catch(() => [] as MockPlaceholder[]),
           api.loadState().catch(() => ({}) as Record<string, unknown>),
           // The data directory is only reported by the settings page; failing to
           // read it must not keep the app from starting.
@@ -554,6 +578,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         connections,
         connectionLayout,
         savedQueries,
+        mockPlaceholders,
         dataDir,
         theme,
         resolvedTheme: resolveTheme(theme),
@@ -672,6 +697,26 @@ export const useAppStore = create<AppState>((set, get) => ({
   async deleteSavedQuery(id) {
     await api.deleteSavedQuery(id)
     await get().refreshSavedQueries()
+  },
+
+  async refreshMockPlaceholders() {
+    const mockPlaceholders = await api.listMockPlaceholders()
+    set({ mockPlaceholders })
+    return mockPlaceholders
+  },
+
+  async saveMockPlaceholder(placeholder) {
+    const saved = await api.saveMockPlaceholder(placeholder)
+    // Re-read rather than patch the list: the name is the file name, so a save
+    // can replace one entry with another (a differently-cased spelling) and the
+    // backend is the one that knows which entries exist now.
+    await get().refreshMockPlaceholders()
+    return saved
+  },
+
+  async deleteMockPlaceholder(name) {
+    await api.deleteMockPlaceholder(name)
+    await get().refreshMockPlaceholders()
   },
 
   async saveConnection(cfg, groupId) {

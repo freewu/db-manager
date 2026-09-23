@@ -59,7 +59,10 @@ import {
   createRng,
   defaultMock,
   mockDescription,
+  sampleOf,
+  seedOf,
   type CompiledTemplate,
+  type CustomPlaceholder,
   type MockValue,
 } from '../lib/mock'
 import {
@@ -91,19 +94,6 @@ const SEP = '\u0000'
 const tableKey = (database: string, schema: string, object: string) =>
   [database, schema, object].join(SEP)
 
-/**
- * A seed that depends only on a field's name.
- *
- * The sample in the description column has to hold still while the user types in
- * another row, so it is drawn from a source seeded by the name rather than from
- * the run's own generator.
- */
-function seedOf(text: string): number {
-  let hash = 2166136261
-  for (let i = 0; i < text.length; i += 1) hash = Math.imul(hash ^ text.charCodeAt(i), 16777619)
-  return hash >>> 0
-}
-
 /** One column of the table being filled, and the mock it will get. */
 interface FieldRow {
   name: string
@@ -114,10 +104,17 @@ interface FieldRow {
   compiled: CompiledTemplate
 }
 
-/** Builds the rows of the fields grid from a structure and any mocks written. */
+/**
+ * Builds the rows of the fields grid from a structure and any mocks written.
+ *
+ * The user's own placeholders are handed to the compiler here, so a mock that
+ * says `@orderNo` is read the same way in every part of the window — the one
+ * place a template is compiled is the one place that decides what it means.
+ */
 function fieldRowsOf(
   structure: TableStructure | undefined,
   overrides: Record<string, string> | undefined,
+  placeholders: readonly CustomPlaceholder[],
 ): FieldRow[] {
   return (structure?.columns ?? []).map((column) => {
     const template = overrides?.[column.name] ?? defaultMock(column)
@@ -126,7 +123,7 @@ function fieldRowsOf(
       column,
       kind: kindOfColumn(column),
       template,
-      compiled: compileTemplate(template),
+      compiled: compileTemplate(template, placeholders),
     }
   })
 }
@@ -153,6 +150,8 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
   const loadSchemas = useAppStore((s) => s.loadSchemas)
   const loadObjects = useAppStore((s) => s.loadObjects)
   const openDataGenTab = useAppStore((s) => s.openDataGenTab)
+  const storedPlaceholders = useAppStore((s) => s.mockPlaceholders)
+  const refreshMockPlaceholders = useAppStore((s) => s.refreshMockPlaceholders)
 
   const driver = drivers.find((d) => d.type === session?.driver)
   const { flatNamespace } = capabilitiesOf(driver)
@@ -185,7 +184,36 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
   const [expanded, setExpanded] = useState<string[]>([])
   const stopRef = useRef(false)
 
-  const rows = useMemo(() => fieldRowsOf(structure, overrides[currentKey]), [structure, overrides, currentKey])
+  /**
+   * The user's placeholders as the engine wants them.
+   *
+   * A file that cannot be read has no template to render, so it is left out: a
+   * mock that writes its name reports '@orderNo is not a placeholder this app
+   * knows', and the settings page is where it is repaired.
+   */
+  const placeholders = useMemo<CustomPlaceholder[]>(
+    () =>
+      storedPlaceholders
+        .filter((entry) => !entry.broken)
+        .map((entry) => ({
+          name: entry.name,
+          template: entry.template,
+          description: entry.description,
+        })),
+    [storedPlaceholders],
+  )
+
+  // Re-read once per window: the settings page may have written a placeholder
+  // since the app started, and a mock of `@orderNo` would otherwise have to wait
+  // for a restart to mean anything.
+  useEffect(() => {
+    refreshMockPlaceholders().catch(() => undefined)
+  }, [refreshMockPlaceholders])
+
+  const rows = useMemo(
+    () => fieldRowsOf(structure, overrides[currentKey], placeholders),
+    [structure, overrides, currentKey, placeholders],
+  )
 
   // The tick is the window's own state rather than a reading of the mock: an
   // empty mock is a value decision, the tick is the decision that the column
@@ -591,10 +619,16 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
       {
         title: 'Description',
         dataIndex: 'name',
-        render: (_name: string, row) => <DescriptionCell row={row} selected={selectedOf(row.column)} />,
+        render: (_name: string, row) => (
+          <DescriptionCell
+            row={row}
+            selected={selectedOf(row.column)}
+            placeholders={placeholders}
+          />
+        ),
       },
     ],
-    [selectedOf, setMock],
+    [placeholders, selectedOf, setMock],
   )
 
   if (!insertable) {
@@ -838,13 +872,21 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
 /* --- the description column ------------------------------------------------ */
 
 /** The description column: what the column is, and what the mock makes of it. */
-function DescriptionCell({ row, selected }: { row: FieldRow; selected: boolean }) {
+function DescriptionCell({
+  row,
+  selected,
+  placeholders,
+}: {
+  row: FieldRow
+  selected: boolean
+  placeholders: readonly CustomPlaceholder[]
+}) {
+  // The sample is drawn from a source seeded by the field's name, so it holds
+  // still while the user types in another row.
   const sample = useMemo(() => {
     if (!selected || row.compiled.error || row.template.trim() === '') return undefined
-    const value = row.compiled.render(createRng(seedOf(row.name)))
-    if (value === null || value === undefined || value === '') return undefined
-    return String(value)
-  }, [row, selected])
+    return sampleOf(row.template, placeholders, seedOf(row.name)).value
+  }, [row, selected, placeholders])
 
   return (
     <div className="dm-datagen-note">
