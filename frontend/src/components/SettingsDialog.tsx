@@ -5,17 +5,19 @@ import {
   Button,
   Descriptions,
   Empty,
+  InputNumber,
   Modal,
   Segmented,
   Select,
   Space,
   Tag,
   Tooltip,
+  Typography,
 } from 'antd'
 import { FolderOpenOutlined, ReloadOutlined, SwapOutlined } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
-import type { DataDirInfo, DataDirMoveResult } from '../api/types'
+import type { ChangeLogSettings, DataDirInfo, DataDirMoveResult } from '../api/types'
 import { AboutProject } from './AboutProject'
 import { MockPlaceholderSettings } from './MockPlaceholderSettings'
 import { useAppStore } from '../store/appStore'
@@ -213,6 +215,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
           {outcome ? <MoveReport result={outcome} /> : null}
 
+          <ChangeLogSize />
+
           <DataDirFiles info={dataDir} />
         </div>
       ) : null}
@@ -256,6 +260,93 @@ function DataDirPath({ info }: { info?: DataDirInfo }) {
         info.isDefault ? <Tag color="default">default</Tag> : <Tag color="green">custom</Tag>
       ) : null}
     </div>
+  )
+}
+
+/** How big one log file gets before it is moved aside as an archive. */
+function ChangeLogSize() {
+  const { message } = AntApp.useApp()
+  const [settings, setSettings] = useState<ChangeLogSettings | undefined>()
+  const [value, setValue] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | undefined>()
+  // Read on mount rather than kept in the app store: this is the only place that
+  // shows it, and the dialog is rebuilt every time it is opened.
+  useEffect(() => {
+    void api
+      .changeLogSettings()
+      .then((current) => {
+        setSettings(current)
+        setValue(current.maxEntries)
+      })
+      .catch((err) => setError(toMessage(err)))
+  }, [])
+
+  const save = async (maxEntries: number) => {
+    if (!settings) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      // What comes back is what is in force, which is the backend's decision and
+      // not something this page gets to assume.
+      const saved = await api.saveChangeLogSettings({ ...settings, maxEntries })
+      setSettings(saved)
+      setValue(saved.maxEntries)
+      message.success(
+        `A log file now holds ${saved.maxEntries.toLocaleString()} statements before it is archived`,
+      )
+    } catch (err) {
+      setError(toMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const changed = settings !== undefined && value !== null && value !== settings.maxEntries
+
+  return (
+    <SettingRow
+      title="Change log"
+      hint="Statements are written to changelog.jsonl until it holds this many, then the file is moved aside whole as <date>-<n>.log and a new one is started. Nothing is ever dropped: the archives keep every statement, and the Change log window lists them."
+    >
+      {error ? (
+        <Alert
+          type="error"
+          showIcon
+          title={settings ? 'The rotation size could not be saved' : 'The rotation size could not be read'}
+          description={error}
+        />
+      ) : null}
+      <Space wrap>
+        <InputNumber
+          min={settings?.min ?? 100}
+          max={settings?.max ?? 100000}
+          step={100}
+          disabled={settings === undefined}
+          value={value}
+          onChange={setValue}
+          addonAfter="statements"
+          style={{ width: 220 }}
+        />
+        <Button
+          type="primary"
+          loading={busy}
+          disabled={!changed || value === null}
+          onClick={() => value !== null && void save(value)}
+        >
+          Save
+        </Button>
+        {settings ? (
+          <Tooltip title={`${settings.min.toLocaleString()} – ${settings.max.toLocaleString()}`}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {settings.maxEntries === settings.default
+                ? `${settings.default.toLocaleString()} by default`
+                : `changed from ${settings.default.toLocaleString()}`}
+            </Typography.Text>
+          </Tooltip>
+        ) : null}
+      </Space>
+    </SettingRow>
   )
 }
 
@@ -315,7 +406,7 @@ function DataDirFiles({ info }: { info?: DataDirInfo }) {
     >
       {info.files.map((file) => (
         <Descriptions.Item key={file.name} label={<span className="mono">{file.name}</span>}>
-          {FILE_PURPOSE[file.name] ?? 'Written by this program'} · {formatBytes(file.bytes)}
+          {purposeOf(file.name)} · {formatBytes(file.bytes)}
           {/* A folder says how much is in it as well: its size counts the files
               but not how many there are, which is what a reader wants to know. */}
           {file.dir && file.count ? ` · ${file.count} file${file.count === 1 ? '' : 's'}` : ''}
@@ -333,8 +424,21 @@ const FILE_PURPOSE: Record<string, string> = {
   'state.json': 'Window state and preferences',
   'secret.key': 'Key that opens the saved passwords — unreadable on another machine',
   'changelog.jsonl': 'What this program has run, one statement per line',
+  'changelog.json': 'How big a log file may get before it is archived',
   '.mock': 'Custom mock placeholders, one file each',
   '.query': 'Saved scripts, one file each',
+}
+
+/**
+ * An archived log — `<date>-<n>.log` — is named when it is rotated out, so it
+ * cannot be listed above by name. The rule mirrors the backend's, which is the
+ * one that decides what counts as an archive.
+ */
+const ARCHIVED_LOG = /^\d{8}-[1-9]\d*\.log$/
+
+/** What one file holds, so the listing reads as an answer rather than a dump. */
+function purposeOf(name: string): string {
+  return FILE_PURPOSE[name] ?? (ARCHIVED_LOG.test(name) ? 'Archived change log' : 'Written by this program')
 }
 
 function formatBytes(bytes: number): string {

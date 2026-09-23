@@ -37,12 +37,15 @@ const locationFile = "location.json"
 
 // dataFiles are the files this build keeps in the data directory: the profiles,
 // the query favourites, the explorer arrangement, the UI state, the key the
-// saved passwords are sealed with, and the change log. The folders beside them
-// are in dataDirs.
+// saved passwords are sealed with, the change log, and the change log's own
+// settings. The folders beside them are in dataDirs.
 //
 // A feature that starts writing a new file (or a new folder) here has to add it
 // to one of those lists, or a move will leave it behind — and now *say* it did,
 // through DataDirMoveResult.LeftBehind, rather than quietly dropping it.
+// Archived change logs are the one thing that cannot be listed here: they are
+// named for the day they were rotated out, so they are found by scanning the
+// directory instead (see dataFileNames).
 var dataFiles = []string{
 	fileName,
 	queriesFile,
@@ -50,6 +53,7 @@ var dataFiles = []string{
 	stateName,
 	secret.KeyFileName,
 	changeLogFile,
+	changeLogSettingsFile,
 }
 
 // dataDirs are the folders this build keeps in the data directory, next to the
@@ -185,7 +189,11 @@ func describe(dir, def string) models.DataDirInfo {
 		IsDefault:   sameDir(dir, def),
 		Files:       []models.DataFileInfo{},
 	}
-	for _, name := range dataFiles {
+	// An unreadable directory is reported as one with nothing in it: this feeds a
+	// settings page, and it must not fail to open because of the folder it is
+	// describing.
+	fileNames, _ := dataFileNames(dir)
+	for _, name := range fileNames {
 		stat, err := os.Stat(filepath.Join(dir, name))
 		if err != nil || stat.IsDir() {
 			continue
@@ -295,7 +303,11 @@ func MoveData(target string) (models.DataDirMoveResult, error) {
 	// line.
 	type moved struct{ display, path string }
 	sources := make([]moved, 0, len(dataFiles)+len(dataDirs))
-	for _, name := range dataFiles {
+	fileNames, err := dataFileNames(source)
+	if err != nil {
+		return models.DataDirMoveResult{}, err
+	}
+	for _, name := range fileNames {
 		from := filepath.Join(source, name)
 		if _, err := os.Stat(from); err != nil {
 			// Not every install has every file (a store that never saved a
@@ -363,11 +375,32 @@ func MoveData(target string) (models.DataDirMoveResult, error) {
 	return result, nil
 }
 
+// dataFileNames lists every file this build keeps in dir: the ones it always
+// writes, plus the archived change logs, whose names are decided when a log is
+// rotated out and therefore cannot be listed ahead of time.
+//
+// Everything that has to know what is in the data directory — the listing, the
+// move, the refusal to move into a directory already holding data, and the
+// "what else is in here" report — goes through this one function, so a new file
+// or a new kind of file is added in a single place.
+func dataFileNames(dir string) ([]string, error) {
+	names := append([]string{}, dataFiles...)
+	archives, err := changeLogArchivesIn(dir)
+	if err != nil {
+		return nil, err
+	}
+	return append(names, archives...), nil
+}
+
 // existingData lists the recognised data files (and the folders this build owns)
 // already present in dir, so a move can refuse a directory that is in use.
 func existingData(dir string) ([]string, error) {
 	found := make([]string, 0, len(dataFiles)+len(dataDirs))
-	for _, name := range dataFiles {
+	fileNames, err := dataFileNames(dir)
+	if err != nil {
+		return nil, fmt.Errorf("list %s: %w", dir, err)
+	}
+	for _, name := range fileNames {
 		stat, err := os.Stat(filepath.Join(dir, name))
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
@@ -413,6 +446,13 @@ func otherEntries(dir string) ([]string, error) {
 		known[name] = true
 	}
 	known[locationFile] = true
+	// Archived logs are ours too, and are found by the same rule that lists and
+	// moves them.
+	if archives, err := changeLogArchivesIn(dir); err == nil {
+		for _, name := range archives {
+			known[name] = true
+		}
+	}
 
 	out := make([]string, 0, len(entries))
 	for _, entry := range entries {

@@ -966,13 +966,59 @@ type ChangeLogConnection struct {
 	User    string     `json:"user,omitempty"`
 }
 
-// ChangeLog is one page of the log, newest entry first.
+// ChangeLog is one page of one log file, newest entry first, plus the file it
+// came from and the files there are to choose between.
 //
 // Total is how many entries the file holds, which is what lets the window say
 // "the newest 200 of 1,248" instead of pretending a page is the whole story.
+// Files travels with the page because the two are read together: a window that
+// knows which entries it has but not which files exist cannot offer the reader
+// the older ones.
 type ChangeLog struct {
+	// File is the file these entries were read from: the live log, or an archive
+	// a rotation moved aside.
+	File    string           `json:"file"`
 	Entries []ChangeLogEntry `json:"entries"`
 	Total   int              `json:"total"`
+	Files   []ChangeLogFile  `json:"files"`
+}
+
+// ChangeLogFile is one file the change log is spread over.
+//
+// The live file is appended to and rotated away from a whole file at a time, so
+// the log is a shelf rather than a single document: reading it means picking a
+// file, and this is what the window picks from.
+type ChangeLogFile struct {
+	// Name is the file name in the data directory: `changelog.jsonl` for the one
+	// being written, `<yyyymmdd>-<n>.log` for an archived one.
+	Name string `json:"name"`
+	// Archived marks a file that is complete and will not be written to again.
+	Archived bool `json:"archived"`
+	// At is when the archive was rotated out (millis), and zero for the live file.
+	At int64 `json:"at,omitempty"`
+	// Bytes is the file's size on disk.
+	Bytes int64 `json:"bytes"`
+	// Entries is how many statements it holds. Counting them means reading it,
+	// which is why this is one call rather than a separate listing: the reader
+	// has to read the file it opens anyway.
+	Entries int `json:"entries"`
+}
+
+// ChangeLogSettings is how the change log is kept.
+//
+// The log is rotated rather than trimmed: at MaxEntries the file is moved aside
+// whole and a new one is started, so nothing a user has ever been shown
+// disappears on its own. The three bounds travel with the value so the settings
+// page validates against the same numbers the backend does, instead of
+// restating them and drifting.
+type ChangeLogSettings struct {
+	// MaxEntries is how many statements the live file holds before it is archived.
+	MaxEntries int `json:"maxEntries"`
+	// Default, Min and Max describe what MaxEntries may be. They are what the
+	// store uses; the settings page only shows them.
+	Default int `json:"default"`
+	Min     int `json:"min"`
+	Max     int `json:"max"`
 }
 
 // AppInfo is static metadata rendered on the welcome screen.

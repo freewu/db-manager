@@ -270,15 +270,32 @@ func (a *App) DeleteMockPlaceholder(name string) error {
 	return a.manager.DeleteMockPlaceholder(name)
 }
 
-// ListChangeLog returns what this application has run against the databases it
-// was pointed at, newest first: one entry per statement it executed that changed
-// schema or data, with the connection, the object and the outcome.
+// ListChangeLog returns one file of the change log, newest entry first: one
+// entry per statement this application ran that changed schema or data, with the
+// connection, the object and the outcome.
 //
 // The log is read from the data directory rather than from any server, so it can
 // be opened with nothing connected — which is the point of it: a change usually
 // needs looking up after the connection that made it is gone.
-func (a *App) ListChangeLog(limit int) (models.ChangeLog, error) {
-	return a.manager.ListChangeLog(limit)
+//
+// `file` names which file to read, empty for the one being written. The answer
+// carries the files there are to read, so the window can offer the archived ones
+// without a second call that could disagree with the first.
+func (a *App) ListChangeLog(file string, limit int) (models.ChangeLog, error) {
+	return a.manager.ListChangeLog(file, limit)
+}
+
+// ChangeLogSettings returns how many statements one change log file holds before
+// it is archived, along with the values that setting may take.
+func (a *App) ChangeLogSettings() (models.ChangeLogSettings, error) {
+	return a.manager.ChangeLogSettings()
+}
+
+// SaveChangeLogSettings stores that number and answers the settings now in
+// force, which is what the caller should show: the backend is the one that
+// decides whether a value was acceptable.
+func (a *App) SaveChangeLogSettings(settings models.ChangeLogSettings) (models.ChangeLogSettings, error) {
+	return a.manager.SaveChangeLogSettings(settings)
 }
 
 // --- metadata --------------------------------------------------------------

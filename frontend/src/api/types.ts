@@ -739,10 +739,48 @@ export interface ChangeLogConnection {
   user?: string
 }
 
-/** One page of the change log, newest entry first, plus the total behind it. */
+/**
+ * One file the change log is spread over: the live log, or an archive a rotation
+ * moved aside.
+ *
+ * The log is rotated rather than trimmed — a full file is renamed to
+ * `<yyyymmdd>-<n>.log` and a new one is started — so reading it means picking a
+ * file, and this is what the window picks from.
+ */
+export interface ChangeLogFile {
+  /** The name in the data directory: `changelog.jsonl`, or `20260214-1.log`. */
+  name: string
+  /** A complete file that will not be written to again. */
+  archived: boolean
+  /** When it was rotated out (milliseconds), for an archive. */
+  at?: number
+  bytes: number
+  /** How many statements it holds. */
+  entries: number
+}
+
+/** One file of the change log, newest first, with the files to choose between. */
 export interface ChangeLog {
+  /** Which file these entries were read from. */
+  file: string
   entries: ChangeLogEntry[]
   total: number
+  files: ChangeLogFile[]
+}
+
+/**
+ * How the change log is kept.
+ *
+ * `default`, `min` and `max` are what `maxEntries` may be, sent by the backend so
+ * the settings page checks against the same numbers it does rather than
+ * restating them.
+ */
+export interface ChangeLogSettings {
+  /** How many statements the live file holds before it is archived. */
+  maxEntries: number
+  default: number
+  min: number
+  max: number
 }
 
 /** One labelled number on a runtime status page. */

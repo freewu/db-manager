@@ -9,6 +9,7 @@ import type {
   BackendBridge,
   CellUpdate,
   ChangeLog,
+  ChangeLogSettings,
   ConnectionConfig,
   ConnectionGroup,
   ConnectionLayout,
@@ -147,13 +148,20 @@ export const api = {
 
   // --- change log ---------------------------------------------------------
   /**
-   * What this application has run against every connection, newest first.
+   * One file of the change log, newest entry first.
    *
    * It is read from the data directory rather than from a server, so it opens
    * with nothing connected — which is when a change usually needs looking up.
-   * A limit of 0 asks for the default page.
+   * A limit of 0 asks for the default page, and an empty file name asks for the
+   * file being written; the answer carries the files to choose between, so the
+   * window never has to guess what else is there.
    */
-  listChangeLog: (limit = 0) => invoke<ChangeLog>('ListChangeLog', limit),
+  listChangeLog: (file = '', limit = 0) => invoke<ChangeLog>('ListChangeLog', file, limit),
+  /** How many statements one log file holds before it is archived. */
+  changeLogSettings: () => invoke<ChangeLogSettings>('ChangeLogSettings'),
+  /** Saves it, and answers what is in force — the backend is what decides. */
+  saveChangeLogSettings: (settings: ChangeLogSettings) =>
+    invoke<ChangeLogSettings>('SaveChangeLogSettings', settings),
 
   // --- profiles -----------------------------------------------------------
   listConnections: () => invoke<ConnectionConfig[]>('ListConnections'),

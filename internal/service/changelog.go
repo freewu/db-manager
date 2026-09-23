@@ -24,6 +24,8 @@ import (
 	"strconv"
 	"time"
 
+	"dbmanager/internal/apperr"
+	"dbmanager/internal/config"
 	"dbmanager/internal/drivers"
 	"dbmanager/internal/drivers/sqlutil"
 	"dbmanager/internal/models"
@@ -43,8 +45,14 @@ const (
 	changeLogMaxPage = 2000
 )
 
-// ListChangeLog returns the newest entries first, with the total behind them.
-func (m *Manager) ListChangeLog(limit int) (models.ChangeLog, error) {
+// ListChangeLog returns the newest entries of one file first, the files the log
+// is spread over, and how many entries the file read holds.
+//
+// An empty file name means the file being written; an archived log is read by
+// the name the window got from the listing. The file list travels with the page
+// because a reader who is looking at an archive still has to be able to see that
+// a newer one exists and go back to it.
+func (m *Manager) ListChangeLog(file string, limit int) (models.ChangeLog, error) {
 	if limit <= 0 {
 		limit = changeLogDefaultPage
 	}
@@ -56,16 +64,68 @@ func (m *Manager) ListChangeLog(limit int) (models.ChangeLog, error) {
 	if store == nil {
 		// A manager built without a store has nowhere to keep a log; only a test
 		// constructs one that way, and an empty log is the honest answer.
-		return models.ChangeLog{Entries: []models.ChangeLogEntry{}}, nil
+		return models.ChangeLog{File: changeLogFileOf(file), Entries: []models.ChangeLogEntry{}, Files: []models.ChangeLogFile{}}, nil
 	}
-	entries, total, err := store.ChangeLog(limit)
+	name, err := config.ChangeLogName(file)
+	if err != nil {
+		return models.ChangeLog{}, apperr.Wrap(apperr.CodeInvalidConfig, err, "open the change log")
+	}
+	log, err := store.ChangeLog(name, limit)
 	if err != nil {
 		return models.ChangeLog{}, err
 	}
-	if entries == nil {
-		entries = []models.ChangeLogEntry{}
+	if log.Entries == nil {
+		log.Entries = []models.ChangeLogEntry{}
 	}
-	return models.ChangeLog{Entries: entries, Total: total}, nil
+	if log.Files == nil {
+		log.Files = []models.ChangeLogFile{}
+	}
+	return log, nil
+}
+
+// ChangeLogSettings reports how the log is kept, and what it may be set to.
+func (m *Manager) ChangeLogSettings() (models.ChangeLogSettings, error) {
+	store := m.storeRef()
+	if store == nil {
+		// A manager built without a store has no settings file to read; only a
+		// test constructs one that way, and the defaults are the honest answer.
+		return config.DefaultChangeLogSettings(), nil
+	}
+	return store.ChangeLogSettings()
+}
+
+// SaveChangeLogSettings stores how many statements one log file holds before it
+// is archived.
+//
+// The bounds are checked here rather than clamped quietly: the number is how
+// much history one file may hold, and a value the user did not choose is a worse
+// answer than being told what the limits are.
+func (m *Manager) SaveChangeLogSettings(settings models.ChangeLogSettings) (models.ChangeLogSettings, error) {
+	current, err := m.ChangeLogSettings()
+	if err != nil {
+		return models.ChangeLogSettings{}, err
+	}
+	if settings.MaxEntries < current.Min || settings.MaxEntries > current.Max {
+		return models.ChangeLogSettings{}, apperr.New(apperr.CodeInvalidConfig,
+			"a change log file has to hold between %d and %d statements", current.Min, current.Max)
+	}
+	store := m.storeRef()
+	if store == nil {
+		return current, nil
+	}
+	if err := store.SaveChangeLogSettings(settings); err != nil {
+		return models.ChangeLogSettings{}, apperr.Wrap(apperr.CodeInvalidConfig, err, "save the change log settings")
+	}
+	return m.ChangeLogSettings()
+}
+
+// changeLogFileOf is the file name a listing is about when there is no store to
+// ask: the live log, which is what an empty name selects.
+func changeLogFileOf(file string) string {
+	if name, err := config.ChangeLogName(file); err == nil {
+		return name
+	}
+	return file
 }
 
 // statementPlace is where a logged statement was written: the object the window

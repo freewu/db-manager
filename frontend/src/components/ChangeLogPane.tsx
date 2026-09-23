@@ -1,5 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Alert, App as AntApp, Button, Descriptions, Empty, Input, Splitter, Tag, Tooltip, Typography } from 'antd'
+import {
+  Alert,
+  App as AntApp,
+  Button,
+  Descriptions,
+  Empty,
+  Input,
+  Select,
+  Splitter,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'antd'
 import {
   CopyOutlined,
   ExclamationCircleOutlined,
@@ -8,8 +20,8 @@ import {
 } from '@ant-design/icons'
 
 import { api, toMessage } from '../api/client'
-import type { ChangeLogEntry } from '../api/types'
-import { formatTimestamp } from '../lib/format'
+import type { ChangeLogEntry, ChangeLogFile } from '../api/types'
+import { formatBytes, formatTimestamp } from '../lib/format'
 import { useAppStore } from '../store/appStore'
 import { SqlCode } from './SqlCode'
 
@@ -48,39 +60,57 @@ const SOURCE_LABEL: Record<string, string> = {
  * line here, with the connection it ran on, the object it was applied to and
  * what came of it. Nothing has to be connected for this to open, which is when
  * a change usually needs looking up.
+ *
+ * The log is not one file. When the file being written reaches the size the user
+ * set, it is moved aside as a whole — `<yyyymmdd>-<n>.log` — and a new one is
+ * started, so nothing is ever dropped and the older statements are still here.
+ * The picker in the toolbar is that shelf: it lists every file with how much is
+ * in it, and the lists below show the one that is open.
  */
 export function ChangeLogPane() {
   const drivers = useAppStore((s) => s.drivers)
   const activeTabId = useAppStore((s) => s.activeTabId)
 
   const [entries, setEntries] = useState<ChangeLogEntry[]>([])
+  const [files, setFiles] = useState<ChangeLogFile[]>([])
+  const [file, setFile] = useState('')
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState(0)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const log = await api.listChangeLog(PAGE)
-      setEntries(log.entries)
-      setTotal(log.total)
-      setError(null)
-    } catch (err) {
-      setError(toMessage(err))
-      setEntries([])
-      setTotal(0)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const load = useCallback(
+    async (name: string) => {
+      setLoading(true)
+      try {
+        const log = await api.listChangeLog(name, PAGE)
+        setEntries(log.entries)
+        setFiles(log.files)
+        setFile(log.file)
+        setTotal(log.total)
+        setSelected(0)
+        setError(null)
+      } catch (err) {
+        setError(toMessage(err))
+        setEntries([])
+        setTotal(0)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [],
+  )
 
   // Re-read when the window comes to the front: a statement is run from another
   // tab, and the only honest answer about a log of what has been run is the one
-  // that was read after the last statement was.
+  // that was read after the last statement was. Re-reading also refreshes the
+  // picker, so an archive a rotation just created is offered.
   useEffect(() => {
-    if (activeTabId === 'changelog') void load()
+    if (activeTabId === 'changelog') void load(file)
+    // `file` is deliberately not a dependency: the file is re-read when it is
+    // switched below, and re-reading it here would fight the switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId, load])
 
   const shown = useMemo(() => {
@@ -96,11 +126,37 @@ export function ChangeLogPane() {
   // A filter can remove the entry that was selected; the first of what is left
   // is a better answer than an empty pane.
   const entry = shown[Math.min(selected, shown.length - 1)]
+  const current = files.find((item) => item.name === file)
 
   return (
     <div className="dm-pane">
       <div className="dm-editor-toolbar">
         <Typography.Text strong>Change Log</Typography.Text>
+        <Select
+          size="small"
+          value={file}
+          onChange={(name) => void load(name)}
+          // A fixed width would push the filter out of a narrow window; the
+          // toolbar clips rather than wraps, so this shrinks instead.
+          style={{ flex: '1 1 300px', minWidth: 180, maxWidth: 420 }}
+          popupMatchSelectWidth={false}
+          options={files.map((item) => ({
+            value: item.name,
+            label: fileLabel(item),
+          }))}
+          // A log that has never been written has no file to pick, and one
+          // empty select is a clearer answer than a hidden control.
+          placeholder="No log yet"
+        />
+        {current?.archived ? (
+          <Tooltip
+            title={`Rotated out on ${formatTimestamp(current.at ?? 0)}. Archived logs are kept as they were and never written to again.`}
+          >
+            <Tag color="default" style={{ marginInlineEnd: 0 }}>
+              archived
+            </Tag>
+          </Tooltip>
+        ) : null}
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {total === 0
             ? 'Nothing has been run yet'
@@ -119,7 +175,13 @@ export function ChangeLogPane() {
             style={{ width: 260 }}
           />
           <Tooltip title="Read the log again">
-            <Button size="small" type="text" icon={<ReloadOutlined />} loading={loading} onClick={() => void load()} />
+            <Button
+              size="small"
+              type="text"
+              icon={<ReloadOutlined />}
+              loading={loading}
+              onClick={() => void load(file)}
+            />
           </Tooltip>
         </div>
       </div>
@@ -285,6 +347,24 @@ function EntryDetail({ entry, driverName }: { entry: ChangeLogEntry; driverName:
       <SqlCode sql={entry.statement} driver={connection.driver} className="dm-changelog-code" />
     </div>
   )
+}
+
+/**
+ * How one file reads in the picker: its name, then what is in it — the file
+ * being written says so, an archive says the day it was taken out.
+ */
+function fileLabel(file: ChangeLogFile): string {
+  const size = `${formatBytes(file.bytes)}, ${file.entries.toLocaleString()} statement${file.entries === 1 ? '' : 's'}`
+  if (!file.archived) return `${file.name} — being written (${size})`
+  return `${file.name} — archived ${shortDay(file.at ?? 0)} (${size})`
+}
+
+/** Just the date, for a line that is one line. */
+function shortDay(ms: number): string {
+  if (!ms) return ''
+  const at = new Date(ms)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`
 }
 
 /** The driver's display name, falling back to the stored id. */

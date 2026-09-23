@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -33,7 +35,7 @@ func loggedManager(t *testing.T) *Manager {
 // entries reads the whole log back.
 func entries(t *testing.T, manager *Manager) ([]models.ChangeLogEntry, int) {
 	t.Helper()
-	log, err := manager.ListChangeLog(0)
+	log, err := manager.ListChangeLog("", 0)
 	if err != nil {
 		t.Fatalf("list change log: %v", err)
 	}
@@ -215,12 +217,18 @@ func TestLoggingWithoutAStoreIsSilent(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	log, err := manager.ListChangeLog(0)
+	log, err := manager.ListChangeLog("", 0)
 	if err != nil {
 		t.Fatalf("an empty log is not an error: %v", err)
 	}
 	if log.Entries == nil || len(log.Entries) != 0 || log.Total != 0 {
 		t.Fatalf("expected an empty log, got %+v", log)
+	}
+	if log.Files == nil {
+		t.Fatalf("the file list should be an empty list, not null: %+v", log)
+	}
+	if log.File != "changelog.jsonl" {
+		t.Fatalf("an empty name is the live log, got %q", log.File)
 	}
 }
 
@@ -238,20 +246,138 @@ func TestListChangeLogClampsWhatItIsAsked(t *testing.T) {
 
 	// The default page is applied when no limit is given, and the total still
 	// says how much is behind it.
-	log, err := manager.ListChangeLog(0)
+	log, err := manager.ListChangeLog("", 0)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
 	if log.Total != 5 || len(log.Entries) != 5 {
 		t.Fatalf("expected five entries, got %d of %d", len(log.Entries), log.Total)
 	}
-	log, err = manager.ListChangeLog(-10)
+	log, err = manager.ListChangeLog("", -10)
 	if err != nil || len(log.Entries) != 5 {
 		t.Fatalf("a negative limit must fall back to the default page: %+v (%v)", log, err)
 	}
-	log, err = manager.ListChangeLog(2)
+	log, err = manager.ListChangeLog("", 2)
 	if err != nil || len(log.Entries) != 2 || log.Total != 5 {
 		t.Fatalf("expected two of five, got %d of %d (%v)", len(log.Entries), log.Total, err)
+	}
+}
+
+// A window asks for one file by name, so the backend is the one that decides
+// which names are files: the log must not become a way to read the rest of the
+// data directory.
+func TestListChangeLogRefusesAFileItDidNotWrite(t *testing.T) {
+	manager := loggedManager(t)
+	if _, err := manager.Execute(models.ExecRequest{SessionID: "s1",
+		Database: "main",
+		SQL:      "INSERT INTO orders (id, user_id) VALUES (999, 999);",
+	}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	for _, name := range []string{"connections.json", "../connections.json", "changelog.json", "notes.log"} {
+		if _, err := manager.ListChangeLog(name, 10); err == nil {
+			t.Errorf("%q was read as a change log", name)
+		}
+	}
+	// The listing the window works from says which file it is about.
+	log, err := manager.ListChangeLog("", 10)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if log.File != "changelog.jsonl" || len(log.Files) != 1 || log.Files[0].Name != log.File {
+		t.Fatalf("unexpected listing: %+v", log)
+	}
+	if log.Files[0].Archived || log.Files[0].Entries != 1 {
+		t.Fatalf("unexpected file entry: %+v", log.Files[0])
+	}
+}
+
+// An archived log is a first-class file: the window asks for it by name and gets
+// its entries, with the picker telling it what else there is.
+func TestListChangeLogReadsAnArchivedFile(t *testing.T) {
+	manager := loggedManager(t)
+
+	if _, err := manager.Execute(models.ExecRequest{SessionID: "s1",
+		Database: "main",
+		SQL:      "INSERT INTO orders (id, user_id) VALUES (900, 900);",
+	}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	// Written the way a rotation leaves one: the live file was renamed, so the
+	// archive holds whole entries in the same format.
+	archive := "20260214-1.log"
+	body := `{"version":1,"kind":"drop","source":"script","statement":"DROP TABLE old_orders;"}` + "\n" +
+		`{"version":1,"kind":"alter","source":"design","statement":"ALTER TABLE orders ADD note TEXT;"}` + "\n"
+	if err := os.WriteFile(filepath.Join(manager.storeRef().Dir(), archive), []byte(body), 0o600); err != nil {
+		t.Fatalf("write archive: %v", err)
+	}
+
+	log, err := manager.ListChangeLog(archive, 10)
+	if err != nil {
+		t.Fatalf("read the archive: %v", err)
+	}
+	if log.File != archive || log.Total != 2 || len(log.Entries) != 2 {
+		t.Fatalf("unexpected archive page: %+v", log)
+	}
+	if log.Entries[0].Statement != "ALTER TABLE orders ADD note TEXT;" {
+		t.Fatalf("the archive is not newest first: %+v", log.Entries)
+	}
+	// Both files are offered, the live one first, and each says how much it holds.
+	if len(log.Files) != 2 || log.Files[0].Name != "changelog.jsonl" || log.Files[0].Entries != 1 {
+		t.Fatalf("unexpected file listing: %+v", log.Files)
+	}
+	if !log.Files[1].Archived || log.Files[1].Name != archive || log.Files[1].Entries != 2 {
+		t.Fatalf("the archive is not listed as one: %+v", log.Files[1])
+	}
+}
+
+// The rotation size is the user's, and the backend is where it is settled: an
+// answer the frontend could have guessed is not a check.
+func TestChangeLogSettingsAreCheckedAndBounded(t *testing.T) {
+	manager := loggedManager(t)
+
+	settings, err := manager.ChangeLogSettings()
+	if err != nil {
+		t.Fatalf("read settings: %v", err)
+	}
+	if settings.MaxEntries != settings.Default || settings.Min >= settings.Max {
+		t.Fatalf("unexpected settings: %+v", settings)
+	}
+
+	saved, err := manager.SaveChangeLogSettings(models.ChangeLogSettings{MaxEntries: settings.Min})
+	if err != nil {
+		t.Fatalf("save the smallest allowed size: %v", err)
+	}
+	if saved.MaxEntries != settings.Min {
+		t.Fatalf("saving %d answered %+v", settings.Min, saved)
+	}
+	if again, err := manager.ChangeLogSettings(); err != nil || again.MaxEntries != settings.Min {
+		t.Fatalf("the choice did not stick: %+v (%v)", again, err)
+	}
+
+	for _, max := range []int{0, -1, settings.Min - 1, settings.Max + 1} {
+		if _, err := manager.SaveChangeLogSettings(models.ChangeLogSettings{MaxEntries: max}); err == nil {
+			t.Errorf("%d was accepted as a rotation size", max)
+		}
+	}
+	// A refused value changes nothing.
+	if again, err := manager.ChangeLogSettings(); err != nil || again.MaxEntries != settings.Min {
+		t.Fatalf("a refused value must not be stored: %+v (%v)", again, err)
+	}
+}
+
+// A manager with no store answers the settings page with the defaults rather
+// than with zeroes: the page is the same page either way.
+func TestChangeLogSettingsWithoutAStore(t *testing.T) {
+	manager, _ := testManager(t)
+
+	settings, err := manager.ChangeLogSettings()
+	if err != nil || settings.MaxEntries == 0 || settings.Default == 0 {
+		t.Fatalf("settings = %+v (%v)", settings, err)
+	}
+	if _, err := manager.SaveChangeLogSettings(models.ChangeLogSettings{MaxEntries: settings.Default}); err != nil {
+		t.Fatalf("saving the default should be a no-op, not an error: %v", err)
 	}
 }
 
