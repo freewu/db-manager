@@ -1053,6 +1053,23 @@ type ChangeLogSettings struct {
 	Max     int `json:"max"`
 }
 
+// DataGenSettings is how much one data generation run may write.
+//
+// It is a ceiling on the Rows box of the data generation window rather than a
+// batch size: the window still sends small batches, reports what landed as it
+// goes, and stops the moment it is told to. The three bounds travel with the
+// value so the settings page validates against the same numbers the backend
+// does, instead of restating them and drifting.
+type DataGenSettings struct {
+	// MaxRows is the most rows one run may write.
+	MaxRows int `json:"maxRows"`
+	// Default, Min and Max describe what MaxRows may be. They are what the store
+	// uses; the settings page only shows them.
+	Default int `json:"default"`
+	Min     int `json:"min"`
+	Max     int `json:"max"`
+}
+
 // AppInfo is static metadata rendered on the welcome screen.
 type AppInfo struct {
 	Name       string `json:"name"`

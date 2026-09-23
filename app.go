@@ -427,6 +427,19 @@ func (a *App) InsertRows(req models.RowInsert) (models.RowInsertResult, error) {
 	return a.manager.InsertRows(req)
 }
 
+// DataGenSettings returns how many rows one generation run may write, along with
+// the values that setting may take.
+func (a *App) DataGenSettings() (models.DataGenSettings, error) {
+	return a.manager.DataGenSettings()
+}
+
+// SaveDataGenSettings stores that number and answers the settings now in force,
+// which is what the caller should show: the backend is the one that decides
+// whether a value was acceptable.
+func (a *App) SaveDataGenSettings(settings models.DataGenSettings) (models.DataGenSettings, error) {
+	return a.manager.SaveDataGenSettings(settings)
+}
+
 // --- file helpers ----------------------------------------------------------
 
 // SaveTextFile prompts for a location and writes text content there. The

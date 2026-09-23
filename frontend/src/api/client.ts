@@ -16,6 +16,7 @@ import type {
   CreateDatabaseRequest,
   DataDirInfo,
   DataDirMoveResult,
+  DataGenSettings,
   DatabaseOptions,
   DatabasePlan,
   DesignPlan,
@@ -245,6 +246,11 @@ export const api = {
    * asked to skip — not as a rejection.
    */
   insertRows: (req: RowInsert) => invoke<RowInsertResult>('InsertRows', req),
+  /** How many rows one generation run may write, and what it may be set to. */
+  dataGenSettings: () => invoke<DataGenSettings>('DataGenSettings'),
+  /** Saves it, and answers what is in force — the backend is what decides. */
+  saveDataGenSettings: (settings: DataGenSettings) =>
+    invoke<DataGenSettings>('SaveDataGenSettings', settings),
 
   // --- files --------------------------------------------------------------
   saveTextFile: (req: SaveFileRequest) => invoke<string>('SaveTextFile', req),

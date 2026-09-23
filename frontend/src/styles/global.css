@@ -733,11 +733,20 @@ body {
   min-height: 320px;
 }
 
-/* The tab strip is the long part — forty placeholders are six groups — so it
-   scrolls on its own rather than pushing the pane off the modal. */
+/* The tab strip is the long part — seven groups is more than a short window
+   holds — so it scrolls on its own rather than pushing the pane off the modal.
+   The clipping happens one level in: antd hides the list with `overflow:
+   hidden` on `.ant-tabs-nav-wrap`, so a scrollbar on the outer nav only ever
+   moved its own padding (five pixels of it) and the wheel went on to the modal
+   body, leaving the last groups out of reach. The wrap has to stop clipping for
+   the nav to be the thing that scrolls. */
 .dm-mock-tabs > .ant-tabs-nav {
   max-height: 52vh;
   overflow: auto;
+}
+
+.dm-mock-tabs > .ant-tabs-nav .ant-tabs-nav-wrap {
+  overflow: visible;
 }
 
 .dm-mock-tabs > .ant-tabs-nav .ant-tabs-nav-list {

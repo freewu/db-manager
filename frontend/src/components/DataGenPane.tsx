@@ -95,9 +95,18 @@ import { useColumnResize } from './ResizableHeader'
  */
 const INSERT_BATCH = 200
 
-/** Rows a run starts with, and the most one run may be asked for. */
+/** Rows a run starts with. The ceiling is the backend's — see the settings page. */
 const DEFAULT_ROWS = 100
-const MAX_ROWS = 100000
+
+/**
+ * What the Rows box allows until the backend has been asked for its ceiling.
+ *
+ * The number is a setting (Settings → Data generation → Rows per run), so this is
+ * only what the window assumes while it is being read, and in a window that has
+ * no backend to read it from at all. It matches the backend's default so that the
+ * box does not move under the user's fingers once the answer arrives.
+ */
+const FALLBACK_MAX_ROWS = 1000000
 
 /** The separator used inside this window's own keys; it cannot occur in a name. */
 const SEP = '\u0000'
@@ -203,6 +212,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
   const loadObjects = useAppStore((s) => s.loadObjects)
   const openDataGenTab = useAppStore((s) => s.openDataGenTab)
   const storedPlaceholders = useAppStore((s) => s.mockPlaceholders)
+  const dataGenSettings = useAppStore((s) => s.dataGenSettings)
   const refreshMockPlaceholders = useAppStore((s) => s.refreshMockPlaceholders)
 
   const driver = drivers.find((d) => d.type === session?.driver)
@@ -230,6 +240,10 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
   const [chosen, setChosen] = useState<Record<string, Record<string, boolean>>>({})
   const [pickerField, setPickerField] = useState<string>()
   const [rowsToWrite, setRowsToWrite] = useState(DEFAULT_ROWS)
+  // The ceiling is a setting rather than a constant of this window: what one run
+  // may write is an answer about the installation, and the settings page is where
+  // it is given. Until it has been read, the window allows its own default.
+  const maxRows = dataGenSettings?.maxRows ?? FALLBACK_MAX_ROWS
   /**
    * Whether a row the engine refuses is left out or ends the run. Off by
    * default: a mock that keeps producing rows the table will not take is
@@ -792,15 +806,15 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                   <InputNumber
                     size="small"
                     min={1}
-                    max={MAX_ROWS}
+                    max={maxRows}
                     value={rowsToWrite}
                     disabled={running}
-                    onChange={(value) => setRowsToWrite(Math.max(1, Math.min(MAX_ROWS, Number(value ?? DEFAULT_ROWS))))}
+                    onChange={(value) => setRowsToWrite(Math.max(1, Math.min(maxRows, Number(value ?? DEFAULT_ROWS))))}
                     style={{ width: 96 }}
                   />
-                  <Tooltip title={`At most ${MAX_ROWS.toLocaleString()} rows per run`}>
+                  <Tooltip title={`At most ${maxRows.toLocaleString()} rows per run`}>
                     <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                      max {MAX_ROWS.toLocaleString()}
+                      max {maxRows.toLocaleString()}
                     </Typography.Text>
                   </Tooltip>
                   <Tooltip

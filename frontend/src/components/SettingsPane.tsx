@@ -24,12 +24,13 @@ import { CODE_LANGUAGES } from '../lib/codegen'
 import { THEME_MODES, type ThemeMode } from '../lib/theme'
 
 /** The pages of the settings, in the order they are shown. */
-type SettingsTab = 'appearance' | 'code' | 'mock' | 'data' | 'about'
+type SettingsTab = 'appearance' | 'code' | 'mock' | 'generation' | 'data' | 'about'
 
 const TABS: { key: SettingsTab; label: string }[] = [
   { key: 'appearance', label: 'Appearance' },
   { key: 'code', label: 'Code generation' },
   { key: 'mock', label: 'Mock placeholders' },
+  { key: 'generation', label: 'Data generation' },
   { key: 'data', label: 'Data folder' },
   { key: 'about', label: 'About' },
 ]
@@ -53,8 +54,9 @@ const LANGUAGE_OPTIONS = [...CODE_LANGUAGES]
   .map((language) => ({ value: language.id, label: language.label }))
 
 /**
- * Program settings: how the window looks, where the data is kept, what mock
- * placeholders exist, and what this build is.
+ * Program settings: how the window looks, what the code windows open in, what
+ * mock placeholders exist, how much one data generation run may write, where the
+ * data is kept, and what this build is.
  *
  * This is a page rather than a dialog, like the other three the rail names: it is
  * somewhere the user goes and comes back from, not something that opens over
@@ -284,6 +286,16 @@ export function SettingsPane() {
 
           <section
             className="dm-settings-section"
+            id={sectionId('generation')}
+            role="tabpanel"
+            aria-label="Data generation"
+          >
+            <h2 className="dm-settings-section-title">Data generation</h2>
+            <DataGenRows />
+          </section>
+
+          <section
+            className="dm-settings-section"
             id={sectionId('data')}
             role="tabpanel"
             aria-label="Data folder"
@@ -459,6 +471,95 @@ function ChangeLogSize() {
           <Tooltip title={`${settings.min.toLocaleString()} – ${settings.max.toLocaleString()}`}>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {settings.maxEntries === settings.default
+                ? `${settings.default.toLocaleString()} by default`
+                : `changed from ${settings.default.toLocaleString()}`}
+            </Typography.Text>
+          </Tooltip>
+        ) : null}
+      </Space>
+    </SettingRow>
+  )
+}
+
+/** How many rows one data generation run may write. */
+function DataGenRows() {
+  const { message } = AntApp.useApp()
+  const settings = useAppStore((s) => s.dataGenSettings)
+  const refresh = useAppStore((s) => s.refreshDataGenSettings)
+  const store = useAppStore((s) => s.saveDataGenSettings)
+  const [value, setValue] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | undefined>()
+  // Read when the page comes to the front, like the rotation size below: the
+  // number belongs to the backend and the data generation window reads it back
+  // from the store, so what is on screen has to be what would be used rather than
+  // what this page last saw.
+  const active = useAppStore((s) => s.page === 'settings')
+  useEffect(() => {
+    if (!active) return
+    void refresh()
+      .then((current) => {
+        setValue(current.maxRows)
+        setError(undefined)
+      })
+      .catch((err) => setError(toMessage(err)))
+  }, [active, refresh])
+
+  const apply = async (maxRows: number) => {
+    if (!settings) return
+    setBusy(true)
+    setError(undefined)
+    try {
+      // What comes back is what is in force, which is the backend's decision and
+      // not something this page gets to assume.
+      const saved = await store({ ...settings, maxRows })
+      setValue(saved.maxRows)
+      message.success(`A run may now write ${saved.maxRows.toLocaleString()} rows`)
+    } catch (err) {
+      setError(toMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const changed = settings !== undefined && value !== null && value !== settings.maxRows
+
+  return (
+    <SettingRow
+      title="Rows per run"
+      hint="The ceiling of the Rows box in the data generation window, kept in datagen.json in the data directory. It is not a batch size: rows still go in, in small batches, and the run reports what landed as it goes."
+    >
+      {error ? (
+        <Alert
+          type="error"
+          showIcon
+          title={settings ? 'The row limit could not be saved' : 'The row limit could not be read'}
+          description={error}
+        />
+      ) : null}
+      <Space wrap>
+        <InputNumber
+          min={settings?.min ?? 100}
+          max={settings?.max ?? 100000000}
+          step={1000}
+          disabled={settings === undefined}
+          value={value}
+          onChange={setValue}
+          addonAfter="rows"
+          style={{ width: 220 }}
+        />
+        <Button
+          type="primary"
+          loading={busy}
+          disabled={!changed || value === null}
+          onClick={() => value !== null && void apply(value)}
+        >
+          Save
+        </Button>
+        {settings ? (
+          <Tooltip title={`${settings.min.toLocaleString()} – ${settings.max.toLocaleString()}`}>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              {settings.maxRows === settings.default
                 ? `${settings.default.toLocaleString()} by default`
                 : `changed from ${settings.default.toLocaleString()}`}
             </Typography.Text>

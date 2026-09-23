@@ -19,7 +19,7 @@
  * could only fail); it is reported instead, with a pointer to the settings page
  * where it can be removed.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Empty, Input, Modal, Tabs, Tag, Typography } from 'antd'
 
 import {
@@ -33,6 +33,29 @@ import { useAppStore } from '../store/appStore'
 
 /** The key of the tab holding the user's own placeholders. */
 const CUSTOM_GROUP = 'custom'
+
+/**
+ * How long the next scroll notch waits before it walks another group. A wheel
+ * fires a burst of events per notch, so without a cooldown one flick would run
+ * from the first group to the last.
+ */
+const WHEEL_COOLDOWN_MS = 150
+
+/**
+ * Brings the group that just became active into the strip's own view.
+ *
+ * The strip is read from the top, so the tab being read has to be the one on
+ * screen. Measured from the rectangles rather than `offsetTop`, because the nav
+ * is not the tab's offset parent.
+ */
+function showActiveTab(host: HTMLElement) {
+  const nav = host.querySelector<HTMLElement>('.ant-tabs-nav')
+  const tab = nav?.querySelector<HTMLElement>('.ant-tabs-tab-active')
+  if (!nav || !tab || nav.scrollHeight <= nav.clientHeight) return
+  const navBox = nav.getBoundingClientRect()
+  const tabBox = tab.getBoundingClientRect()
+  nav.scrollTop += tabBox.top + tabBox.height / 2 - (navBox.top + navBox.height / 2)
+}
 
 interface MockPickerModalProps {
   /** The field being filled; the modal is closed while this is undefined. */
@@ -86,6 +109,8 @@ function PlaceholderTile({
 export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps) {
   const [query, setQuery] = useState('')
   const [group, setGroup] = useState(PLACEHOLDER_GROUPS[0].key)
+  const unbindStrip = useRef<(() => void) | null>(null)
+  const steppedAt = useRef(0)
 
   const stored = useAppStore((state) => state.mockPlaceholders)
   const refreshMockPlaceholders = useAppStore((state) => state.refreshMockPlaceholders)
@@ -130,6 +155,53 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
       },
     ],
     [placeholders],
+  )
+
+  /**
+   * The wheel over the tab strip walks the groups.
+   *
+   * The groups are a column down the left, and a column that answers the wheel
+   * by moving two pixels reads as broken: the wheel over it is how the next group
+   * is reached.
+   *
+   * The listener is bound to the strip's element rather than to a ref read in an
+   * effect, because the modal's body is only mounted a render or two after it
+   * opens — an effect would run with nothing to listen on. It is registered in
+   * the capture phase so that the event stops here: antd slides the tab list
+   * under the wheel as well, and a strip that both walks the groups and slides
+   * under them moves two groups at a time.
+   *
+   * Only the strip: the tiles below are a list of their own, and a wheel over
+   * them scrolls them.
+   */
+  const bindStrip = useCallback(
+    (node: HTMLDivElement | null) => {
+      unbindStrip.current?.()
+      unbindStrip.current = null
+      if (!node) return
+      const onWheel = (event: WheelEvent) => {
+        const target = event.target as HTMLElement | null
+        if (!target?.closest('.ant-tabs-nav') || Math.abs(event.deltaY) < 4) return
+        const at = groups.findIndex((entry) => entry.key === group)
+        const next = at < 0 ? undefined : groups[at + (event.deltaY > 0 ? 1 : -1)]
+        // At either end there is no next group, and the wheel is left to the strip
+        // itself — it may have a notch of its own to give.
+        if (!next) return
+        event.preventDefault()
+        event.stopPropagation()
+        // One group per notch: a wheel fires a burst of events per notch, and
+        // without the wait a single flick would run from the first group to the
+        // last.
+        const now = Date.now()
+        if (now - steppedAt.current < WHEEL_COOLDOWN_MS) return
+        steppedAt.current = now
+        setGroup(next.key)
+        window.requestAnimationFrame(() => showActiveTab(node))
+      }
+      node.addEventListener('wheel', onWheel, { capture: true })
+      unbindStrip.current = () => node.removeEventListener('wheel', onWheel, { capture: true })
+    },
+    [groups, group],
   )
 
   const needle = query.trim().toLowerCase()
@@ -181,65 +253,67 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
         style={{ marginBottom: 8 }}
       />
       {brokenNote}
-      {needle ? (
-        matches.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No placeholder matches" />
-        ) : (
-          <div className="dm-mock-pane">
-            <div className="dm-mock-tiles">
-              {matches.map(({ group: label, item }) => (
-                <PlaceholderTile
-                  key={`${label}:${item.value}`}
-                  item={item}
-                  placeholders={placeholders}
-                  tag={label}
-                  onPick={onPick}
-                />
-              ))}
-            </div>
-          </div>
-        )
-      ) : (
-        <Tabs
-          className="dm-mock-tabs"
-          tabPosition="left"
-          size="small"
-          activeKey={group}
-          onChange={setGroup}
-          items={groups.map((entry) => ({
-            key: entry.key,
-            label: entry.label,
-            children: (
-              <div className="dm-mock-pane">
-                {entry.items.length === 0 ? (
-                  <Empty
-                    image={Empty.PRESENTED_IMAGE_SIMPLE}
-                    description={
-                      <span>
-                        No custom placeholder yet.
-                        <br />
-                        Settings › Mock placeholders writes one — a name for a template such as{' '}
-                        <span className="mono">SO@date(yyyy)@natural(1000, 9999)</span>.
-                      </span>
-                    }
+      <div ref={bindStrip}>
+        {needle ? (
+          matches.length === 0 ? (
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No placeholder matches" />
+          ) : (
+            <div className="dm-mock-pane">
+              <div className="dm-mock-tiles">
+                {matches.map(({ group: label, item }) => (
+                  <PlaceholderTile
+                    key={`${label}:${item.value}`}
+                    item={item}
+                    placeholders={placeholders}
+                    tag={label}
+                    onPick={onPick}
                   />
-                ) : (
-                  <div className="dm-mock-tiles">
-                    {entry.items.map((item) => (
-                      <PlaceholderTile
-                        key={item.value}
-                        item={item}
-                        placeholders={placeholders}
-                        onPick={onPick}
-                      />
-                    ))}
-                  </div>
-                )}
+                ))}
               </div>
-            ),
-          }))}
-        />
-      )}
+            </div>
+          )
+        ) : (
+          <Tabs
+            className="dm-mock-tabs"
+            tabPosition="left"
+            size="small"
+            activeKey={group}
+            onChange={setGroup}
+            items={groups.map((entry) => ({
+              key: entry.key,
+              label: entry.label,
+              children: (
+                <div className="dm-mock-pane">
+                  {entry.items.length === 0 ? (
+                    <Empty
+                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      description={
+                        <span>
+                          No custom placeholder yet.
+                          <br />
+                          Settings › Mock placeholders writes one — a name for a template such as{' '}
+                          <span className="mono">SO@date(yyyy)@natural(1000, 9999)</span>.
+                        </span>
+                      }
+                    />
+                  ) : (
+                    <div className="dm-mock-tiles">
+                      {entry.items.map((item) => (
+                        <PlaceholderTile
+                          key={item.value}
+                          item={item}
+                          placeholders={placeholders}
+                          onPick={onPick}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ),
+            }))}
+          />
+        )}
+      </div>
     </Modal>
   )
 }

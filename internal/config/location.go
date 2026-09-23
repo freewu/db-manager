@@ -37,8 +37,9 @@ const locationFile = "location.json"
 
 // dataFiles are the files this build keeps in the data directory: the profiles,
 // the query favourites, the explorer arrangement, the UI state, the key the
-// saved passwords are sealed with, the change log, and the change log's own
-// settings. The folders beside them are in dataDirs.
+// saved passwords are sealed with, the change log, the change log's own
+// settings, and the data generation cap. The folders beside them are in
+// dataDirs.
 //
 // A feature that starts writing a new file (or a new folder) here has to add it
 // to one of those lists, or a move will leave it behind — and now *say* it did,
@@ -54,6 +55,7 @@ var dataFiles = []string{
 	secret.KeyFileName,
 	changeLogFile,
 	changeLogSettingsFile,
+	datagenSettingsFile,
 }
 
 // dataDirs are the folders this build keeps in the data directory, next to the

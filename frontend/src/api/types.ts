@@ -596,6 +596,22 @@ export interface RowInsertResult {
   error?: string
 }
 
+/**
+ * How much one data generation run may write.
+ *
+ * It is the ceiling of the window's Rows box, not a batch size: the window still
+ * sends small batches and stops when it is told to. `default`, `min` and `max`
+ * are what `maxRows` may be, sent by the backend so the settings page checks
+ * against the same numbers it does rather than restating them.
+ */
+export interface DataGenSettings {
+  /** The most rows one run may write. */
+  maxRows: number
+  default: number
+  min: number
+  max: number
+}
+
 export interface FileFilter {
   displayName: string
   pattern: string

@@ -18,6 +18,7 @@ import type {
   ConnectionLayout,
   DataDirInfo,
   DataDirMoveResult,
+  DataGenSettings,
   DriverInfo,
   IndexEntry,
   MockPlaceholder,
@@ -286,6 +287,15 @@ interface AppState {
    * directory moves them too.
    */
   mockPlaceholders: MockPlaceholder[]
+  /**
+   * The ceiling on one data generation run, as the data generation window and
+   * the settings page both read it. It is the backend's number: the window shows
+   * it and the settings page edits it, and both go through here so the two can
+   * never disagree about what is in force. Absent until the backend has been
+   * asked — see `FALLBACK_MAX_ROWS` in the data generation window for what that
+   * window allows in the meantime.
+   */
+  dataGenSettings?: DataGenSettings
   editorOpen: boolean
   editorDraft?: ConnectionDraft
 
@@ -312,6 +322,10 @@ interface AppState {
   /** Creates or updates one custom placeholder, keyed by its name. */
   saveMockPlaceholder: (placeholder: MockPlaceholder) => Promise<MockPlaceholder>
   deleteMockPlaceholder: (name: string) => Promise<void>
+  /** Re-reads the data generation cap the settings page can change. */
+  refreshDataGenSettings: () => Promise<DataGenSettings>
+  /** Stores a new cap; answers what is in force, the backend being what decides. */
+  saveDataGenSettings: (settings: DataGenSettings) => Promise<DataGenSettings>
 
   refreshConnections: () => Promise<void>
   /** Re-reads the arrangement alone, for changes the profiles do not show
@@ -658,6 +672,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         mockPlaceholders,
         persisted,
         dataDir,
+        dataGenSettings,
       ] = await Promise.all([
           api.appInfo(),
           api.listDrivers(),
@@ -673,6 +688,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           // The data directory is only reported by the settings page; failing to
           // read it must not keep the app from starting.
           api.getDataDir().catch(() => undefined),
+          // Same for the data generation cap: the window falls back to its own
+          // ceiling, and the settings page says it could not be read.
+          api.dataGenSettings().catch(() => undefined),
         ])
 
       const stored = persisted?.[STATE_KEY] as
@@ -703,6 +721,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         savedQueries,
         mockPlaceholders,
         dataDir,
+        dataGenSettings,
         theme,
         resolvedTheme: resolveTheme(theme),
         codegenLanguage,
@@ -840,6 +859,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   async deleteMockPlaceholder(name) {
     await api.deleteMockPlaceholder(name)
     await get().refreshMockPlaceholders()
+  },
+
+  async refreshDataGenSettings() {
+    const settings = await api.dataGenSettings()
+    set({ dataGenSettings: settings })
+    return settings
+  },
+
+  async saveDataGenSettings(settings) {
+    const saved = await api.saveDataGenSettings(settings)
+    set({ dataGenSettings: saved })
+    return saved
   },
 
   async saveConnection(cfg, groupId) {
