@@ -2118,3 +2118,103 @@ body {
     0 6px 16px -8px rgba(0, 0, 0, 0.16),
     0 9px 28px 0 rgba(0, 0, 0, 0.08);
 }
+
+/* ---- change log ----------------------------------------------------------- */
+
+/* The list of what has been run. It scrolls on its own so the details beside it
+   stay put while the reader walks down the history. */
+.dm-changelog-list {
+  height: 100%;
+  overflow: auto;
+  border-right: 1px solid var(--dm-border);
+}
+
+/* One entry is one button: the whole row is the target, so a mis-click is not
+   possible and the keyboard can walk the log. */
+.dm-changelog-row {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--dm-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dm-changelog-row:hover {
+  background: var(--dm-tree-hover);
+}
+
+.dm-changelog-row.is-active {
+  background: var(--dm-accent-soft);
+}
+
+.dm-changelog-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dm-changelog-when {
+  font-family: var(--dm-mono);
+  font-size: 11px;
+  color: var(--dm-null);
+  white-space: nowrap;
+}
+
+/* Pushed to the far end: what a statement was applied to is the other half of
+   "when" and "what", and it lines up down the list. */
+.dm-changelog-where {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.dm-changelog-row-sql {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--dm-mono);
+  font-size: 11px;
+  color: var(--dm-null);
+}
+
+.dm-changelog-detail {
+  padding: 12px;
+}
+
+.dm-changelog-body {
+  max-width: 900px;
+}
+
+/* Labels take the width they need and the values start in one column. */
+.dm-changelog-meta .ant-descriptions-item-label {
+  width: 110px;
+  color: var(--dm-null);
+}
+
+.dm-changelog-note {
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.dm-changelog-statement-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+/* The statement is the reason the window is open, so it is not capped at the
+   height a DDL preview uses: it scrolls in place. */
+.dm-changelog-code {
+  max-height: none;
+}

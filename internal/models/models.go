@@ -496,6 +496,14 @@ type ScriptStatement struct {
 	// Destructive marks statements that can lose schema or data.
 	Destructive bool   `json:"destructive"`
 	Reason      string `json:"reason,omitempty"`
+	// SQL is the statement as it was written, which is what the change log keeps
+	// — a preview is for showing next to an editor, not for recording what was
+	// run.
+	//
+	// It never crosses the bridge: the window that asked for the analysis already
+	// holds the whole script, so sending the statements back would double the
+	// message for nothing.
+	SQL string `json:"-"`
 }
 
 // ScriptAnalysis is the dry run the DDL editor shows before running anything.
@@ -704,6 +712,13 @@ type FetchResult struct {
 type ExecRequest struct {
 	SessionID string `json:"sessionId"`
 	Database  string `json:"database,omitempty"`
+	// Schema and Object are the place the script was written against, when it has
+	// one: the DDL editor of a table runs that table's script. They are not sent
+	// to the engine — the script names what it touches itself — but they are what
+	// the change log records as the object of the statements it ran, since the
+	// window knows and the text would have to be parsed to find out.
+	Schema    string `json:"schema,omitempty"`
+	Object    string `json:"object,omitempty"`
 	SQL       string `json:"sql"`
 	MaxRows   int    `json:"maxRows,omitempty"`
 	TimeoutMS int    `json:"timeoutMs,omitempty"`
@@ -879,6 +894,85 @@ type MockPlaceholder struct {
 	// so a placeholder that was hand-edited into something unparseable can be
 	// seen — and deleted — from the settings page instead of quietly vanishing.
 	Broken string `json:"broken,omitempty"`
+}
+
+// --- change log ------------------------------------------------------------
+
+// Where a logged statement came from: which window of the application asked for
+// it to run. The value travels with the entry, so the log keeps saying where a
+// statement was written long after that window is closed.
+const (
+	// ChangeSourceScript is a window that runs text the user wrote: the query
+	// window, the DDL editor, a database being created.
+	ChangeSourceScript = "script"
+	// ChangeSourceDesign is the structure page saving a draft of an existing
+	// table.
+	ChangeSourceDesign = "design"
+	// ChangeSourceCreate is the table designer creating one.
+	ChangeSourceCreate = "create"
+)
+
+// ChangeLogEntry is one statement this application ran that changed schema or
+// data.
+//
+// The log is a record of what the program did to the databases it was pointed
+// at: every statement it executed other than a read, when it ran it, where, and
+// what came of it. It is written by the layer that executes statements, not by
+// the windows, so a statement cannot be run through the application without
+// leaving a line behind — and the whole "Structure Sync" slot is answered by
+// reading the file rather than by contacting an engine.
+//
+// Table is the object the statement was applied to, which is *context* rather
+// than something parsed out of the text: the structure page knows the table it
+// saved, the DDL editor knows the table whose script it runs, and a query window
+// knows only the database. It is empty for a statement that creates a table — a
+// table that does not exist yet is not an object an entry can point at, and its
+// name is written in the statement itself.
+//
+// Error is the message the run ended with, and is empty when it finished. A
+// script goes to the engine in one call, so a run that stops halfway leaves the
+// same message on each of its statements: the entry says what the run said, and
+// never more than the engine did.
+type ChangeLogEntry struct {
+	Version int   `json:"version"`
+	At      int64 `json:"at"`
+
+	Connection ChangeLogConnection `json:"connection"`
+	Database   string              `json:"database,omitempty"`
+	Schema     string              `json:"schema,omitempty"`
+	Table      string              `json:"table,omitempty"`
+
+	// Kind is the statement's own leading keyword, lowercased ("create",
+	// "alter", "drop", "insert", …), so the list can be scanned by what was
+	// done rather than by a category.
+	Kind string `json:"kind"`
+	// Source is one of the ChangeSource values above.
+	Source    string `json:"source"`
+	Statement string `json:"statement"`
+	Error     string `json:"error,omitempty"`
+}
+
+// ChangeLogConnection is what an entry remembers about the connection it ran on.
+//
+// It is copied at write time rather than looked up when the log is read: profiles
+// get renamed, re-pointed and deleted, and a log that changes its mind about
+// where a statement ran is not a log. Nothing secret is kept — the address and
+// the user name are what a reader needs to tell two servers apart.
+type ChangeLogConnection struct {
+	ID      string     `json:"id,omitempty"`
+	Name    string     `json:"name,omitempty"`
+	Driver  DriverType `json:"driver,omitempty"`
+	Address string     `json:"address,omitempty"`
+	User    string     `json:"user,omitempty"`
+}
+
+// ChangeLog is one page of the log, newest entry first.
+//
+// Total is how many entries the file holds, which is what lets the window say
+// "the newest 200 of 1,248" instead of pretending a page is the whole story.
+type ChangeLog struct {
+	Entries []ChangeLogEntry `json:"entries"`
+	Total   int              `json:"total"`
 }
 
 // AppInfo is static metadata rendered on the welcome screen.

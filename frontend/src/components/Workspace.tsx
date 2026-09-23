@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
 import { App as AntApp, Button, Space, Tabs, Tag, Tooltip, Typography } from 'antd'
 import type { TabsProps } from 'antd'
-import { CodeOutlined, DashboardOutlined, ExperimentOutlined, FileTextOutlined, FolderOutlined, PartitionOutlined, PlusOutlined, TableOutlined } from '@ant-design/icons'
+import { CodeOutlined, DashboardOutlined, ExperimentOutlined, FileTextOutlined, FolderOutlined, HistoryOutlined, PartitionOutlined, PlusOutlined, TableOutlined } from '@ant-design/icons'
 
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
+import { ChangeLogPane } from './ChangeLogPane'
 import { DataGenPane } from './DataGenPane'
 import { DdlPane } from './DdlPane'
 import { CodegenPane } from './CodegenPane'
@@ -73,6 +74,8 @@ export function Workspace() {
             <ErDiagramPane tab={tab} />
           ) : tab.kind === 'runtime' ? (
             <RuntimePane tab={tab} />
+          ) : tab.kind === 'changelog' ? (
+            <ChangeLogPane />
           ) : (
             <TablePane tab={tab} />
           ),
@@ -155,6 +158,8 @@ function TabLabel({ tab, sessionName }: { tab: WorkspaceTab; sessionName?: strin
         <PartitionOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'runtime' ? (
         <DashboardOutlined style={{ opacity: 0.7 }} />
+      ) : tab.kind === 'changelog' ? (
+        <HistoryOutlined style={{ opacity: 0.7 }} />
       ) : (
         <TableOutlined style={{ opacity: 0.7 }} />
       )}

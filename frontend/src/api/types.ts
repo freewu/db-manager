@@ -469,6 +469,18 @@ export interface FetchResult extends QueryResult {
 export interface ExecRequest {
   sessionId: string
   database?: string
+  /**
+   * The namespace and object the script was written against, when the window
+   * knows one: the DDL editor of a table runs that table's script.
+   *
+   * They are not sent to the engine — the script names what it touches itself —
+   * but they are what the change log records as the object of the statements it
+   * ran, because the window knows and the text would have to be parsed to find
+   * out. A query window is written against a database, not a table, so it leaves
+   * these empty.
+   */
+  schema?: string
+  object?: string
   sql: string
   maxRows?: number
   timeoutMs?: number
@@ -683,6 +695,54 @@ export interface MockPlaceholder {
   updatedAt?: number
   /** Set when the file could not be read: it is listed so it can be deleted. */
   broken?: string
+}
+
+/**
+ * One statement this application ran that changed schema or data.
+ *
+ * The log is written by the layer that executes statements, so every statement
+ * the app runs — other than a read — leaves a line behind. Data the app writes
+ * through the grid and the data generation window is not here: those are
+ * statements the app builds itself, with bound values and no text a user ever
+ * read.
+ */
+export interface ChangeLogEntry {
+  version: number
+  /** Milliseconds since the epoch, when the statement ran. */
+  at: number
+  connection: ChangeLogConnection
+  database?: string
+  schema?: string
+  /**
+   * What the statement was applied to, from the window that ran it — never
+   * parsed out of the SQL. Empty for a statement that creates a table: nothing
+   * points at it yet, and the name it introduces is in the statement itself.
+   */
+  table?: string
+  /** The statement's own leading keyword, lowercased: `create`, `alter`, `insert`, … */
+  kind: string
+  /** Where it came from: `script`, `design` or `create`. */
+  source: string
+  statement: string
+  /** What the run ended with. A script goes to the engine in one call, so a run
+   * that stopped halfway carries its message on every statement of that run. */
+  error?: string
+}
+
+/** What an entry remembers about the connection it ran on, copied when it ran. */
+export interface ChangeLogConnection {
+  id?: string
+  name?: string
+  driver?: DriverType
+  /** host:port, or the file a file-backed database lives in. */
+  address?: string
+  user?: string
+}
+
+/** One page of the change log, newest entry first, plus the total behind it. */
+export interface ChangeLog {
+  entries: ChangeLogEntry[]
+  total: number
 }
 
 /** One labelled number on a runtime status page. */

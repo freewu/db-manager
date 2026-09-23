@@ -332,6 +332,7 @@ const FILE_PURPOSE: Record<string, string> = {
   'layout.json': 'Groups and order of the connection tree',
   'state.json': 'Window state and preferences',
   'secret.key': 'Key that opens the saved passwords — unreadable on another machine',
+  'changelog.jsonl': 'What this program has run, one statement per line',
   '.mock': 'Custom mock placeholders, one file each',
   '.query': 'Saved scripts, one file each',
 }

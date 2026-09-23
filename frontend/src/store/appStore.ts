@@ -64,6 +64,7 @@ export type TabKind =
   | 'datagen'
   | 'er'
   | 'runtime'
+  | 'changelog'
 
 /**
  * The id of a saved-script window.
@@ -423,6 +424,11 @@ interface AppState {
   openErTab: (sessionId: string, database: string, schema: string) => void
   /** Opens the live status page of a connection (one per session). */
   openRuntimeTab: (sessionId: string) => void
+  /**
+   * Opens the change log: what this application has run against the databases
+   * it was pointed at, newest first.
+   */
+  openChangeLog: () => void
   setTabView: (tabId: string, view: TableView) => void
 
   /**
@@ -1293,6 +1299,23 @@ export const useAppStore = create<AppState>((set, get) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       activeTabId: id,
       ...focused(state, sessionId),
+    }))
+  },
+
+  openChangeLog() {
+    // One window, not one per connection: the log covers every connection this
+    // application has touched, so a copy per session would be the same file read
+    // twice. It is also the one window that opens with nothing connected.
+    const id = 'changelog'
+    const tab: WorkspaceTab = {
+      id,
+      kind: 'changelog',
+      sessionId: '',
+      title: 'Change Log',
+    }
+    set((state) => ({
+      tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
+      activeTabId: id,
     }))
   },
 

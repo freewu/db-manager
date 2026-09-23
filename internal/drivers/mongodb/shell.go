@@ -176,6 +176,9 @@ func (c *Conn) AnalyzeScript(script string, readOnly bool) models.ScriptAnalysis
 			Index:   i,
 			Preview: previewStatement(raw),
 			Kind:    sqlutil.KindUnknown,
+			// The statement as written, for the change log to record if a window
+			// runs it — a preview is for showing, not for keeping.
+			SQL: strings.TrimSpace(raw),
 		}
 
 		st, err := parseStatement(raw)

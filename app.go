@@ -270,6 +270,17 @@ func (a *App) DeleteMockPlaceholder(name string) error {
 	return a.manager.DeleteMockPlaceholder(name)
 }
 
+// ListChangeLog returns what this application has run against the databases it
+// was pointed at, newest first: one entry per statement it executed that changed
+// schema or data, with the connection, the object and the outcome.
+//
+// The log is read from the data directory rather than from any server, so it can
+// be opened with nothing connected — which is the point of it: a change usually
+// needs looking up after the connection that made it is gone.
+func (a *App) ListChangeLog(limit int) (models.ChangeLog, error) {
+	return a.manager.ListChangeLog(limit)
+}
+
 // --- metadata --------------------------------------------------------------
 
 // ListDatabases returns the catalogs of a session.

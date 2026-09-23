@@ -139,6 +139,11 @@ export function DdlPane({ tab }: DdlPaneProps) {
           const res = await api.executeSql({
             sessionId: tab.sessionId,
             database,
+            // The window knows which object it opened, and the change log
+            // records it: the statements below are written against this table
+            // even when their own text does not say so.
+            schema: schema || undefined,
+            object: object || undefined,
             sql: text,
             maxRows: 2000,
             timeoutMs: 300000,

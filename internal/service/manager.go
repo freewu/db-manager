@@ -715,13 +715,19 @@ func (m *Manager) Execute(req models.ExecRequest) (*models.QueryResult, error) {
 	defer cancel()
 
 	readOnly := req.ReadOnly || s.readOnly
-	return s.conn.Execute(ctx, drivers.ExecRequest{
+	res, err := s.conn.Execute(ctx, drivers.ExecRequest{
 		Database:  req.Database,
 		SQL:       req.SQL,
 		MaxRows:   req.MaxRows,
 		TimeoutMS: req.TimeoutMS,
 		ReadOnly:  readOnly,
 	})
+	// Logged after the call rather than before it, so a statement that never
+	// reached the server is not recorded as a change; the failure itself is
+	// recorded, on the entry, because a script that stopped halfway is part of
+	// what happened to the database.
+	m.logScript(s, req, err)
+	return res, err
 }
 
 // --- scripts (DDL editor) --------------------------------------------------
@@ -839,7 +845,7 @@ func (m *Manager) ApplyDesign(design models.TableDesign) (*models.DesignResult, 
 	if err != nil {
 		return nil, err
 	}
-	return m.applyPlan(s, design.Database, plan), nil
+	return m.applyPlan(s, design, plan, models.ChangeSourceDesign), nil
 }
 
 // PlanCreateDesign renders the script that creates a table that does not exist
@@ -878,21 +884,35 @@ func (m *Manager) ApplyCreateDesign(design models.TableDesign) (*models.DesignRe
 	if err != nil {
 		return nil, err
 	}
-	return m.applyPlan(s, design.Database, plan), nil
+	return m.applyPlan(s, design, plan, models.ChangeSourceCreate), nil
 }
 
 // applyPlan runs an already-planned script, one statement at a time, and reports
 // how far it got. A plan that is applied is always planned first, so this is the
-// only place where DDL is executed.
-func (m *Manager) applyPlan(s *session, database string, plan *models.DesignPlan) *models.DesignResult {
+// only place where the structure page executes DDL.
+//
+// Each statement is written to the change log as it runs, with the object the
+// draft was for: this is the one path that executes statement by statement, so it
+// is the one path that knows the outcome of every line it ran and can record a
+// failure against the statement that caused it.
+func (m *Manager) applyPlan(s *session, design models.TableDesign, plan *models.DesignPlan, source string) *models.DesignResult {
 	result := &models.DesignResult{Plan: *plan, Executed: []string{}, FailedIndex: -1}
 	for i, statement := range plan.Statements {
 		ctx, cancel := m.ctx(QueryTimeout(0))
 		res, err := s.conn.Execute(ctx, drivers.ExecRequest{
-			Database: database,
+			Database: design.Database,
 			SQL:      statement,
 		})
 		cancel()
+		// The plan's statements come from the designer's own renderer, so they are
+		// SQL whatever the engine calls it; a keyword that is not one still gets
+		// the classification rather than being left blank.
+		m.logStatement(s, statementPlace{
+			database: design.Database,
+			schema:   design.Schema,
+			object:   design.Object,
+			source:   source,
+		}, statement, statementKind(statement, sqlutil.KindOf(statement)), err)
 		if err != nil {
 			result.FailedIndex = i
 			result.Error = err.Error()

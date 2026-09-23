@@ -66,20 +66,12 @@ func Analyze(sql string, readOnly bool) models.ScriptAnalysis {
 		entry := models.ScriptStatement{
 			Index:   i,
 			Preview: preview(statement),
-			Kind:    KindUnknown,
-		}
-
-		switch {
-		case word == "":
-			// A fragment that is only comments: SplitStatements drops those,
-			// so this cannot normally happen.
-			entry.Kind = KindUnknown
-		case queryLeaders[word]:
-			entry.Kind = KindQuery
-		case ddlLeaders[word]:
-			entry.Kind = KindDDL
-		case dmlLeaders[word]:
-			entry.Kind = KindDML
+			// A fragment that is only comments cannot normally reach this point,
+			// since SplitStatements drops those; it would come back unknown.
+			Kind: KindOf(statement),
+			// The statement as written, for the change log to record if a window
+			// runs it.
+			SQL: strings.TrimSpace(statement),
 		}
 
 		entry.Destructive, entry.Reason = destructive(cleaned)
@@ -108,6 +100,64 @@ func Analyze(sql string, readOnly bool) models.ScriptAnalysis {
 		}, analysis.Warnings...)
 	}
 	return analysis
+}
+
+// KindOf classifies a single statement the way Analyze does: KindQuery, KindDDL,
+// KindDML, or KindUnknown when the leading keyword is not one this build knows.
+//
+// It is the same judgement on one statement, for callers that have already split
+// the script themselves — the change log, which records the statements that
+// change something and leaves the reads alone.
+func KindOf(statement string) string {
+	word := LeadingWord(statement)
+	switch {
+	case word == "":
+		return KindUnknown
+	case queryLeaders[word]:
+		return KindQuery
+	case ddlLeaders[word]:
+		return KindDDL
+	case dmlLeaders[word]:
+		return KindDML
+	}
+	return KindUnknown
+}
+
+// LeadingWord returns a statement's first keyword, lowercased, with comments and
+// leading whitespace skipped. It is how the change log says what a statement
+// does ("create", "alter", "drop", …) without pretending to have parsed it.
+func LeadingWord(statement string) string {
+	return strings.ToLower(leadingWord(stripComments(statement)))
+}
+
+// createsTableModifiers are the words that may stand between CREATE and TABLE.
+var createsTableModifiers = map[string]bool{
+	"or": true, "replace": true,
+	"temp": true, "temporary": true, "global": true, "local": true,
+	"unlogged": true, "external": true, "volatile": true, "multiset": true,
+}
+
+// CreatesTable reports whether a statement creates a table.
+//
+// It exists for the change log. An entry keeps the object a statement was
+// applied to, and a table that is being created is not one: nothing points at it
+// yet, and the name it will have is written in the statement itself. Everything
+// else the word CREATE introduces — an index, a view, a database — is a change
+// to something that already has a name, and is recorded against it.
+func CreatesTable(statement string) bool {
+	fields := strings.Fields(strings.ToLower(stripComments(statement)))
+	if len(fields) < 2 || fields[0] != "create" {
+		return false
+	}
+	for _, word := range fields[1:] {
+		if word == "table" {
+			return true
+		}
+		if !createsTableModifiers[word] {
+			return false
+		}
+	}
+	return false
 }
 
 // destructive reports whether a statement can lose schema or data, plus the

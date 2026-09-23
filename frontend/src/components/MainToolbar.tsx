@@ -5,10 +5,10 @@ import {
   ClockCircleOutlined,
   CloudUploadOutlined,
   CodeOutlined,
-  DiffOutlined,
   DisconnectOutlined,
   ExperimentOutlined,
   EyeOutlined,
+  HistoryOutlined,
   ReloadOutlined,
   SettingOutlined,
   SwapOutlined,
@@ -53,6 +53,7 @@ export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) 
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const openObjectsTab = useAppStore((s) => s.openObjectsTab)
   const openDataGenTab = useAppStore((s) => s.openDataGenTab)
+  const openChangeLog = useAppStore((s) => s.openChangeLog)
   const closeSession = useAppStore((s) => s.closeSession)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
   const loadDatabases = useAppStore((s) => s.loadDatabases)
@@ -247,7 +248,15 @@ export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) 
       <RibbonButton icon={<ClockCircleOutlined />} label="Auto Run" hint={PARKED} disabled />
       <RibbonButton icon={<SwapOutlined />} label="Transfer" hint={PARKED} disabled />
       <RibbonButton icon={<SyncOutlined />} label="Data Sync" hint={PARKED} disabled />
-      <RibbonButton icon={<DiffOutlined />} label="Structure Sync" hint={PARKED} disabled />
+      <RibbonButton
+        icon={<HistoryOutlined />}
+        label="Change Log"
+        // Live, and global: the log records what this application ran against
+        // every connection it has touched, so it does not depend on what the
+        // explorer is standing on — which is why it needs no session.
+        hint="Every change this application has run, newest first"
+        onClick={openChangeLog}
+      />
       <RibbonButton
         icon={<ExperimentOutlined />}
         label="Data Generation"

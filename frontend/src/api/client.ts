@@ -8,6 +8,7 @@ import type {
   AppInfo,
   BackendBridge,
   CellUpdate,
+  ChangeLog,
   ConnectionConfig,
   ConnectionGroup,
   ConnectionLayout,
@@ -143,6 +144,16 @@ export const api = {
   saveMockPlaceholder: (placeholder: MockPlaceholder) =>
     invoke<MockPlaceholder>('SaveMockPlaceholder', placeholder),
   deleteMockPlaceholder: (name: string) => invoke<void>('DeleteMockPlaceholder', name),
+
+  // --- change log ---------------------------------------------------------
+  /**
+   * What this application has run against every connection, newest first.
+   *
+   * It is read from the data directory rather than from a server, so it opens
+   * with nothing connected — which is when a change usually needs looking up.
+   * A limit of 0 asks for the default page.
+   */
+  listChangeLog: (limit = 0) => invoke<ChangeLog>('ListChangeLog', limit),
 
   // --- profiles -----------------------------------------------------------
   listConnections: () => invoke<ConnectionConfig[]>('ListConnections'),

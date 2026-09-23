@@ -121,6 +121,66 @@ func TestAnalyzePreviewIsSingleLineAndCommentFree(t *testing.T) {
 	}
 }
 
+// The change log names a statement by its own first keyword, and decides
+// whether it created a table from the same reading of the text. Both have to
+// survive comments, casing and the words some engines put in between.
+func TestCreatesTableReadsTheStatementRatherThanGuessing(t *testing.T) {
+	cases := []struct {
+		name string
+		sql  string
+		want bool
+	}{
+		{"plain", "CREATE TABLE orders (id INT);", true},
+		{"already there", "CREATE TABLE IF NOT EXISTS orders (id INT);", true},
+		{"temporary", "CREATE TEMPORARY TABLE draft (id INT);", true},
+		{"unlogged", "CREATE UNLOGGED TABLE fast (id INT);", true},
+		{"lowercase", "create table t (id int)", true},
+		{"after a comment", "-- build it\nCREATE TABLE t (id INT);", true},
+		{"index", "CREATE INDEX idx ON orders (id);", false},
+		{"unique index", "CREATE UNIQUE INDEX idx ON orders (id);", false},
+		{"view", "CREATE OR REPLACE VIEW v AS SELECT 1;", false},
+		{"database", "CREATE DATABASE shop;", false},
+		{"alter", "ALTER TABLE orders ADD note TEXT;", false},
+		{"a comment about a table", "/* create table t */ SELECT 1;", false},
+		{"a column named table", "INSERT INTO t (table) VALUES ('x');", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := CreatesTable(tc.sql); got != tc.want {
+				t.Fatalf("CreatesTable(%q) = %v, want %v", tc.sql, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLeadingWordAndKindOfAgreeWithAnalyze(t *testing.T) {
+	kindCases := map[string]string{
+		"SELECT 1":                          KindQuery,
+		"DROP TABLE t;":                     KindDDL,
+		"update t set a = 1;":               KindDML,
+		"WIBBLE wobble;":                    KindUnknown,
+		"-- only a comment\n":               KindUnknown,
+		"/* c */ INSERT INTO t VALUES (1);": KindDML,
+	}
+	for sql, want := range kindCases {
+		if got := KindOf(sql); got != want {
+			t.Errorf("KindOf(%q) = %s, want %s", sql, got, want)
+		}
+	}
+
+	wordCases := map[string]string{
+		"CREATE TABLE t (id INT);": "create",
+		"  Alter Table t;":         "alter",
+		"-- why\nTRUNCATE t;":      "truncate",
+		"SELECT 1":                 "select",
+	}
+	for sql, want := range wordCases {
+		if got := LeadingWord(sql); got != want {
+			t.Errorf("LeadingWord(%q) = %q, want %q", sql, got, want)
+		}
+	}
+}
+
 func TestAnalyzeIgnoresEmptyScript(t *testing.T) {
 	analysis := Analyze("-- nothing but a comment\n", false)
 	if len(analysis.Statements) != 0 {
