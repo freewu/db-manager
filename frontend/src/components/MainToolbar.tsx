@@ -40,11 +40,24 @@ const PARKED = 'Temporarily unavailable'
  *
  * The button set mirrors Navicat's main window one-for-one so the layout reads
  * the same, but only *Connection*, *Open*, *Close*, *New Query*, *Refresh*,
- * *Table*, *View*, *Data Generation* and *Settings* are live. Everything else is
- * disabled and says why — a dead button is worse than an honest gap, but an
- * empty toolbar is not the layout we are after.
+ * *Table*, *View*, *Change Log*, *Data Generation* and *Settings* are live.
+ * Everything else is disabled and says why — a dead button is worse than an
+ * honest gap, but an empty toolbar is not the layout we are after.
+ *
+ * Two of those commands also fold the explorer away, because they open windows
+ * that are wider than they are deep: the change log puts a list beside the
+ * statement it opens on, and the data generation window puts every column's
+ * template in one grid. Neither reads the tree to be used, and both are opened
+ * for a table that has already been picked. The explorer comes back from the
+ * arrow on the splitter bar, where it has always been.
  */
-export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function MainToolbar({
+  onOpenSettings,
+  onCollapseSidebar,
+}: {
+  onOpenSettings: () => void
+  onCollapseSidebar: () => void
+}) {
   const connections = useAppStore((s) => s.connections)
   const drivers = useAppStore((s) => s.drivers)
   const sessions = useAppStore((s) => s.sessions)
@@ -255,7 +268,10 @@ export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) 
         // every connection it has touched, so it does not depend on what the
         // explorer is standing on — which is why it needs no session.
         hint="Every change this application has run, newest first"
-        onClick={openChangeLog}
+        onClick={() => {
+          onCollapseSidebar()
+          openChangeLog()
+        }}
       />
       <RibbonButton
         icon={<ExperimentOutlined />}
@@ -269,6 +285,7 @@ export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) 
         onClick={() => {
           if (!datagenSession) return
           const scope = namespaceSession?.id === datagenSession.id ? focusedNamespace : undefined
+          onCollapseSidebar()
           openDataGenTab(datagenSession.id, scope?.database, scope?.schema)
         }}
       />
