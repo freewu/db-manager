@@ -1,11 +1,11 @@
 import { AutoComplete, Checkbox, Input, Table, Tooltip, Typography } from 'antd'
-import type { TableColumnsType } from 'antd'
 import { useRef, useState } from 'react'
 import type { DragEvent, Key } from 'react'
 import { HolderOutlined, KeyOutlined } from '@ant-design/icons'
 
 import type { DesignColumn, DriverType, TableDesign } from '../api/types'
 import { typeSuggestions } from '../lib/design'
+import { useColumnResize, type ResizableColumns } from './ResizableHeader'
 
 /** Which row of a designer grid is selected, and how to change that. */
 export interface GridSelection {
@@ -87,12 +87,13 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
     if (selection?.selected === from) selection.onChange(to)
   }
 
-  const columns: TableColumnsType<DesignColumn> = [
+  const columns: ResizableColumns<DesignColumn> = [
     {
       title: '',
       key: 'drag',
       width: 30,
       align: 'center',
+      resizable: false,
       render: () => (
         <Tooltip title="Drag to reorder">
           <span
@@ -109,6 +110,7 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
       title: '#',
       width: 44,
       align: 'right',
+      resizable: false,
       render: (_value, _row, index) => (
         <Typography.Text type="secondary" style={{ fontSize: 11 }}>
           {index + 1}
@@ -225,13 +227,15 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
     },
   ]
 
+  const grid = useColumnResize(columns)
   return (
     <Table
-      className="dm-design-grid"
+      className={grid.resized ? 'dm-design-grid dm-grid-resized' : 'dm-design-grid'}
+      {...grid.tableProps}
       size="small"
       bordered
       rowKey={(_row, index) => String(index)}
-      columns={columns}
+      columns={grid.columns}
       dataSource={design.columns}
       pagination={false}
       rowSelection={selection ? rowSelection(selection) : undefined}

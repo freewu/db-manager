@@ -4,6 +4,7 @@ import type { TableColumnsType, TableProps } from 'antd'
 import { LeftOutlined, RightOutlined } from '@ant-design/icons'
 
 import type { CellValue, ColumnMeta, QueryResult, SortSpec } from '../api/types'
+import { useColumnResize } from './ResizableHeader'
 
 export interface DataGridProps {
   result: QueryResult
@@ -76,7 +77,7 @@ function CellContent({ value }: { value: CellValue }) {
           </div>
         }
       >
-        <span className="dm-truncate" style={{ maxWidth: 360 }}>
+        <span className="dm-truncate" style={{ maxWidth: 'min(360px, 100%)' }}>
           {text.slice(0, 400)}…
         </span>
       </Tooltip>
@@ -85,7 +86,7 @@ function CellContent({ value }: { value: CellValue }) {
   if (text.length > 40) {
     return (
       <Tooltip title={text}>
-        <span className="dm-truncate" style={{ maxWidth: 360 }}>
+        <span className="dm-truncate" style={{ maxWidth: 'min(360px, 100%)' }}>
           {text}
         </span>
       </Tooltip>
@@ -210,6 +211,9 @@ export function DataGrid({
     })
   }, [canEdit, onEditCell, onSortChange, primaryKey, result.columns, result.rows, sort])
 
+  // The columns keep their estimated widths until one of the edges is dragged.
+  const grid = useColumnResize(columns)
+
   const handleChange: TableProps<CellValue[]>['onChange'] = (pagination, _filters, sorter) => {
     if (onSortChange) {
       const list = Array.isArray(sorter) ? sorter : [sorter]
@@ -231,10 +235,11 @@ export function DataGrid({
     <div className="dm-result-area">
       <div className="dm-pane-body" style={{ flex: '1 1 auto' }}>
         <Table<CellValue[]>
-          className="dm-grid"
+          className={grid.resized ? 'dm-grid dm-grid-resized' : 'dm-grid'}
+          {...grid.tableProps}
           size="small"
           loading={loading}
-          columns={columns}
+          columns={grid.columns}
           dataSource={result.rows}
           rowKey={(_row, index) => String((index ?? 0) + rowOffset)}
           scroll={{ x: 'max-content' }}

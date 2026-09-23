@@ -74,6 +74,7 @@ import {
 } from '../lib/tree'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { MockPickerModal } from './MockPickerModal'
+import { useColumnResize } from './ResizableHeader'
 
 /**
  * Rows per request.
@@ -569,6 +570,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
     () => [
       {
         title: 'Field',
+        key: 'field',
         dataIndex: 'name',
         width: 200,
         render: (name: string, row) => (
@@ -618,6 +620,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
       },
       {
         title: 'Description',
+        key: 'description',
         dataIndex: 'name',
         render: (_name: string, row) => (
           <DescriptionCell
@@ -630,6 +633,8 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
     ],
     [placeholders, selectedOf, setMock],
   )
+
+  const grid = useColumnResize(columns)
 
   if (!insertable) {
     return (
@@ -835,10 +840,15 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                 />
               ) : structure ? (
                 <Table
-                  className="dm-grid dm-datagen-grid"
+                  className={
+                    grid.resized
+                      ? 'dm-grid dm-datagen-grid dm-grid-resized'
+                      : 'dm-grid dm-datagen-grid'
+                  }
+                  {...grid.tableProps}
                   size="small"
                   rowKey="name"
-                  columns={columns}
+                  columns={grid.columns}
                   dataSource={rows}
                   pagination={false}
                   scroll={{ x: 'max-content' }}

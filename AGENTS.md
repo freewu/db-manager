@@ -144,6 +144,12 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
 - **`tsconfig` 开了 `noUnusedLocals` / `noUnusedParameters`**：删代码时记得删导入，
   否则 `tsc` 直接失败。
 - **antd Tree 的 node key 必须全局唯一**：占位/错误节点用 `placeholder:${scope}` / `error:${scope}` 这种带作用域的前缀。
+- **表格列宽由 `components/ResizableHeader.tsx` 提供**：新的 `Table` 要接上 `useColumnResize`
+  （`{...grid.tableProps}` + `columns={grid.columns}`，拖动过就给 `className` 加 `dm-grid-resized`），
+  否则表头拖不动；装饰列（行号、拖动抓手、行操作）写 `resizable: false`。
+  第一次拖动会把**当前屏幕上所有列**的宽度量下来定死并改用 `table-layout: fixed`（列少、内容长时的
+  「拖不动 / 打滑」都是这一条在管），宽度不落盘；列多了重复的 `key`/`dataIndex` 会被自动区分，
+  编辑表（`DataGenPane`）里同 `dataIndex` 的两列务必自己给 `key`。
 - **表设计器（结构页）发送的是「完整目标定义」，不是 diff**：`TableDesign` 是用户想要的样子，
   后端 `sqlbase.PlanAlter` 拿实时 catalog 结构对比后渲染语句 —— **预览与保存走同一条代码路径**。
   由此派生几条硬规则：

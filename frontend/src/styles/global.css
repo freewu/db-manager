@@ -997,6 +997,53 @@ body {
   z-index: 100;
 }
 
+/* --- draggable column widths ---------------------------------------------
+   A header can be dragged at its right edge (`useColumnResize`). The grip is a
+   strip inside the cell, drawn on the column edge the way a spreadsheet's is —
+   a few pixels of grab area either side of a hairline that only shows up when
+   the edge is being pointed at or pulled. */
+.dm-col-resizer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 9px;
+  cursor: col-resize;
+  /* No panning or zooming may be mistaken for a drag. */
+  touch-action: none;
+}
+
+.dm-col-resizer::after {
+  content: '';
+  position: absolute;
+  inset-block: 2px;
+  inset-inline-end: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: transparent;
+}
+
+.dm-col-resizer:hover::after,
+.dm-col-resizer:active::after {
+  background: var(--dm-accent);
+}
+
+/* While an edge is being dragged the whole window keeps the cursor: letting it
+   turn back into an arrow halfway across the table would read as the drag having
+   been dropped — and nothing on the way may be selected by accident. */
+body.dm-col-resizing,
+body.dm-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+/* A grid whose edges have been dragged has exact widths, so it stops stretching
+   its columns across the pane — the gap that leaves on the right of a narrow
+   table is what "this column is 200px wide" means. `min-width: 100%` is antd's
+   own inline style on the table, and `!important` is what outranks inline. */
+.dm-grid-resized table {
+  min-width: 0 !important;
+}
+
 /* keep the result grid dense */
 .dm-grid .ant-table-tbody > tr > td,
 .dm-grid .ant-table-thead > tr > th {
@@ -1004,8 +1051,14 @@ body {
   font-size: 12px;
 }
 
+/* One line per row, one row per line: a cell wider than its column is clipped
+   rather than pushed into the next one. That is what makes a narrowed column
+   readable — the value ends where the column does, with an ellipsis when it is
+   plain text (a value that needs more room is a value to widen the column for). */
 .dm-grid .ant-table-cell {
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .dm-grid .ant-table-tbody > tr.dm-grid-row:hover > td {

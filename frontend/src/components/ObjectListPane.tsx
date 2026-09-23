@@ -21,6 +21,7 @@ import { formatBytes, formatCount } from '../lib/format'
 import { indexesKey, KIND_SINGULAR, namespaceKey, objectsKey } from '../lib/tree'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { objectIcon } from './objectIcon'
+import { useColumnResize } from './ResizableHeader'
 
 /** Engines can only estimate rows/bytes for relation-like objects. */
 function measured(kind: ObjectInfo['kind']): boolean {
@@ -268,6 +269,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         key: 'actions',
         width: 48,
         align: 'right',
+        resizable: false,
         render: (_: unknown, row) => (
           <Dropdown menu={rowMenu(row)} trigger={['click']} placement="bottomRight">
             <Button
@@ -343,6 +345,11 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
     [],
   )
 
+  // Both column sets are resizable; only one of them is on screen at a time.
+  const objectGrid = useColumnResize(objectColumns)
+  const indexGrid = useColumnResize(indexColumns)
+  const grid = isIndexes ? indexGrid : objectGrid
+
   if (!database || !schema) {
     return <Empty description="No namespace selected" style={{ marginTop: 80 }} />
   }
@@ -395,14 +402,17 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
             <Empty description={`No ${tab.title.toLowerCase()} in ${path}`} />
           </div>
         ) : (
-          <Table
-            className="dm-grid dm-object-list"
+          <Table<ObjectInfo | IndexEntry>
+            className={
+              grid.resized ? 'dm-grid dm-object-list dm-grid-resized' : 'dm-grid dm-object-list'
+            }
+            {...grid.tableProps}
             size="small"
             rowKey={(row) =>
               isIndexes ? `${(row as IndexEntry).table}.${(row as IndexEntry).name}` : row.name
             }
             columns={
-              (isIndexes ? indexColumns : objectColumns) as TableColumnsType<
+              (isIndexes ? indexGrid.columns : objectGrid.columns) as TableColumnsType<
                 ObjectInfo | IndexEntry
               >
             }

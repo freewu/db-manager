@@ -35,6 +35,7 @@ import { capabilitiesOf } from '../lib/capabilities'
 import { emptyColumn, isDirty } from '../lib/design'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { FieldGrid } from './DesignGrid'
+import { useColumnResize } from './ResizableHeader'
 import { SqlCode } from './SqlCode'
 
 /** Which slice of the structure a table window is showing. */
@@ -319,6 +320,11 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
     [creating, database, draft, message, modal, object, plan, schema, tab.id, tab.sessionId],
   )
 
+  // The two tables below the structure are only one at a time, but the hook has
+  // to run before the branch that chooses which, and each keeps its own widths.
+  const indexGrid = useColumnResize(indexColumns)
+  const fkGrid = useColumnResize(fkColumns)
+
   if (loading && !structure) {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
@@ -356,10 +362,11 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No indexes" />
         ) : (
           <Table
-            className="dm-grid"
+            className={indexGrid.resized ? 'dm-grid dm-grid-resized' : 'dm-grid'}
+            {...indexGrid.tableProps}
             size="small"
             rowKey="name"
-            columns={indexColumns}
+            columns={indexGrid.columns}
             dataSource={structure.indexes}
             pagination={false}
             scroll={{ x: 'max-content' }}
@@ -380,10 +387,11 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No foreign keys" />
         ) : (
           <Table
-            className="dm-grid"
+            className={fkGrid.resized ? 'dm-grid dm-grid-resized' : 'dm-grid'}
+            {...fkGrid.tableProps}
             size="small"
             rowKey="name"
-            columns={fkColumns}
+            columns={fkGrid.columns}
             dataSource={structure.foreignKeys}
             pagination={false}
             scroll={{ x: 'max-content' }}
@@ -601,6 +609,7 @@ function FieldList({
   driver: DriverType | undefined
 }) {
   const mongo = driver === 'mongodb'
+  const grid = useColumnResize(fieldColumns)
   return (
     <div className="dm-pane-body" style={{ padding: 12 }}>
       <Alert
@@ -621,10 +630,11 @@ function FieldList({
         />
       ) : (
         <Table
-          className="dm-grid"
+          className={grid.resized ? 'dm-grid dm-grid-resized' : 'dm-grid'}
+          {...grid.tableProps}
           size="small"
           rowKey="name"
-          columns={fieldColumns}
+          columns={grid.columns}
           dataSource={structure.columns}
           pagination={false}
           scroll={{ x: 'max-content' }}
