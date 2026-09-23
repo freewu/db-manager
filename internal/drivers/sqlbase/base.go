@@ -128,6 +128,9 @@ var (
 	// Every spec is asked about statements through Explain; a spec that cannot
 	// answer says so (see explain.go).
 	_ drivers.Explainer = (*Conn)(nil)
+	// Generated rows are written with one INSERT per batch (see mutate.go);
+	// there is nothing engine specific about it beyond the dialect.
+	_ drivers.Inserter = (*Conn)(nil)
 )
 
 // Spec exposes the driver spec (used by engine specific extras).

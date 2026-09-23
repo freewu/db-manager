@@ -29,6 +29,8 @@ import type {
   OpenRequest,
   QueryResult,
   RowDelete,
+  RowInsert,
+  RowInsertResult,
   SaveFileRequest,
   SavedQuery,
   QueryFile,
@@ -201,6 +203,11 @@ export const api = {
     invoke<ServerOverview>('GetServerOverview', sessionId),
   updateCell: (req: CellUpdate) => invoke<number>('UpdateCell', req),
   deleteRow: (req: RowDelete) => invoke<number>('DeleteRow', req),
+  /**
+   * Appends one batch of generated rows. A batch the engine refuses comes back
+   * as a result naming the row that stopped it, not as a rejection.
+   */
+  insertRows: (req: RowInsert) => invoke<RowInsertResult>('InsertRows', req),
 
   // --- files --------------------------------------------------------------
   saveTextFile: (req: SaveFileRequest) => invoke<string>('SaveTextFile', req),

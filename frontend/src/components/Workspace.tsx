@@ -1,9 +1,10 @@
 import { useMemo } from 'react'
 import { App as AntApp, Button, Space, Tabs, Tag, Tooltip, Typography } from 'antd'
 import type { TabsProps } from 'antd'
-import { CodeOutlined, DashboardOutlined, FileTextOutlined, FolderOutlined, PartitionOutlined, PlusOutlined, TableOutlined } from '@ant-design/icons'
+import { CodeOutlined, DashboardOutlined, ExperimentOutlined, FileTextOutlined, FolderOutlined, PartitionOutlined, PlusOutlined, TableOutlined } from '@ant-design/icons'
 
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
+import { DataGenPane } from './DataGenPane'
 import { DdlPane } from './DdlPane'
 import { CodegenPane } from './CodegenPane'
 import { ErDiagramPane } from './ErDiagramPane'
@@ -66,6 +67,8 @@ export function Workspace() {
             <DdlPane tab={tab} />
           ) : tab.kind === 'codegen' ? (
             <CodegenPane tab={tab} />
+          ) : tab.kind === 'datagen' ? (
+            <DataGenPane tab={tab} />
           ) : tab.kind === 'er' ? (
             <ErDiagramPane tab={tab} />
           ) : tab.kind === 'runtime' ? (
@@ -146,6 +149,8 @@ function TabLabel({ tab, sessionName }: { tab: WorkspaceTab; sessionName?: strin
         <FileTextOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'codegen' ? (
         <CodeOutlined style={{ opacity: 0.7 }} />
+      ) : tab.kind === 'datagen' ? (
+        <ExperimentOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'er' ? (
         <PartitionOutlined style={{ opacity: 0.7 }} />
       ) : tab.kind === 'runtime' ? (

@@ -37,6 +37,7 @@ func (Driver) Info() models.DriverInfo {
 		// A plain EXPLAIN is answered by this whole family (see
 		// mysqlcompat.ExplainSQL) and never runs the statement.
 		SupportsExplain: true,
+		SupportsInsert:  true,
 		// MySQL keeps views next to tables in the catalog; there is no third
 		// object kind the explorer would be honest about drawing.
 		ObjectKinds:     []models.ObjectKind{models.KindTable, models.KindView},

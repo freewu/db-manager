@@ -120,6 +120,22 @@ type Explainer interface {
 	Explain(ctx context.Context, req ExplainRequest) (*models.ExplainResult, error)
 }
 
+// Inserter is an optional Conn capability: append a batch of generated rows to
+// a table.
+//
+// The data generation window produces values in the frontend (placeholders,
+// Chinese name tables, Luhn checksums are presentation, not driver work); what
+// needs an engine is writing them down. The values may only travel as bind
+// parameters — nothing the window generates is SQL — and a batch the server
+// refuses must come back as a partial count rather than as an error, so the
+// window can say which row failed instead of blaming the whole run.
+//
+// A document store does not implement this: a collection has no column list to
+// fill, so there is nothing for the window to offer.
+type Inserter interface {
+	InsertRows(ctx context.Context, req models.RowInsert) (models.RowInsertResult, error)
+}
+
 // ExplainRequest is the driver-level explain request (no session ids).
 type ExplainRequest struct {
 	Database  string

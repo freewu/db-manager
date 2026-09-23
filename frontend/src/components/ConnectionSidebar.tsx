@@ -8,6 +8,7 @@ import {
   DeleteOutlined,
   DisconnectOutlined,
   EditOutlined,
+  ExperimentOutlined,
   FileTextOutlined,
   FolderAddOutlined,
   FolderOutlined,
@@ -119,6 +120,7 @@ export function ConnectionSidebar() {
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const openDdlTab = useAppStore((s) => s.openDdlTab)
   const openCodegenTab = useAppStore((s) => s.openCodegenTab)
+  const openDataGenTab = useAppStore((s) => s.openDataGenTab)
   const openErTab = useAppStore((s) => s.openErTab)
   const openRuntimeTab = useAppStore((s) => s.openRuntimeTab)
   const closeSession = useAppStore((s) => s.closeSession)
@@ -446,7 +448,7 @@ export function ConnectionSidebar() {
       if (!objects) return []
       // A document store has no CREATE TABLE / ALTER TABLE to write, so its
       // object menus stop at the data and the sampled field list.
-      const { relational, designable } = capabilitiesOf(driverOfSession(sessionId))
+      const { relational, designable, insertable } = capabilitiesOf(driverOfSession(sessionId))
       // Creating a table is a write, so a read-only session offers no menu item
       // for it rather than one that fails after the whole definition is typed.
       const canCreate = designable && !sessions.find((s) => s.id === sessionId)?.readOnly
@@ -574,6 +576,19 @@ export function ConnectionSidebar() {
                         },
                       ]
                     : []),
+                  // Only a table can be filled: a view has no INSERT of its own
+                  // and a document store has no column list, which is exactly
+                  // what the window's own capability check says too.
+                  ...(object.kind === 'table' && insertable
+                    ? [
+                        {
+                          key: 'datagen',
+                          icon: <ExperimentOutlined />,
+                          label: 'Data generation…',
+                          onClick: () => openDataGenTab(sessionId, database, schema, object.name),
+                        },
+                      ]
+                    : []),
                   { type: 'divider' as const },
                   {
                     key: 'copy',
@@ -605,6 +620,7 @@ export function ConnectionSidebar() {
       driverOfSession,
       loadNamespace,
       openCodegenTab,
+      openDataGenTab,
       openDdlTab,
       openList,
       openNewTableTab,

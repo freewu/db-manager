@@ -1,11 +1,14 @@
 package all
 
 import (
+	"reflect"
 	"slices"
 	"testing"
 
 	"dbmanager/internal/drivers"
+	"dbmanager/internal/drivers/mongodb"
 	"dbmanager/internal/drivers/planned"
+	"dbmanager/internal/drivers/sqlbase"
 	"dbmanager/internal/models"
 )
 
@@ -131,5 +134,51 @@ func TestParkedEnginesStayOutOfTheMenu(t *testing.T) {
 	}
 	if extra := planned.Infos(); len(extra) != 0 {
 		t.Fatalf("planned.Infos() = %+v, want no roadmap entries while everything is either done or parked", extra)
+	}
+}
+
+// The data generation window writes rows through drivers.Inserter, and the
+// ribbon hides its button where the engine cannot do it. The flag therefore has
+// to follow the interface, engine by engine: a new SQL engine that forgot the
+// wrapper would otherwise look insertable and only fail when the button was
+// finally clicked.
+func TestInsertCapabilityFollowsTheInserterInterface(t *testing.T) {
+	inserter := reflect.TypeOf((*drivers.Inserter)(nil)).Elem()
+
+	// Every SQL engine goes through sqlbase.Conn, which writes rows for all of
+	// them at once (base.go pins that with a compile time assertion).
+	if !reflect.TypeOf(&sqlbase.Conn{}).Implements(inserter) {
+		t.Fatal("sqlbase.Conn must implement drivers.Inserter: it writes every SQL engine's rows")
+	}
+
+	want := map[models.DriverType]bool{
+		models.DriverMySQL:    true,
+		models.DriverPostgres: true,
+		models.DriverSQLite:   true,
+		models.DriverTiDB:     true,
+		// Doris is insertable even though it is not designable: what it lacks is
+		// the table designer, not INSERT (see its Info()).
+		models.DriverDoris: true,
+		// A collection has no column list for the window to fill.
+		models.DriverMongoDB: false,
+	}
+	for _, info := range drivers.Infos() {
+		expected, pinned := want[info.Type]
+		if !pinned {
+			t.Errorf("%s has no expected insert capability; pin it here and in Info()", info.Type)
+			continue
+		}
+		if info.SupportsInsert != expected {
+			t.Errorf("%s SupportsInsert = %v, want %v", info.Type, info.SupportsInsert, expected)
+		}
+		if info.SupportsInsert && !info.Relational {
+			t.Errorf("%s offers data generation without being relational", info.Type)
+		}
+	}
+
+	// MongoDB must not merely leave the flag off: the service decides by
+	// asserting drivers.Inserter, so the interface has to be missing as well.
+	if reflect.TypeOf(&mongodb.Conn{}).Implements(inserter) {
+		t.Error("mongodb.Conn implements drivers.Inserter; a collection has no column list to fill")
 	}
 }

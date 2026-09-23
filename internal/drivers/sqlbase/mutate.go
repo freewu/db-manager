@@ -2,6 +2,7 @@ package sqlbase
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 
 	"dbmanager/internal/apperr"
@@ -87,6 +88,120 @@ func (c *Conn) DeleteRow(ctx context.Context, req models.RowDelete) (int64, erro
 	affected, err := res.RowsAffected()
 	if err != nil {
 		return 0, nil
+	}
+	return affected, nil
+}
+
+// InsertRows implements drivers.Inserter.
+//
+// The batch goes out as one multi-row INSERT — one round trip instead of one
+// per row — and only the identifiers (table and columns) are spliced into it,
+// through the dialect's quoting; every generated value is a bind parameter.
+//
+// If the server refuses that statement the batch is replayed one row at a time,
+// which is the only way to find out *which* row it was: a multi-row INSERT is
+// all-or-nothing per statement, so the retry at worst repeats the rows the
+// failed statement had already written on an engine whose INSERT is not atomic
+// per statement (MySQL's non-transactional tables). That duplicate is reported
+// as the row that failed, together with the engine's message — the count the
+// window shows stays true, which is what matters to whoever is looking at a
+// half-filled table.
+func (c *Conn) InsertRows(ctx context.Context, req models.RowInsert) (models.RowInsertResult, error) {
+	object := strings.TrimSpace(req.Object)
+	if object == "" {
+		return models.RowInsertResult{}, apperr.New(apperr.CodeInvalidConfig, "an object name is required")
+	}
+	columns, err := insertColumns(req.Columns)
+	if err != nil {
+		return models.RowInsertResult{}, err
+	}
+	if len(req.Rows) == 0 {
+		return models.RowInsertResult{}, apperr.New(apperr.CodeInvalidConfig, "there is no row to insert")
+	}
+	for i, row := range req.Rows {
+		if len(row) != len(columns) {
+			return models.RowInsertResult{}, apperr.New(apperr.CodeInvalidConfig,
+				"row %d has %d value(s) for %d column(s)", i+1, len(row), len(columns))
+		}
+	}
+
+	db, err := c.DB(ctx, req.Database)
+	if err != nil {
+		return models.RowInsertResult{}, err
+	}
+
+	d := c.spec.Dialect
+	target := d.Qualify(c.resolveDatabase(req.Database), req.Schema, object)
+
+	ctx, cancel := withTimeout(ctx, 0)
+	defer cancel()
+
+	if inserted, err := execInsert(ctx, db, d, target, columns, req.Rows); err == nil {
+		return models.RowInsertResult{Inserted: inserted}, nil
+	}
+
+	var landed int64
+	for i, row := range req.Rows {
+		inserted, err := execInsert(ctx, db, d, target, columns, [][]any{row})
+		if err != nil {
+			return models.RowInsertResult{Inserted: landed, Failed: i + 1, Error: err.Error()}, nil
+		}
+		landed += inserted
+	}
+	return models.RowInsertResult{Inserted: landed}, nil
+}
+
+// insertColumns trims and validates the column list once, up front, so a bad
+// request is refused before anything is sent to the server.
+func insertColumns(columns []string) ([]string, error) {
+	if len(columns) == 0 {
+		return nil, apperr.New(apperr.CodeInvalidConfig, "there is no column to fill")
+	}
+	out := make([]string, 0, len(columns))
+	seen := make(map[string]bool, len(columns))
+	for _, column := range columns {
+		name := strings.TrimSpace(column)
+		if name == "" {
+			return nil, apperr.New(apperr.CodeInvalidConfig, "a column name is empty")
+		}
+		if seen[name] {
+			return nil, apperr.New(apperr.CodeInvalidConfig, "column %s is listed twice", name)
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	return out, nil
+}
+
+// execInsert writes rows in one statement, in the order they were given.
+func execInsert(ctx context.Context, db *sql.DB, d drivers.Dialect, target string, columns []string, rows [][]any) (int64, error) {
+	quoted := make([]string, len(columns))
+	for i, column := range columns {
+		quoted[i] = d.Quote(column)
+	}
+
+	args := make([]any, 0, len(rows)*len(columns))
+	values := make([]string, 0, len(rows))
+	for _, row := range rows {
+		marks := make([]string, len(columns))
+		for i := range columns {
+			args = append(args, row[i])
+			marks[i] = d.Placeholder(len(args))
+		}
+		values = append(values, "("+strings.Join(marks, ", ")+")")
+	}
+
+	query := "INSERT INTO " + target +
+		" (" + strings.Join(quoted, ", ") + ") VALUES " + strings.Join(values, ", ")
+	res, err := db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, apperr.Wrap(apperr.CodeQueryFailed, err, "insert row")
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		// The statement went through; only the count is unavailable. A multi-row
+		// INSERT is one statement, so every row in it is in.
+		return int64(len(rows)), nil
 	}
 	return affected, nil
 }

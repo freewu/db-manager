@@ -39,6 +39,7 @@ func (Driver) Info() models.DriverInfo {
 		// EXPLAIN without ANALYZE only plans the statement; the reason the
 		// measured form is not used is that it would run it.
 		SupportsExplain: true,
+		SupportsInsert:  true,
 		// Materialized views exist here, so the explorer draws their folder too.
 		// Sequences and procedures do not have an introspector, and a folder that
 		// could never fill up is worse than no folder.

@@ -60,6 +60,7 @@ export type TabKind =
   | 'objects'
   | 'ddl'
   | 'codegen'
+  | 'datagen'
   | 'er'
   | 'runtime'
 
@@ -388,6 +389,22 @@ interface AppState {
     database: string,
     schema: string,
     object: ObjectInfo,
+  ) => void
+  /**
+   * Opens the data generation window of a connection: pick one of its tables on
+   * the left, describe what each column gets on the right, and insert the rows.
+   *
+   * One window per connection, not per table, because its state — the mocks
+   * written for a table — is worth keeping while moving around that connection.
+   * Opening it again with a table pointed at moves the existing window's target
+   * instead of adding a copy, which is what makes "Data generation" on a table
+   * do the useful thing rather than open a second window on the same engine.
+   */
+  openDataGenTab: (
+    sessionId: string,
+    database?: string,
+    schema?: string,
+    object?: string,
   ) => void
   /** Opens the ER diagram of one namespace (schema, or database when there is
    * no schema layer). */
@@ -1156,6 +1173,47 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeTabId: id,
       ...focused(state, sessionId),
     }))
+  },
+
+  openDataGenTab(sessionId, database, schema, object) {
+    const id = `datagen:${sessionId}`
+    set((state) => {
+      const existing = state.tabs.find((tab) => tab.id === id)
+      if (existing) {
+        // Moving to another database moves to another place: pointing the
+        // window at the old namespace or table would leave it aimed at
+        // something that is no longer in the tree beside it.
+        const samePlace = database === undefined || database === existing.database
+        return {
+          tabs: state.tabs.map((tab) =>
+            tab.id === id
+              ? {
+                  ...tab,
+                  database: database ?? tab.database,
+                  schema: samePlace ? (schema ?? tab.schema) : schema,
+                  object: samePlace ? (object ?? tab.object) : object,
+                }
+              : tab,
+          ),
+          activeTabId: id,
+          ...focused(state, sessionId),
+        }
+      }
+      const tab: WorkspaceTab = {
+        id,
+        kind: 'datagen',
+        sessionId,
+        title: 'Data generation',
+        database,
+        schema,
+        object,
+      }
+      return {
+        tabs: [...state.tabs, tab],
+        activeTabId: id,
+        ...focused(state, sessionId),
+      }
+    })
   },
 
   openErTab(sessionId, database, schema) {

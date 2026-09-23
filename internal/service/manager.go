@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 	"sync"
@@ -944,6 +945,98 @@ func (m *Manager) DeleteRow(req models.RowDelete) (int64, error) {
 	ctx, cancel := m.ctx(QueryTimeout(0))
 	defer cancel()
 	return s.conn.DeleteRow(ctx, req)
+}
+
+// InsertRows appends a batch of rows produced by the data generation window.
+//
+// What the window generates (placeholders, mock.js expressions, the Chinese
+// name and address tables) is presentation and lives in the frontend. What is
+// left for the backend is the part that decides what may reach the database:
+// only identifiers are interpolated, every value is bound as a parameter, a
+// whole JSON number is folded back into an integer (a `float64` bound to an
+// `int4` column is read by PostgreSQL as double precision, which it refuses),
+// the batch is width-checked and size-capped, and a statement the engine turns
+// down comes back as a partial count rather than as an error.
+func (m *Manager) InsertRows(req models.RowInsert) (models.RowInsertResult, error) {
+	s, err := m.session(req.SessionID)
+	if err != nil {
+		return models.RowInsertResult{}, err
+	}
+	if s.readOnly {
+		return models.RowInsertResult{}, apperr.New(apperr.CodeReadOnly, "this connection is read-only")
+	}
+	// Asking the connection rather than the driver's name is what lets a
+	// document store answer honestly: it has no Inserter, so there is nothing
+	// to offer and the window says so.
+	inserter, ok := s.conn.(drivers.Inserter)
+	if !ok {
+		return models.RowInsertResult{}, apperr.New(apperr.CodeUnsupported,
+			"%s cannot write generated rows", s.driver.Info().DisplayName)
+	}
+	if strings.TrimSpace(req.Object) == "" {
+		return models.RowInsertResult{}, apperr.New(apperr.CodeInvalidConfig, "a table name is required")
+	}
+	if len(req.Columns) == 0 {
+		return models.RowInsertResult{}, apperr.New(apperr.CodeInvalidConfig, "there is no column to fill")
+	}
+	if len(req.Rows) == 0 {
+		return models.RowInsertResult{}, apperr.New(apperr.CodeInvalidConfig, "there is no row to insert")
+	}
+	if len(req.Rows) > maxInsertRows {
+		return models.RowInsertResult{}, apperr.New(apperr.CodeInvalidConfig,
+			"a batch may not carry more than %d rows, got %d", maxInsertRows, len(req.Rows))
+	}
+	rows, err := normalizeInsertRows(req.Rows, len(req.Columns))
+	if err != nil {
+		return models.RowInsertResult{}, err
+	}
+	req.Rows = rows
+
+	ctx, cancel := m.ctx(QueryTimeout(0))
+	defer cancel()
+	return inserter.InsertRows(ctx, req)
+}
+
+// maxInsertRows caps one batch. The window sends small batches and reports
+// progress between them, so this only guards against a caller that would build
+// a statement no server would take (MySQL's max_allowed_packet is the tightest
+// of the engines here).
+const maxInsertRows = 500
+
+// normalizeInsertRows checks every row's width once and folds its numbers into
+// the shape the database expects.
+func normalizeInsertRows(rows [][]any, width int) ([][]any, error) {
+	out := make([][]any, len(rows))
+	for i, row := range rows {
+		if len(row) != width {
+			return nil, apperr.New(apperr.CodeInvalidConfig,
+				"row %d has %d value(s) for %d column(s)", i+1, len(row), width)
+		}
+		values := make([]any, len(row))
+		for j, value := range row {
+			values[j] = normalizeInsertValue(value)
+		}
+		out[i] = values
+	}
+	return out, nil
+}
+
+// normalizeInsertValue makes a whole JSON number an integer again.
+//
+// Everything the window sends over the bridge arrives as float64. Binding one
+// to an integer column is what PostgreSQL refuses outright and what MySQL
+// silently rounds, so a whole number becomes int64 — but only while the double
+// was exact (below 2^53); a fractional one is left alone for the column to
+// judge, exactly like a typed value from the data grid.
+func normalizeInsertValue(value any) any {
+	number, ok := value.(float64)
+	if !ok {
+		return value
+	}
+	if number != math.Trunc(number) || math.Abs(number) >= 1<<53 {
+		return value
+	}
+	return int64(number)
 }
 
 // QueryTimeout normalises the per-request timeout.

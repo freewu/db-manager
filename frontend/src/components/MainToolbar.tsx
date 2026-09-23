@@ -7,6 +7,7 @@ import {
   CodeOutlined,
   DiffOutlined,
   DisconnectOutlined,
+  ExperimentOutlined,
   EyeOutlined,
   ReloadOutlined,
   SettingOutlined,
@@ -19,7 +20,7 @@ import {
 import { ConnectionTypeDropdown } from './ConnectionTypeMenu'
 import { useAppStore } from '../store/appStore'
 import { useConnect } from '../hooks/useConnect'
-import { findDriver, objectKindsOf } from '../lib/capabilities'
+import { capabilitiesOf, findDriver, objectKindsOf } from '../lib/capabilities'
 import { FOLDER_LABEL } from '../lib/tree'
 
 /**
@@ -39,9 +40,9 @@ const PARKED = 'Temporarily unavailable'
  *
  * The button set mirrors Navicat's main window one-for-one so the layout reads
  * the same, but only *Connection*, *Open*, *Close*, *New Query*, *Refresh*,
- * *Table*, *View* and *Settings* are live. Everything else is disabled and says
- * why — a dead button is worse than an honest gap, but an empty toolbar is not
- * the layout we are after.
+ * *Table*, *View*, *Data Generation* and *Settings* are live. Everything else is
+ * disabled and says why — a dead button is worse than an honest gap, but an
+ * empty toolbar is not the layout we are after.
  */
 export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const connections = useAppStore((s) => s.connections)
@@ -51,6 +52,7 @@ export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) 
   const activeNamespace = useAppStore((s) => s.activeNamespace)
   const openQueryTab = useAppStore((s) => s.openQueryTab)
   const openObjectsTab = useAppStore((s) => s.openObjectsTab)
+  const openDataGenTab = useAppStore((s) => s.openDataGenTab)
   const closeSession = useAppStore((s) => s.closeSession)
   const invalidateSession = useAppStore((s) => s.invalidateSession)
   const loadDatabases = useAppStore((s) => s.loadDatabases)
@@ -128,6 +130,18 @@ export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) 
 
   const tableButton = listButton('table')
   const viewButton = listButton('view')
+
+  // Data generation acts on a live session rather than on a namespace: the
+  // window is opened per connection, and it can pick its own table. The
+  // namespace the explorer is standing in is handed over only to open the
+  // window on that database.
+  const datagenSession = focusedSession ?? namespaceSession
+  const datagenDriver = findDriver(drivers, datagenSession?.driver)
+  const datagenHint = !datagenSession
+    ? 'Pick an open connection in the tree first'
+    : capabilitiesOf(datagenDriver).insertable
+      ? `Fill a table of ${datagenSession.name} with generated rows`
+      : `${datagenDriver?.displayName ?? 'This engine'} cannot insert rows`
 
   return (
     <div className="dm-ribbon">
@@ -234,6 +248,21 @@ export function MainToolbar({ onOpenSettings }: { onOpenSettings: () => void }) 
       <RibbonButton icon={<SwapOutlined />} label="Transfer" hint={PARKED} disabled />
       <RibbonButton icon={<SyncOutlined />} label="Data Sync" hint={PARKED} disabled />
       <RibbonButton icon={<DiffOutlined />} label="Structure Sync" hint={PARKED} disabled />
+      <RibbonButton
+        icon={<ExperimentOutlined />}
+        label="Data Generation"
+        // Live, and the one command in this group that is: it opens the window
+        // that writes rows, standing on the database the explorer is in when
+        // there is one. A document store says why it cannot, through the same
+        // capability the window itself reads.
+        hint={datagenHint}
+        disabled={!datagenSession || !capabilitiesOf(datagenDriver).insertable}
+        onClick={() => {
+          if (!datagenSession) return
+          const scope = namespaceSession?.id === datagenSession.id ? focusedNamespace : undefined
+          openDataGenTab(datagenSession.id, scope?.database, scope?.schema)
+        }}
+      />
       <RibbonButton
         icon={<SettingOutlined />}
         label="Settings"

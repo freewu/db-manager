@@ -36,6 +36,12 @@ export interface Capabilities {
    * statements are shell calls there is no plan for.
    */
   explainable: boolean
+  /**
+   * Rows can be appended to this engine's tables, so the data generation
+   * window can fill them. False for a document store: a collection has no
+   * column list for a generated batch to line up with.
+   */
+  insertable: boolean
 }
 
 /**
@@ -52,6 +58,7 @@ export function capabilitiesOf(driver: DriverInfo | undefined): Capabilities {
     // what every build so far has been.
     designable: driver ? driver.supportsDesign : true,
     explainable: driver ? driver.supportsExplain : true,
+    insertable: driver ? driver.supportsInsert : true,
   }
 }
 

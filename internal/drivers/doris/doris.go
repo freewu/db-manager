@@ -55,6 +55,9 @@ func (Driver) Info() models.DriverInfo {
 		// can be read in the query window even though its tables cannot be
 		// designed here.
 		SupportsExplain: true,
+		// Rows can be written here like anywhere else in this family — the
+		// designer is what Doris is missing, not INSERT.
+		SupportsInsert:  true,
 		ObjectKinds:     []models.ObjectKind{models.KindTable, models.KindView},
 		SortOrder:       46,
 		DefaultDatabase: "",

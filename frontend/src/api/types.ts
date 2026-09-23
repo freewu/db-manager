@@ -110,6 +110,12 @@ export interface DriverInfo {
    */
   supportsExplain: boolean
   /**
+   * Whether rows can be inserted into this engine's tables, which is what the
+   * data generation window needs. False for a document store: a collection has
+   * no column list for a batch of generated values to line up with.
+   */
+  supportsInsert: boolean
+  /**
    * The kinds of object this engine can hold, in the order the explorer draws
    * their folders. Every one gets a folder whether or not it holds anything,
    * so an empty database still shows "Tables (0)" instead of nothing. The
@@ -523,6 +529,38 @@ export interface RowDelete {
   schema?: string
   object: string
   key: KeyValue[]
+}
+
+/**
+ * A batch of rows to append to one table, as the data generation window sends
+ * them.
+ *
+ * `columns` are identifiers — the one thing that may reach the statement — and
+ * every value in `rows` is bound as a parameter. `rows` is a slice per row, in
+ * `columns` order, holding JSON scalars; a value that cannot fit its column is
+ * refused by the engine rather than reshaped here.
+ */
+export interface RowInsert {
+  sessionId: string
+  database?: string
+  schema?: string
+  object: string
+  columns: string[]
+  rows: unknown[][]
+}
+
+/**
+ * What one batch really did.
+ *
+ * A statement the engine refused is a result, not an error: `failed` is the
+ * 1-based index of the row that stopped the batch and `inserted` counts the
+ * rows that did land, so a run cannot claim more than it wrote. Both are absent
+ * when everything went in.
+ */
+export interface RowInsertResult {
+  inserted: number
+  failed?: number
+  error?: string
 }
 
 export interface FileFilter {

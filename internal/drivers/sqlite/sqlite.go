@@ -43,6 +43,7 @@ func (Driver) Info() models.DriverInfo {
 		// not run the statement to find out. The bare `EXPLAIN` opcode listing
 		// is a different (and much less readable) thing.
 		SupportsExplain: true,
+		SupportsInsert:  true,
 		// A SQLite file holds tables and views; its indexes hang off the tables,
 		// so the explorer keeps them in the namespace-wide index folder.
 		ObjectKinds:     []models.ObjectKind{models.KindTable, models.KindView},

@@ -65,6 +65,9 @@ func (Driver) Info() models.DriverInfo {
 		// There is no schema to design: a collection's fields are whatever the
 		// sampled documents happen to contain.
 		SupportsDesign: false,
+		// SupportsInsert stays false for the same reason: the data generation
+		// window fills a table's columns, and a collection has no column list
+		// to fill.
 		// Collections lead: a document store is browsed as collections, and the
 		// Mongo views among them are a marginal second kind.
 		ObjectKinds:     []models.ObjectKind{models.KindCollection, models.KindView},

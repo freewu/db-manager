@@ -147,6 +147,13 @@ type DriverInfo struct {
 	// statement to send).
 	SupportsExplain bool `json:"supportsExplain"`
 
+	// SupportsInsert says generated rows can be appended to a table here, which
+	// is what the data generation window writes through. It is set where the
+	// driver implements drivers.Inserter. A document store does not: a
+	// collection has no column list to fill, so the window says so instead of
+	// offering a button that could only fail.
+	SupportsInsert bool `json:"supportsInsert"`
+
 	// ObjectKinds are the kinds of object this engine can hold, in the order the
 	// explorer draws their folders. Every one of them gets a folder whether or
 	// not it holds anything: "Tables (0)" tells the user the database exists and
@@ -733,6 +740,43 @@ type RowDelete struct {
 	Schema    string     `json:"schema,omitempty"`
 	Object    string     `json:"object"`
 	Key       []KeyValue `json:"key"`
+}
+
+// RowInsert appends a batch of generated rows to one table.
+//
+// The values arrive from the data generation window as JSON scalars (strings,
+// numbers, booleans, null) in `Columns` order, one slice per row. Drivers bind
+// every one of them as a parameter: the only text that reaches the statement is
+// an identifier, and identifiers go through the dialect's quoting — so nothing
+// the window generates can become SQL.
+//
+// Rows are sent in batches because one statement per batch costs one round trip
+// instead of one per row; the batch size is the caller's business, and the
+// service caps it.
+type RowInsert struct {
+	SessionID string   `json:"sessionId"`
+	Database  string   `json:"database,omitempty"`
+	Schema    string   `json:"schema,omitempty"`
+	Object    string   `json:"object"`
+	Columns   []string `json:"columns"`
+	Rows      [][]any  `json:"rows"`
+}
+
+// RowInsertResult reports what one batch really did.
+//
+// A statement the engine refused comes back here rather than as an error, so a
+// batch that stopped halfway can still say how many rows did land and which row
+// stopped it — the same honesty rule DesignResult follows for a half-applied
+// script. A request that could not be attempted at all (no session, nothing to
+// write) is still an error.
+type RowInsertResult struct {
+	// Inserted counts the rows this batch really wrote.
+	Inserted int64 `json:"inserted"`
+	// Failed is the 1-based index of the row that stopped the batch, or 0 when
+	// every row went in.
+	Failed int `json:"failed,omitempty"`
+	// Error is the engine's own message for that row.
+	Error string `json:"error,omitempty"`
 }
 
 // SaveFileRequest writes text content to a user chosen path.

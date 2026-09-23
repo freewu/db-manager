@@ -4,6 +4,7 @@ import type { MenuProps, TableColumnsType } from 'antd'
 import {
   AppstoreOutlined,
   CheckOutlined,
+  ExperimentOutlined,
   FunctionOutlined,
   KeyOutlined,
   MoreOutlined,
@@ -14,6 +15,7 @@ import {
 } from '@ant-design/icons'
 
 import type { IndexEntry, ObjectInfo } from '../api/types'
+import { capabilitiesOf } from '../lib/capabilities'
 import { generatable } from '../lib/codegen'
 import { formatBytes, formatCount } from '../lib/format'
 import { indexesKey, KIND_SINGULAR, namespaceKey, objectsKey } from '../lib/tree'
@@ -37,16 +39,22 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
   const { message } = AntApp.useApp()
   const tree = useAppStore((s) => s.tree)
   const session = useAppStore((s) => s.sessions.find((s) => s.id === tab.sessionId))
+  const drivers = useAppStore((s) => s.drivers)
   const loadObjects = useAppStore((s) => s.loadObjects)
   const loadIndexes = useAppStore((s) => s.loadIndexes)
   const openTableTab = useAppStore((s) => s.openTableTab)
   const openCodegenTab = useAppStore((s) => s.openCodegenTab)
+  const openDataGenTab = useAppStore((s) => s.openDataGenTab)
 
   const [filter, setFilter] = useState('')
   const [selectedKey, setSelectedKey] = useState<string>()
 
   const { database, schema, list = 'table' } = tab
   const isIndexes = list === 'index'
+  // A table can be filled only where the engine has an INSERT and the session
+  // is not read-only; the window itself checks the same capability before it
+  // offers a Generate button.
+  const insertable = capabilitiesOf(drivers.find((d) => d.type === session?.driver)).insertable
 
   const cacheKey = isIndexes
     ? indexesKey(tab.sessionId, database ?? '', schema ?? '')
@@ -162,6 +170,20 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
               },
             ]
           : []),
+        ...(object.kind === 'table' && insertable
+          ? [
+              {
+                key: 'datagen',
+                icon: <ExperimentOutlined />,
+                label: 'Data generation…',
+                onClick: () => {
+                  if (database && schema) {
+                    openDataGenTab(tab.sessionId, database, schema, object.name)
+                  }
+                },
+              },
+            ]
+          : []),
         { type: 'divider' as const },
         {
           key: 'copy',
@@ -171,7 +193,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         },
       ],
     }),
-    [copyName, database, openCodegenTab, openObject, schema, tab.sessionId],
+    [copyName, database, insertable, openCodegenTab, openDataGenTab, openObject, schema, tab.sessionId],
   )
 
   const objectColumns = useMemo<TableColumnsType<ObjectInfo>>(
