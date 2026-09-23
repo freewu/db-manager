@@ -998,6 +998,24 @@ export function ConnectionSidebar() {
   ])
 
   /**
+   * Opens or closes a group, the way a click on its drawer arrow would.
+   *
+   * The arrow is a small target and the rest of the row is its label, so the
+   * label answers to a double-click too — the gesture the tree already uses for
+   * "show me what is inside" (a connection row opens its runtime page that way).
+   * A group has nothing of its own to fetch: its members are already in the
+   * arrangement, which is why this touches the open set and nothing else.
+   */
+  const toggleGroup = useCallback((groupId: string) => {
+    const key = encodeNode({ t: 'group', groupId })
+    setExpandedKeys((keys) =>
+      keys.some((open) => String(open) === key)
+        ? keys.filter((open) => String(open) !== key)
+        : [...keys, key],
+    )
+  }, [])
+
+  /**
    * The pane's rows: the arrangement, then whatever the arrangement cannot hold.
    *
    * A group is a row like any other connection, so it is dragged and dropped by
@@ -1019,7 +1037,14 @@ export function ConnectionSidebar() {
               items={groupMenuItems(entry)}
               onClick={({ key }) => handleGroupMenuKey(entry, key)}
             >
-              <span className="dm-group-node">
+              <span
+                className="dm-group-node"
+                onDoubleClick={() => {
+                  // A group with nothing in it has nothing to reveal, so it is a
+                  // leaf and a double-click on it says nothing.
+                  if (members.length > 0) toggleGroup(entry.id)
+                }}
+              >
                 <span className="dm-truncate">{entry.name}</span>
                 {members.length > 0 ? (
                   <span className="dm-group-count">{members.length}</span>
@@ -1045,7 +1070,7 @@ export function ConnectionSidebar() {
     return nodes
     // Menu builders close over the current tree/session state on purpose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildConnectionNode, rootById, visibleArrangement, visibleSessions])
+  }, [buildConnectionNode, rootById, toggleGroup, visibleArrangement, visibleSessions])
 
   /* ------------------------------------------------------------ callbacks */
 
