@@ -566,6 +566,82 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
               ? 'No field is ticked'
               : undefined
 
+  /**
+   * Writes the rows the confirmation asked for.
+   *
+   * It runs on its own rather than as the answer to the dialog: the dialog is
+   * only there to be agreed to, and a run of a million rows would hold it open on
+   * top of the progress bar for as long as the run lasts. Agreeing closes it, and
+   * the run reports itself in the pane it was started from — where Stop is, and
+   * where the result stays afterwards.
+   */
+  const runGeneration = useCallback(async () => {
+    const rng = createRng()
+    const total = rowsToWrite
+    const columns = ticked.map((row) => row.name)
+    // Time is taken here rather than asked of the backend: what the user waited
+    // for is this loop, round trips and rendering included, and that is the
+    // number a run of a hundred thousand rows is judged by.
+    const started = Date.now()
+    const elapsed = () => Date.now() - started
+    stopRef.current = false
+    setResult(undefined)
+    setRunning(true)
+    setStartedAt(started)
+    setProgress({ done: 0, total, skipped: 0 })
+    let inserted = 0
+    let skipped = 0
+    // The engine's own words for the first row it would not take. A run that
+    // leaves rows out has to be able to say why, even when it finished.
+    let skipReason: string | undefined
+    try {
+      for (let start = 0; start < total; start += INSERT_BATCH) {
+        if (stopRef.current) {
+          setResult({ kind: 'stopped', inserted, skipped, ms: elapsed(), skipReason })
+          return
+        }
+        const size = Math.min(INSERT_BATCH, total - start)
+        const batch: unknown[][] = []
+        for (let i = 0; i < size; i += 1) {
+          batch.push(
+            ticked.map((row) => coerceMockValue(row.compiled.render(rng) as MockValue, row.kind)),
+          )
+        }
+        const answer = await api.insertRows({
+          sessionId,
+          database,
+          schema,
+          object,
+          columns,
+          rows: batch,
+          skipErrors,
+        })
+        inserted += answer.inserted
+        skipped += answer.skipped ?? 0
+        // The first refusal of the whole run, not of the batch in hand.
+        if (!skipReason && answer.error) skipReason = answer.error
+        if (answer.failed) {
+          setResult({
+            kind: 'failed',
+            inserted,
+            skipped,
+            ms: elapsed(),
+            row: start + answer.failed,
+            error: answer.error ?? 'the engine refused the row',
+          })
+          return
+        }
+        setProgress({ done: start + size, total, skipped })
+      }
+      setResult({ kind: 'done', inserted, skipped, ms: elapsed(), skipReason })
+    } catch (error) {
+      setResult({ kind: 'error', inserted, skipped, ms: elapsed(), error: toMessage(error) })
+    } finally {
+      setRunning(false)
+      if (inserted > 0) void loadObjects(sessionId, database, schema)
+    }
+  }, [rowsToWrite, skipErrors, ticked, sessionId, database, schema, object, loadObjects])
+
   const generate = useCallback(() => {
     if (blocker || !structure || !object) return
     modal.confirm({
@@ -588,88 +664,12 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
         </div>
       ),
       okText: 'Generate',
-      onOk: async () => {
-        const rng = createRng()
-        const total = rowsToWrite
-        const columns = ticked.map((row) => row.name)
-        // Time is taken here rather than asked of the backend: what the user
-        // waited for is this loop, round trips and rendering included, and that
-        // is the number a run of a hundred thousand rows is judged by.
-        const started = Date.now()
-        const elapsed = () => Date.now() - started
-        stopRef.current = false
-        setResult(undefined)
-        setRunning(true)
-        setStartedAt(started)
-        setProgress({ done: 0, total, skipped: 0 })
-        let inserted = 0
-        let skipped = 0
-        // The engine's own words for the first row it would not take. A run that
-        // leaves rows out has to be able to say why, even when it finished.
-        let skipReason: string | undefined
-        try {
-          for (let start = 0; start < total; start += INSERT_BATCH) {
-            if (stopRef.current) {
-              setResult({ kind: 'stopped', inserted, skipped, ms: elapsed(), skipReason })
-              return
-            }
-            const size = Math.min(INSERT_BATCH, total - start)
-            const batch: unknown[][] = []
-            for (let i = 0; i < size; i += 1) {
-              batch.push(
-                ticked.map((row) =>
-                  coerceMockValue(row.compiled.render(rng) as MockValue, row.kind),
-                ),
-              )
-            }
-            const answer = await api.insertRows({
-              sessionId,
-              database,
-              schema,
-              object,
-              columns,
-              rows: batch,
-              skipErrors,
-            })
-            inserted += answer.inserted
-            skipped += answer.skipped ?? 0
-            // The first refusal of the whole run, not of the batch in hand.
-            if (!skipReason && answer.error) skipReason = answer.error
-            if (answer.failed) {
-              setResult({
-                kind: 'failed',
-                inserted,
-                skipped,
-                ms: elapsed(),
-                row: start + answer.failed,
-                error: answer.error ?? 'the engine refused the row',
-              })
-              return
-            }
-            setProgress({ done: start + size, total, skipped })
-          }
-          setResult({ kind: 'done', inserted, skipped, ms: elapsed(), skipReason })
-        } catch (error) {
-          setResult({ kind: 'error', inserted, skipped, ms: elapsed(), error: toMessage(error) })
-        } finally {
-          setRunning(false)
-          if (inserted > 0) void loadObjects(sessionId, database, schema)
-        }
+      // Closing here and running detached: the dialog is not what reports the run.
+      onOk: () => {
+        void runGeneration()
       },
     })
-  }, [
-    blocker,
-    structure,
-    object,
-    rowsToWrite,
-    skipErrors,
-    ticked,
-    modal,
-    sessionId,
-    database,
-    schema,
-    loadObjects,
-  ])
+  }, [blocker, structure, object, rowsToWrite, ticked, skipErrors, modal, runGeneration])
 
   /* --- the fields grid --------------------------------------------------- */
 

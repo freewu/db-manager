@@ -725,41 +725,28 @@ body {
 }
 
 /* --- the placeholder picker ----------------------------------------------
-   The groups are tabs down the left and the placeholders are tiles, because the
+   The groups are names down the left and the placeholders are tiles, because the
    useful part of a placeholder is the example in it: a name alone makes two
    similar placeholders look alike. The tile grid fills whatever width the modal
    has, so the same markup works in a narrow window and a wide one. */
-.dm-mock-tabs {
+
+/* The column and the box are the pair the settings page uses (`.dm-settings-nav`
+   beside `.dm-settings-body`: the names down the left, one scroll box holding
+   every section, the highlight following the scroll, a border around the pair).
+   All that is added here is a height, because a modal has none of its own to
+   fill — a fixed box is what makes the scroll the box's rather than the modal's,
+   and the modal is not what the scroll position is read from. The box also keeps
+   the class `dm-mock-body`, which is what the smoke harness scrolls by name. */
+.dm-mock-groups {
+  height: 52vh;
   min-height: 320px;
+  border: 1px solid var(--dm-border);
+  border-radius: 4px;
 }
 
-/* The tab strip is the long part — seven groups is more than a short window
-   holds — so it scrolls on its own rather than pushing the pane off the modal.
-   The clipping happens one level in: antd hides the list with `overflow:
-   hidden` on `.ant-tabs-nav-wrap`, so a scrollbar on the outer nav only ever
-   moved its own padding (five pixels of it) and the wheel went on to the modal
-   body, leaving the last groups out of reach. The wrap has to stop clipping for
-   the nav to be the thing that scrolls. */
-.dm-mock-tabs > .ant-tabs-nav {
-  max-height: 52vh;
-  overflow: auto;
-}
-
-.dm-mock-tabs > .ant-tabs-nav .ant-tabs-nav-wrap {
-  overflow: visible;
-}
-
-.dm-mock-tabs > .ant-tabs-nav .ant-tabs-nav-list {
-  gap: 2px;
-}
-
-/* The pane is what scrolls, so a long group keeps the tab strip in place. */
-.dm-mock-tabs > .ant-tabs-content-holder {
-  max-height: 52vh;
-  overflow: auto;
-  padding-left: 4px;
-}
-
+/* The search results have no groups beside them, so they are a list of tiles on
+   their own rather than the pair above — the tag on each tile is what says which
+   group it came from. */
 .dm-mock-pane {
   max-height: 52vh;
   overflow: auto;

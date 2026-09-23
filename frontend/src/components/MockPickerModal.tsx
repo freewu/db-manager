@@ -6,21 +6,24 @@
  * picked placeholder (`order-@natural(1, 9999)`) is written in the cell, where
  * the description column can explain it.
  *
- * The groups are tabs down the left side and each placeholder is a tile, because
- * the interesting part of a placeholder is not its name but what it produces:
- * every tile renders an example of itself, from the same engine the window uses,
- * so two placeholders that sound alike can be told apart before one is picked.
+ * The groups are names down the left and each placeholder is a tile, because the
+ * interesting part of a placeholder is not its name but what it produces: every
+ * tile renders an example of itself, from the same engine the window uses, so two
+ * placeholders that sound alike can be told apart before one is picked. The
+ * column and the box are read the way the settings page reads its sections — the
+ * highlight follows the scroll, and a click moves the scroll — so the wheel over
+ * the list walks the groups instead of doing nothing.
  *
- * The last tab is the user's own placeholders — the ones the settings page keeps
- * in the data directory's `.mock` folder. They are shown like the built-ins,
- * with an example rendered from their template, which is what makes a custom
- * placeholder checkable at the moment of use rather than only where it is
- * written. A placeholder file that cannot be read is not offered (picking it
- * could only fail); it is reported instead, with a pointer to the settings page
- * where it can be removed.
+ * The last group is the user's own placeholders — the ones the settings page keeps
+ * in the data directory's `.mock` folder. They are shown like the built-ins, with
+ * an example rendered from their template, which is what makes a custom
+ * placeholder checkable at the moment of use rather than only where it is written.
+ * A placeholder file that cannot be read is not offered (picking it could only
+ * fail); it is reported instead, with a pointer to the settings page where it can
+ * be removed.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Empty, Input, Modal, Tabs, Tag, Typography } from 'antd'
+import { Empty, Input, Modal, Tag, Typography } from 'antd'
 
 import {
   PLACEHOLDER_GROUPS,
@@ -29,9 +32,10 @@ import {
   type Placeholder,
   type PlaceholderGroup,
 } from '../lib/mock'
+import { useSectionScroll } from '../lib/sectionScroll'
 import { useAppStore } from '../store/appStore'
 
-/** The key of the tab holding the user's own placeholders. */
+/** The key of the group holding the user's own placeholders. */
 const CUSTOM_GROUP = 'custom'
 
 /**
@@ -41,21 +45,8 @@ const CUSTOM_GROUP = 'custom'
  */
 const WHEEL_COOLDOWN_MS = 150
 
-/**
- * Brings the group that just became active into the strip's own view.
- *
- * The strip is read from the top, so the tab being read has to be the one on
- * screen. Measured from the rectangles rather than `offsetTop`, because the nav
- * is not the tab's offset parent.
- */
-function showActiveTab(host: HTMLElement) {
-  const nav = host.querySelector<HTMLElement>('.ant-tabs-nav')
-  const tab = nav?.querySelector<HTMLElement>('.ant-tabs-tab-active')
-  if (!nav || !tab || nav.scrollHeight <= nav.clientHeight) return
-  const navBox = nav.getBoundingClientRect()
-  const tabBox = tab.getBoundingClientRect()
-  nav.scrollTop += tabBox.top + tabBox.height / 2 - (navBox.top + navBox.height / 2)
-}
+/** The id a group's element carries, so the column can point at it and the scroll can find it. */
+const groupPaneId = (key: string) => `dm-mock-group-${key}`
 
 interface MockPickerModalProps {
   /** The field being filled; the modal is closed while this is undefined. */
@@ -80,7 +71,7 @@ function PlaceholderTile({
 }: {
   item: Placeholder
   placeholders: CustomPlaceholder[]
-  /** The group's label, shown only in search results, where tabs are gone. */
+  /** The group's label, shown only in search results, where the groups' headings are not beside them. */
   tag?: string
   onPick: (value: string) => void
 }) {
@@ -108,23 +99,12 @@ function PlaceholderTile({
 
 export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps) {
   const [query, setQuery] = useState('')
-  const [group, setGroup] = useState(PLACEHOLDER_GROUPS[0].key)
-  const unbindStrip = useRef<(() => void) | null>(null)
+  const unbindNav = useRef<(() => void) | null>(null)
   const steppedAt = useRef(0)
 
   const stored = useAppStore((state) => state.mockPlaceholders)
   const refreshMockPlaceholders = useAppStore((state) => state.refreshMockPlaceholders)
   const open = field !== undefined
-
-  // The tab strip is only as long as the last read, so the modal re-reads the
-  // folder as it opens: another window (or a hand-edited file) may have changed
-  // it since. A failure leaves the list as it was rather than emptying it.
-  useEffect(() => {
-    if (!open) return
-    setQuery('')
-    setGroup(PLACEHOLDER_GROUPS[0].key)
-    refreshMockPlaceholders().catch(() => undefined)
-  }, [open, field, refreshMockPlaceholders])
 
   // What the engine compiles with. Broken files are left out of it on purpose:
   // they have no template to render, and a name that cannot be rendered is a
@@ -156,36 +136,55 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
     ],
     [placeholders],
   )
+  const groupKeys = useMemo(() => groups.map((entry) => entry.key), [groups])
 
   /**
-   * The wheel over the tab strip walks the groups.
-   *
-   * The groups are a column down the left, and a column that answers the wheel
-   * by moving two pixels reads as broken: the wheel over it is how the next group
-   * is reached.
-   *
-   * The listener is bound to the strip's element rather than to a ref read in an
-   * effect, because the modal's body is only mounted a render or two after it
-   * opens — an effect would run with nothing to listen on. It is registered in
-   * the capture phase so that the event stops here: antd slides the tab list
-   * under the wheel as well, and a strip that both walks the groups and slides
-   * under them moves two groups at a time.
-   *
-   * Only the strip: the tiles below are a list of their own, and a wheel over
-   * them scrolls them.
+   * The groups are read the way the settings page's sections are: the names down
+   * the left, one scroll box beside them, the highlight following the scroll and
+   * a click moving it. All the groups are in the box at once, which is what makes
+   * a scroll position mean anything: the wheel over the tiles walks the groups
+   * because the tiles of the next group are below the ones on screen.
    */
-  const bindStrip = useCallback(
-    (node: HTMLDivElement | null) => {
-      unbindStrip.current?.()
-      unbindStrip.current = null
+  const { current: group, bodyRef, onScroll, goTo, reset } = useSectionScroll({
+    keys: groupKeys,
+    idOf: groupPaneId,
+    active: open,
+  })
+
+  // The list is only as long as the last read, so the modal re-reads the folder
+  // as it opens: another window (or a hand-edited file) may have changed it since,
+  // which also moves the groups the scroll is read against. A failure leaves the
+  // list as it was rather than emptying it.
+  useEffect(() => {
+    if (!open) return
+    setQuery('')
+    reset()
+    refreshMockPlaceholders().catch(() => undefined)
+  }, [open, field, reset, refreshMockPlaceholders])
+
+  /**
+   * The wheel over the names walks the groups.
+   *
+   * The box beside them answers the wheel by scrolling, and a column that answers
+   * it by moving two pixels reads as broken: the wheel over the column is how the
+   * next group is reached. Bound to the element with a callback ref rather than
+   * to a ref read in an effect, because the modal's body is only mounted a render
+   * or two after it opens — an effect would run with nothing to listen on.
+   *
+   * Only the column: the box beside it is what scrolls through the groups, and the
+   * wheel over it is left alone to do that.
+   */
+  const bindNav = useCallback(
+    (node: HTMLElement | null) => {
+      unbindNav.current?.()
+      unbindNav.current = null
       if (!node) return
       const onWheel = (event: WheelEvent) => {
-        const target = event.target as HTMLElement | null
-        if (!target?.closest('.ant-tabs-nav') || Math.abs(event.deltaY) < 4) return
+        if (Math.abs(event.deltaY) < 4) return
         const at = groups.findIndex((entry) => entry.key === group)
         const next = at < 0 ? undefined : groups[at + (event.deltaY > 0 ? 1 : -1)]
-        // At either end there is no next group, and the wheel is left to the strip
-        // itself — it may have a notch of its own to give.
+        // At either end there is no next group, and the wheel is left to the
+        // column itself — it may have a notch of its own to give.
         if (!next) return
         event.preventDefault()
         event.stopPropagation()
@@ -195,13 +194,12 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
         const now = Date.now()
         if (now - steppedAt.current < WHEEL_COOLDOWN_MS) return
         steppedAt.current = now
-        setGroup(next.key)
-        window.requestAnimationFrame(() => showActiveTab(node))
+        goTo(next.key)
       }
-      node.addEventListener('wheel', onWheel, { capture: true })
-      unbindStrip.current = () => node.removeEventListener('wheel', onWheel, { capture: true })
+      node.addEventListener('wheel', onWheel)
+      unbindNav.current = () => node.removeEventListener('wheel', onWheel)
     },
-    [groups, group],
+    [groups, group, goTo],
   )
 
   const needle = query.trim().toLowerCase()
@@ -228,8 +226,8 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
   ) : null
 
   return (
-    // Wide enough for four tiles to a row inside the left tab strip, and the same
-    // whether the group tabs are showing or a search's results are not.
+    // Wide enough for four tiles to a row beside the group names, and the same
+    // whether those names are showing or a search's results are not.
     <Modal
       open={open}
       title={field ? `Placeholder for “${field}”` : 'Placeholder'}
@@ -253,67 +251,87 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
         style={{ marginBottom: 8 }}
       />
       {brokenNote}
-      <div ref={bindStrip}>
-        {needle ? (
-          matches.length === 0 ? (
-            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No placeholder matches" />
-          ) : (
-            <div className="dm-mock-pane">
-              <div className="dm-mock-tiles">
-                {matches.map(({ group: label, item }) => (
-                  <PlaceholderTile
-                    key={`${label}:${item.value}`}
-                    item={item}
-                    placeholders={placeholders}
-                    tag={label}
-                    onPick={onPick}
-                  />
-                ))}
-              </div>
-            </div>
-          )
+      {needle ? (
+        matches.length === 0 ? (
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No placeholder matches" />
         ) : (
-          <Tabs
-            className="dm-mock-tabs"
-            tabPosition="left"
-            size="small"
-            activeKey={group}
-            onChange={setGroup}
-            items={groups.map((entry) => ({
-              key: entry.key,
-              label: entry.label,
-              children: (
-                <div className="dm-mock-pane">
-                  {entry.items.length === 0 ? (
-                    <Empty
-                      image={Empty.PRESENTED_IMAGE_SIMPLE}
-                      description={
-                        <span>
-                          No custom placeholder yet.
-                          <br />
-                          Settings › Mock placeholders writes one — a name for a template such as{' '}
-                          <span className="mono">SO@date(yyyy)@natural(1000, 9999)</span>.
-                        </span>
-                      }
-                    />
-                  ) : (
-                    <div className="dm-mock-tiles">
-                      {entry.items.map((item) => (
-                        <PlaceholderTile
-                          key={item.value}
-                          item={item}
-                          placeholders={placeholders}
-                          onPick={onPick}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ),
-            }))}
-          />
-        )}
-      </div>
+          <div className="dm-mock-pane">
+            <div className="dm-mock-tiles">
+              {matches.map(({ group: label, item }) => (
+                <PlaceholderTile
+                  key={`${label}:${item.value}`}
+                  item={item}
+                  placeholders={placeholders}
+                  tag={label}
+                  onPick={onPick}
+                />
+              ))}
+            </div>
+          </div>
+        )
+      ) : (
+        // Every group lives in one scroll box: the column beside it is read back
+        // from that scroll, and a click moves it, so the two always agree.
+        <div className="dm-settings-page dm-mock-groups">
+          <nav
+            className="dm-settings-nav"
+            role="tablist"
+            aria-label="Placeholder groups"
+            ref={bindNav}
+          >
+            {groups.map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                role="tab"
+                aria-selected={group === entry.key}
+                aria-controls={groupPaneId(entry.key)}
+                className={`dm-settings-nav-item${group === entry.key ? ' is-active' : ''}`}
+                onClick={() => goTo(entry.key)}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </nav>
+          <div className="dm-settings-body dm-mock-body" ref={bodyRef} onScroll={onScroll}>
+            {groups.map((entry) => (
+              <section
+                key={entry.key}
+                className="dm-settings-section"
+                id={groupPaneId(entry.key)}
+                role="tabpanel"
+                aria-label={entry.label}
+              >
+                <h2 className="dm-settings-section-title">{entry.label}</h2>
+                {entry.items.length === 0 ? (
+                  <Empty
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                    description={
+                      <span>
+                        No custom placeholder yet.
+                        <br />
+                        Settings › Mock placeholders writes one — a name for a template such as{' '}
+                        <span className="mono">SO@date(yyyy)@natural(1000, 9999)</span>.
+                      </span>
+                    }
+                  />
+                ) : (
+                  <div className="dm-mock-tiles">
+                    {entry.items.map((item) => (
+                      <PlaceholderTile
+                        key={item.value}
+                        item={item}
+                        placeholders={placeholders}
+                        onPick={onPick}
+                      />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
+        </div>
+      )}
     </Modal>
   )
 }

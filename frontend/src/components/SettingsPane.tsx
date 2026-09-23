@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   Alert,
   App as AntApp,
@@ -21,6 +21,7 @@ import { AboutProject } from './AboutProject'
 import { MockPlaceholderSettings } from './MockPlaceholderSettings'
 import { useAppStore } from '../store/appStore'
 import { CODE_LANGUAGES } from '../lib/codegen'
+import { useSectionScroll } from '../lib/sectionScroll'
 import { THEME_MODES, type ThemeMode } from '../lib/theme'
 
 /** The pages of the settings, in the order they are shown. */
@@ -38,15 +39,8 @@ const TABS: { key: SettingsTab; label: string }[] = [
 /** The id a section carries, so the nav can point at it and the scroll can find it. */
 const sectionId = (key: SettingsTab) => `dm-settings-${key}`
 
-/**
- * How far below the top of the scroll box a heading has to be for the section to
- * count as the one being read. A small offset rather than zero, because a heading
- * exactly level with the edge is half cut off and does not read as "here".
- */
-const SECTION_MARKER = 24
-
-/** How long a nav click's smooth scroll is given before scrolling is read again. */
-const SCROLL_SETTLE_MS = 420
+/** The sections' keys, in the order they are shown; the scroll is read in this order. */
+const SECTION_KEYS = TABS.map((entry) => entry.key)
 
 /** The languages a code window can open in, listed by the name they go by. */
 const LANGUAGE_OPTIONS = [...CODE_LANGUAGES]
@@ -84,70 +78,18 @@ export function SettingsPane() {
   const moveDataDir = useAppStore((s) => s.moveDataDir)
 
   const { message } = AntApp.useApp()
-  const [tab, setTab] = useState<SettingsTab>('appearance')
   const [busy, setBusy] = useState<'pick' | 'move' | 'reset' | undefined>()
   const [outcome, setOutcome] = useState<DataDirMoveResult | undefined>()
   const [error, setError] = useState<string | undefined>()
 
-  const bodyRef = useRef<HTMLDivElement | null>(null)
-  // The section a click asked for, held while its smooth scroll is animating.
-  // Those scroll events are the nav's own doing, and reading them back would run
-  // the highlight through every section on the way there.
-  const scrollingTo = useRef<SettingsTab | undefined>(undefined)
-  const settleTimer = useRef<number | undefined>(undefined)
-
-  const sectionOf = useCallback((key: SettingsTab): HTMLElement | null => {
-    return bodyRef.current?.querySelector<HTMLElement>(`#${sectionId(key)}`) ?? null
-  }, [])
-
-  /**
-   * Reads the scroll position back into the nav.
-   *
-   * The section being read is the last one whose heading has reached the top of
-   * the box — the sections are stacked in the nav's order, so the last one that
-   * has arrived is the one on screen. The end of the list is the exception: the
-   * final section can be too short to ever reach the top, so the bottom of the
-   * scroll means the bottom of the list.
-   */
-  const syncFromScroll = useCallback(() => {
-    const body = bodyRef.current
-    if (!body || scrollingTo.current) return
-    const top = body.getBoundingClientRect().top
-    let current = TABS[0].key
-    for (const entry of TABS) {
-      const section = sectionOf(entry.key)
-      if (section && section.getBoundingClientRect().top - top <= SECTION_MARKER) {
-        current = entry.key
-      }
-    }
-    if (body.scrollTop + body.clientHeight >= body.scrollHeight - 2) {
-      current = TABS[TABS.length - 1].key
-    }
-    setTab(current)
-  }, [sectionOf])
-
-  /** Moves the scroll to a section, and the nav with it. */
-  const goTo = useCallback(
-    (key: SettingsTab) => {
-      const body = bodyRef.current
-      const section = sectionOf(key)
-      setTab(key)
-      if (!body || !section) return
-      scrollingTo.current = key
-      const top =
-        body.scrollTop + section.getBoundingClientRect().top - body.getBoundingClientRect().top
-      body.scrollTo({ top, behavior: 'smooth' })
-      window.clearTimeout(settleTimer.current)
-      settleTimer.current = window.setTimeout(() => {
-        scrollingTo.current = undefined
-        syncFromScroll()
-      }, SCROLL_SETTLE_MS)
-    },
-    [sectionOf, syncFromScroll],
-  )
-
-  useEffect(() => () => window.clearTimeout(settleTimer.current), [])
-
+  // The nav and the scroll box are one thing: the highlight follows the scroll
+  // and a click moves the scroll, so the two always agree about which section is
+  // being read. See `useSectionScroll`.
+  const { current: tab, bodyRef, onScroll, goTo } = useSectionScroll({
+    keys: SECTION_KEYS,
+    idOf: sectionId,
+    active,
+  })
   // Re-read on coming back to the front, and whenever a move left something to
   // report: what the folder holds is what the page is about.
   useEffect(() => {
@@ -156,14 +98,6 @@ export function SettingsPane() {
     setError(undefined)
     void refreshDataDir().catch((err) => setError(toMessage(err)))
   }, [active, refreshDataDir])
-
-  // Coming back to the front re-measures as well: a section can have grown while
-  // it was hidden (the folder listing arrives with file sizes), which moves every
-  // heading below it.
-  useEffect(() => {
-    if (!active) return
-    syncFromScroll()
-  }, [active, syncFromScroll])
 
   const pickAndMove = useCallback(
     async (reset: boolean) => {
@@ -225,7 +159,7 @@ export function SettingsPane() {
 
         {/* Every section lives in one scroll box: the nav beside it is read back
             from that scroll, and a click moves it, so the two always agree. */}
-        <div className="dm-settings-body" ref={bodyRef} onScroll={syncFromScroll}>
+        <div className="dm-settings-body" ref={bodyRef} onScroll={onScroll}>
           <section
             className="dm-settings-section"
             id={sectionId('appearance')}
