@@ -756,9 +756,14 @@ body {
   overflow: auto;
 }
 
+/* Four to a row, and no more: the catalogue is read by scanning the names down
+   a column, and four tiles is what the window's width fits without the examples
+   being squeezed into slivers. A wider window spreads the same four; a narrower
+   one keeps four columns and lets the text wrap, because a wrapped example still
+   reads and a squeezed one does not. */
 .dm-mock-tiles {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -792,10 +797,14 @@ body {
   min-width: 0;
 }
 
+/* The placeholder itself — the thing the user is picking — gets the same
+   treatment as the example below it: at four tiles to a row a parameterised
+   name as long as `@datetime(yyyy-MM-dd HH:mm:ss)` does not fit on one line, and
+   a clipped name is the one thing that makes the tile unusable. */
 .dm-mock-value {
   font-size: 12.5px;
   color: var(--dm-accent-text);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 /* The example is the tile's reason to exist, so it is the roomiest line: a

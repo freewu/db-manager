@@ -139,7 +139,9 @@ type Explainer interface {
 // needs an engine is writing them down. The values may only travel as bind
 // parameters — nothing the window generates is SQL — and a batch the server
 // refuses must come back as a partial count rather than as an error, so the
-// window can say which row failed instead of blaming the whole run.
+// window can say which row failed instead of blaming the whole run. Whether a
+// refusal ends the batch or is counted over is the caller's choice, and it is
+// carried by the request (`RowInsert.SkipErrors`).
 //
 // A document store does not implement this: a collection has no column list to
 // fill, so there is nothing for the window to offer.

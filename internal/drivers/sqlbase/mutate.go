@@ -167,12 +167,14 @@ func (c *Conn) DeleteRow(ctx context.Context, req models.RowDelete) (int64, erro
 //
 // If the server refuses that statement the batch is replayed one row at a time,
 // which is the only way to find out *which* row it was: a multi-row INSERT is
-// all-or-nothing per statement, so the retry at worst repeats the rows the
-// failed statement had already written on an engine whose INSERT is not atomic
-// per statement (MySQL's non-transactional tables). That duplicate is reported
-// as the row that failed, together with the engine's message — the count the
-// window shows stays true, which is what matters to whoever is looking at a
-// half-filled table.
+// all-or-nothing per statement. What the replay then does with a refused row is
+// the whole meaning of `SkipErrors` — off (the default) the batch stops there
+// and reports the row, on it is counted as skipped and the next row is tried.
+// The retry at worst repeats the rows the failed statement had already written
+// on an engine whose INSERT is not atomic per statement (MySQL's
+// non-transactional tables). A duplicate then surfaces as a row that failed,
+// with the engine's own message — the count the window shows stays true, which
+// is what matters to whoever is looking at a half-filled table.
 func (c *Conn) InsertRows(ctx context.Context, req models.RowInsert) (models.RowInsertResult, error) {
 	object := strings.TrimSpace(req.Object)
 	if object == "" {
@@ -208,14 +210,25 @@ func (c *Conn) InsertRows(ctx context.Context, req models.RowInsert) (models.Row
 	}
 
 	var landed int64
+	var skipped int64
+	var firstError string
 	for i, row := range req.Rows {
 		inserted, err := execInsert(ctx, db, d, target, columns, [][]any{row})
 		if err != nil {
-			return models.RowInsertResult{Inserted: landed, Failed: i + 1, Error: err.Error()}, nil
+			if !req.SkipErrors {
+				return models.RowInsertResult{Inserted: landed, Failed: i + 1, Error: err.Error()}, nil
+			}
+			// The row is left out and the run keeps its shape: the caller asked
+			// for the count of what did not fit, not for the run to stop.
+			skipped++
+			if firstError == "" {
+				firstError = err.Error()
+			}
+			continue
 		}
 		landed += inserted
 	}
-	return models.RowInsertResult{Inserted: landed}, nil
+	return models.RowInsertResult{Inserted: landed, Skipped: skipped, Error: firstError}, nil
 }
 
 // insertColumns trims and validates the column list once, up front, so a bad

@@ -20,6 +20,14 @@
  * them; the batching is here so that the count on screen always matches the rows
  * that were really written.
  *
+ * A row the engine will not take normally ends the run: it is named, and the
+ * count on screen is the count that landed. Tick *Skip bad rows* and the
+ * refusals are counted instead — the backend leaves those rows out and carries
+ * on, so a hundred thousand row run does not stop at one value the table will
+ * not accept. Either way the alert says what the run did: rows in, rows skipped,
+ * and how long it took, because a run that writes and cannot be undone deserves
+ * a record rather than a progress bar that disappeared.
+ *
  * The connection is the window's: each one gets its own window, so the mocks
  * written for a table are not thrown away by looking at another table. Picking a
  * table under a different connection brings up *that* connection's window, where
@@ -30,6 +38,7 @@ import {
   Alert,
   App as AntApp,
   Button,
+  Checkbox,
   Empty,
   Input,
   InputNumber,
@@ -53,6 +62,7 @@ import { api, toMessage } from '../api/client'
 import type { ColumnInfo, TableStructure } from '../api/types'
 import { capabilitiesOf } from '../lib/capabilities'
 import { kindOfColumn, type ColumnKind } from '../lib/codegen'
+import { formatDuration } from '../lib/format'
 import {
   coerceMockValue,
   compileTemplate,
@@ -129,12 +139,53 @@ function fieldRowsOf(
   })
 }
 
-/** What one run did, as the alert under the toolbar reports it. */
+/**
+ * What one run did, as the alert under the toolbar reports it.
+ *
+ * Every kind carries the same tally — rows written, rows passed over, and the
+ * wall-clock time of the whole run, round trips included — so the one line the
+ * user is left with cannot depend on how the run ended.
+ */
 type RunResult =
-  | { kind: 'done'; inserted: number }
-  | { kind: 'stopped'; inserted: number }
-  | { kind: 'failed'; inserted: number; row: number; error: string }
-  | { kind: 'error'; inserted: number; error: string }
+  | { kind: 'done'; inserted: number; skipped: number; ms: number; skipReason?: string }
+  | { kind: 'stopped'; inserted: number; skipped: number; ms: number; skipReason?: string }
+  | { kind: 'failed'; inserted: number; skipped: number; ms: number; row: number; error: string }
+  | { kind: 'error'; inserted: number; skipped: number; ms: number; error: string }
+
+/**
+ * How long a run took, as the alert and the progress line say it.
+ *
+ * Precise to the millisecond while it is short, and coarse once it is not: a run
+ * of a hundred thousand rows is measured in minutes, where `formatDuration`'s
+ * "304.61 s" would read as a number rather than as a length of time.
+ */
+function elapsedText(ms: number): string {
+  if (ms < 10_000) return formatDuration(ms)
+  const seconds = Math.round(ms / 1000)
+  if (seconds < 60) return `${seconds} s`
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds % 60
+  return rest === 0 ? `${minutes} min` : `${minutes} min ${rest} s`
+}
+
+/**
+ * The headline of a finished run: how many rows, how long, how many were left
+ * out. The skipped count is only worth a clause when there is one.
+ */
+function resultHeadline(result: RunResult): string {
+  const rows = (count: number) => `${count.toLocaleString()} row(s)`
+  const skipped = result.skipped > 0 ? ` — ${rows(result.skipped)} skipped` : ''
+  switch (result.kind) {
+    case 'done':
+      return `Inserted ${rows(result.inserted)} in ${elapsedText(result.ms)}${skipped}`
+    case 'stopped':
+      return `Stopped after ${rows(result.inserted)} in ${elapsedText(result.ms)}${skipped}`
+    case 'failed':
+      return `Row ${result.row.toLocaleString()} was refused after ${elapsedText(result.ms)} — ${rows(result.inserted)} are in the table`
+    case 'error':
+      return `Insert failed after ${rows(result.inserted)} in ${elapsedText(result.ms)}`
+  }
+}
 
 interface DataGenPaneProps {
   tab: WorkspaceTab
@@ -179,9 +230,21 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
   const [chosen, setChosen] = useState<Record<string, Record<string, boolean>>>({})
   const [pickerField, setPickerField] = useState<string>()
   const [rowsToWrite, setRowsToWrite] = useState(DEFAULT_ROWS)
+  /**
+   * Whether a row the engine refuses is left out or ends the run. Off by
+   * default: a mock that keeps producing rows the table will not take is
+   * something to be seen and fixed, so stopping at the first one is the honest
+   * choice until the user says otherwise.
+   */
+  const [skipErrors, setSkipErrors] = useState(false)
   const [running, setRunning] = useState(false)
-  const [progress, setProgress] = useState<{ done: number; total: number }>()
+  const [progress, setProgress] = useState<{ done: number; total: number; skipped: number }>()
   const [result, setResult] = useState<RunResult>()
+  /** When the run in flight started, so its elapsed time can be shown while it runs. */
+  const [startedAt, setStartedAt] = useState(0)
+  // Redraws once a second while a run is in flight, so the elapsed time in the
+  // progress line moves. The counter itself is of no interest to anything.
+  const [, setElapsedTick] = useState(0)
   const [expanded, setExpanded] = useState<string[]>([])
   const stopRef = useRef(false)
 
@@ -210,6 +273,14 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
   useEffect(() => {
     refreshMockPlaceholders().catch(() => undefined)
   }, [refreshMockPlaceholders])
+
+  // The ticking clock of a run in flight. Nothing else in the window wants a
+  // timer, and the interval only exists while there is something to time.
+  useEffect(() => {
+    if (!running) return
+    const id = window.setInterval(() => setElapsedTick((n) => n + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [running])
 
   const rows = useMemo(
     () => fieldRowsOf(structure, overrides[currentKey], placeholders),
@@ -495,6 +566,11 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
             The rows go straight into the table in batches of {INSERT_BATCH}. There is no undo —
             delete them the way you would delete any other row.
           </div>
+          <div style={{ marginTop: 6 }}>
+            {skipErrors
+              ? 'A row the engine refuses is left out and counted; the run carries on without it.'
+              : 'The run stops at the first row the engine refuses and says which one it was.'}
+          </div>
         </div>
       ),
       okText: 'Generate',
@@ -502,15 +578,25 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
         const rng = createRng()
         const total = rowsToWrite
         const columns = ticked.map((row) => row.name)
+        // Time is taken here rather than asked of the backend: what the user
+        // waited for is this loop, round trips and rendering included, and that
+        // is the number a run of a hundred thousand rows is judged by.
+        const started = Date.now()
+        const elapsed = () => Date.now() - started
         stopRef.current = false
         setResult(undefined)
         setRunning(true)
-        setProgress({ done: 0, total })
+        setStartedAt(started)
+        setProgress({ done: 0, total, skipped: 0 })
         let inserted = 0
+        let skipped = 0
+        // The engine's own words for the first row it would not take. A run that
+        // leaves rows out has to be able to say why, even when it finished.
+        let skipReason: string | undefined
         try {
           for (let start = 0; start < total; start += INSERT_BATCH) {
             if (stopRef.current) {
-              setResult({ kind: 'stopped', inserted })
+              setResult({ kind: 'stopped', inserted, skipped, ms: elapsed(), skipReason })
               return
             }
             const size = Math.min(INSERT_BATCH, total - start)
@@ -529,22 +615,28 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
               object,
               columns,
               rows: batch,
+              skipErrors,
             })
             inserted += answer.inserted
+            skipped += answer.skipped ?? 0
+            // The first refusal of the whole run, not of the batch in hand.
+            if (!skipReason && answer.error) skipReason = answer.error
             if (answer.failed) {
               setResult({
                 kind: 'failed',
                 inserted,
+                skipped,
+                ms: elapsed(),
                 row: start + answer.failed,
                 error: answer.error ?? 'the engine refused the row',
               })
               return
             }
-            setProgress({ done: start + size, total })
+            setProgress({ done: start + size, total, skipped })
           }
-          setResult({ kind: 'done', inserted })
+          setResult({ kind: 'done', inserted, skipped, ms: elapsed(), skipReason })
         } catch (error) {
-          setResult({ kind: 'error', inserted, error: toMessage(error) })
+          setResult({ kind: 'error', inserted, skipped, ms: elapsed(), error: toMessage(error) })
         } finally {
           setRunning(false)
           if (inserted > 0) void loadObjects(sessionId, database, schema)
@@ -556,6 +648,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
     structure,
     object,
     rowsToWrite,
+    skipErrors,
     ticked,
     modal,
     sessionId,
@@ -688,7 +781,11 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                 </Typography.Text>
               ) : null}
               <div className="dm-toolbar-right">
-                <Space size={6}>
+                {/* The run settings, the two resets and Generate are one group, but
+                    a window at its narrowest gets them on two lines rather than
+                    clipped: the toolbar hides what does not fit, and Generate is
+                    the one button that must not be the thing that falls off. */}
+                <Space size={6} wrap>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                     Rows
                   </Typography.Text>
@@ -705,6 +802,22 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                     <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                       max {MAX_ROWS.toLocaleString()}
                     </Typography.Text>
+                  </Tooltip>
+                  <Tooltip
+                    title={
+                      skipErrors
+                        ? 'A row the engine refuses is left out and counted, and the run carries on'
+                        : 'The run stops at the first row the engine refuses (tick to carry on instead)'
+                    }
+                  >
+                    <Checkbox
+                      checked={skipErrors}
+                      disabled={running}
+                      onChange={(event) => setSkipErrors(event.target.checked)}
+                      style={{ fontSize: 12 }}
+                    >
+                      Skip bad rows
+                    </Checkbox>
                   </Tooltip>
                   <Button
                     size="small"
@@ -723,9 +836,11 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                     </Button>
                   </Tooltip>
                   {running ? (
-                    <Button size="small" danger onClick={() => (stopRef.current = true)}>
-                      Stop
-                    </Button>
+                    <Tooltip title="Finish the batch in flight, then stop">
+                      <Button size="small" danger onClick={() => (stopRef.current = true)}>
+                        Stop
+                      </Button>
+                    </Tooltip>
                   ) : (
                     <Tooltip title={blocker ?? 'Insert the generated rows'}>
                       <Button
@@ -767,11 +882,18 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
               <div className="dm-datagen-progress">
                 <div className="dm-datagen-progress-head">
                   <span>
-                    Inserted {progress.done.toLocaleString()} / {progress.total.toLocaleString()} row(s)
+                    Inserted {progress.done.toLocaleString()} / {progress.total.toLocaleString()}{' '}
+                    row(s)
+                    {progress.skipped > 0
+                      ? ` · ${progress.skipped.toLocaleString()} skipped`
+                      : ''}
+                    {startedAt ? ` · ${elapsedText(Date.now() - startedAt)}` : ''}
                   </span>
-                  <Button size="small" type="link" danger onClick={() => (stopRef.current = true)}>
-                    Stop
-                  </Button>
+                  <Tooltip title="Finish the batch in flight, then stop">
+                    <Button size="small" type="link" danger onClick={() => (stopRef.current = true)}>
+                      Stop
+                    </Button>
+                  </Tooltip>
                 </div>
                 <Progress
                   percent={progress.total === 0 ? 0 : Math.round((progress.done / progress.total) * 100)}
@@ -790,19 +912,15 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                 type={
                   result.kind === 'done' ? 'success' : result.kind === 'stopped' ? 'warning' : 'error'
                 }
-                title={
-                  result.kind === 'done'
-                    ? `Inserted ${result.inserted.toLocaleString()} row(s)`
-                    : result.kind === 'stopped'
-                      ? `Stopped after ${result.inserted.toLocaleString()} row(s)`
-                      : result.kind === 'failed'
-                        ? `Row ${result.row.toLocaleString()} was refused — ${result.inserted.toLocaleString()} row(s) are in the table`
-                        : `Insert failed after ${result.inserted.toLocaleString()} row(s)`
-                }
+                title={resultHeadline(result)}
                 description={
                   result.kind === 'failed' || result.kind === 'error' ? (
                     <span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
                       {result.error}
+                    </span>
+                  ) : result.skipReason ? (
+                    <span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
+                      first refusal: {result.skipReason}
                     </span>
                   ) : undefined
                 }

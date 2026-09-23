@@ -361,3 +361,81 @@ CREATE TABLE people (
 		t.Fatal("expected an empty batch to be refused")
 	}
 }
+
+// A run that was told to skip bad rows keeps going: the batch is replayed row by
+// row either way (a multi-row INSERT cannot say which row it refused), and the
+// only difference is what happens at the row that fails.
+func TestInsertRowsSkipsRefusedRowsWhenAsked(t *testing.T) {
+	ctx := context.Background()
+	conn := newConn(t)
+	in := inserter(t, conn)
+
+	exec(t, conn, `
+CREATE TABLE people (
+	id   INTEGER PRIMARY KEY AUTOINCREMENT,
+	name TEXT NOT NULL
+);`)
+
+	result, err := in.InsertRows(ctx, models.RowInsert{
+		Database:   "main",
+		Object:     "people",
+		Columns:    []string{"name"},
+		SkipErrors: true,
+		Rows: [][]any{
+			{"Alice"},
+			{nil}, // name is NOT NULL: skipped, not fatal
+			{"Bob"},
+			{nil}, // and the run is still going here
+			{"Carol"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("skipping rows must not turn a refusal into a failed call: %v", err)
+	}
+	if result.Inserted != 3 {
+		t.Fatalf("expected the three good rows to land, got %+v", result)
+	}
+	if result.Skipped != 2 {
+		t.Fatalf("expected two rows to be counted as skipped, got %+v", result)
+	}
+	// Nothing stopped the batch, so it must not name a row as the one that did.
+	if result.Failed != 0 {
+		t.Fatalf("a skipped row is not a row that stopped the batch, got %+v", result)
+	}
+	if result.Error == "" {
+		t.Fatal("the engine's message for the first skipped row has to travel back")
+	}
+
+	page, err := conn.Fetch(ctx, drivers.FetchRequest{
+		Database:   "main",
+		Object:     "people",
+		Limit:      10,
+		CountTotal: true,
+	})
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if page.Total != 3 {
+		t.Fatalf("expected only the rows that fit to be in the table, got %d", page.Total)
+	}
+	// The ones that fit are the ones around the refusals, in the order given.
+	for i, want := range []string{"Alice", "Bob", "Carol"} {
+		if page.Rows[i][1] != want {
+			t.Fatalf("row %d should be %q, got %v", i, want, page.Rows[i][1])
+		}
+	}
+
+	// Asking to stop still stops: the flag is what decides, not the batch.
+	stopped, err := in.InsertRows(ctx, models.RowInsert{
+		Database: "main",
+		Object:   "people",
+		Columns:  []string{"name"},
+		Rows:     [][]any{{"Dan"}, {nil}, {"Eve"}},
+	})
+	if err != nil {
+		t.Fatalf("a refused row must be reported, not raised: %v", err)
+	}
+	if stopped.Inserted != 1 || stopped.Failed != 2 || stopped.Skipped != 0 {
+		t.Fatalf("expected the batch to stop at row 2, got %+v", stopped)
+	}
+}

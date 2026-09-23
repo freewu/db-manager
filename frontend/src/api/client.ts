@@ -241,7 +241,8 @@ export const api = {
   updateRow: (req: RowUpdate) => invoke<number>('UpdateRow', req),
   /**
    * Appends one batch of generated rows. A batch the engine refuses comes back
-   * as a result naming the row that stopped it, not as a rejection.
+   * as a result naming the row that stopped it — or counting the rows it was
+   * asked to skip — not as a rejection.
    */
   insertRows: (req: RowInsert) => invoke<RowInsertResult>('InsertRows', req),
 

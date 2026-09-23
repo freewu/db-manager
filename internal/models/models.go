@@ -793,6 +793,11 @@ type RowInsert struct {
 	Object    string   `json:"object"`
 	Columns   []string `json:"columns"`
 	Rows      [][]any  `json:"rows"`
+	// SkipErrors keeps the batch going past a row the engine refuses, counting
+	// it instead of stopping at it. Off — the default — a refusal ends the
+	// batch, because a mock that keeps producing rows the engine will not take
+	// is something to be seen and fixed rather than run over.
+	SkipErrors bool `json:"skipErrors,omitempty"`
 }
 
 // RowInsertResult reports what one batch really did.
@@ -805,10 +810,16 @@ type RowInsert struct {
 type RowInsertResult struct {
 	// Inserted counts the rows this batch really wrote.
 	Inserted int64 `json:"inserted"`
+	// Skipped counts the rows a skip-errors batch passed over. It stays 0 on a
+	// batch that was told to stop, which never gets past the row it stopped at.
+	Skipped int64 `json:"skipped,omitempty"`
 	// Failed is the 1-based index of the row that stopped the batch, or 0 when
-	// every row went in.
+	// nothing stopped it: every row went in, or the batch was told to keep going
+	// past the rows the engine refused.
 	Failed int `json:"failed,omitempty"`
-	// Error is the engine's own message for that row.
+	// Error is the engine's own message for the row that stopped the batch, or —
+	// when the batch was told to keep going — for the first row it passed over.
+	// It is empty when nothing was refused.
 	Error string `json:"error,omitempty"`
 }
 

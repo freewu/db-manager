@@ -575,6 +575,8 @@ export interface RowInsert {
   object: string
   columns: string[]
   rows: unknown[][]
+  /** Keep going past a row the engine refuses, counting it instead of stopping. */
+  skipErrors?: boolean
 }
 
 /**
@@ -582,11 +584,14 @@ export interface RowInsert {
  *
  * A statement the engine refused is a result, not an error: `failed` is the
  * 1-based index of the row that stopped the batch and `inserted` counts the
- * rows that did land, so a run cannot claim more than it wrote. Both are absent
- * when everything went in.
+ * rows that did land, so a run cannot claim more than it wrote. `skipped` is the
+ * other half of that rule — a batch told to keep going names no row, it counts
+ * the ones it passed over — and `error` carries the engine's message either way.
+ * All three are absent when everything went in.
  */
 export interface RowInsertResult {
   inserted: number
+  skipped?: number
   failed?: number
   error?: string
 }

@@ -1049,7 +1049,9 @@ func (m *Manager) editable(sessionID string, key []models.KeyValue) (*session, e
 // whole JSON number is folded back into an integer (a `float64` bound to an
 // `int4` column is read by PostgreSQL as double precision, which it refuses),
 // the batch is width-checked and size-capped, and a statement the engine turns
-// down comes back as a partial count rather than as an error.
+// down comes back as a partial count rather than as an error. Whether such a
+// refusal ends the batch or is counted over is the window's own decision and
+// arrives in the request (`SkipErrors`); the service only carries it through.
 func (m *Manager) InsertRows(req models.RowInsert) (models.RowInsertResult, error) {
 	s, err := m.session(req.SessionID)
 	if err != nil {

@@ -162,3 +162,54 @@ func TestInsertRowsReportsTheRowTheEngineRefused(t *testing.T) {
 		t.Fatal("the engine's own message has to travel back to the window")
 	}
 }
+
+// The window's checkbox decides whether a refused row ends the run. It travels in
+// the request, and what comes back has to line up with it: counting rows over is
+// not the same thing as naming the row that stopped the batch.
+func TestInsertRowsCountsOverRefusedRowsWhenAsked(t *testing.T) {
+	manager, _ := testManager(t)
+
+	// user_id is NOT NULL in the fixture, so rows 2 and 4 are the ones the engine
+	// will turn down.
+	result, err := manager.InsertRows(models.RowInsert{
+		SessionID:  "s1",
+		Database:   "main",
+		Object:     "orders",
+		Columns:    []string{"id", "user_id"},
+		SkipErrors: true,
+		Rows: [][]any{
+			{float64(3), float64(11)},
+			{float64(4), nil},
+			{float64(5), float64(12)},
+			{float64(6), nil},
+			{float64(7), float64(13)},
+		},
+	})
+	if err != nil {
+		t.Fatalf("a skipped row must be reported, not returned as an error: %v", err)
+	}
+	if result.Inserted != 3 || result.Skipped != 2 {
+		t.Fatalf("expected three rows in and two skipped, got %+v", result)
+	}
+	if result.Failed != 0 {
+		t.Fatalf("nothing stopped the batch, so no row may be named as having: %+v", result)
+	}
+	if result.Error == "" {
+		t.Fatal("the window has to be able to say why rows were left out")
+	}
+
+	page, err := manager.Fetch(models.FetchRequest{
+		SessionID:  "s1",
+		Database:   "main",
+		Object:     "orders",
+		Limit:      10,
+		CountTotal: true,
+	})
+	if err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	// The fixture starts with two rows; three more were added.
+	if page.Total != 5 {
+		t.Fatalf("expected 5 rows in total, got %d", page.Total)
+	}
+}

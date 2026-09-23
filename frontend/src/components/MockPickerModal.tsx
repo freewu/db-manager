@@ -156,6 +156,8 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
   ) : null
 
   return (
+    // Wide enough for four tiles to a row inside the left tab strip, and the same
+    // whether the group tabs are showing or a search's results are not.
     <Modal
       open={open}
       title={field ? `Placeholder for “${field}”` : 'Placeholder'}
@@ -167,7 +169,7 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
           <span className="mono">@@</span> for a literal @.
         </Typography.Text>
       }
-      width={760}
+      width={880}
       destroyOnHidden
     >
       <Input
