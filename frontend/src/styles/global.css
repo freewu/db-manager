@@ -928,6 +928,8 @@ body {
 /* thin scrollbars, closer to a native tool feel */
 .dm-sidebar-tree::-webkit-scrollbar,
 .dm-pane-body::-webkit-scrollbar,
+.dm-settings-body::-webkit-scrollbar,
+.dm-settings-nav::-webkit-scrollbar,
 .dm-runtime-scroll::-webkit-scrollbar,
 .dm-ddl::-webkit-scrollbar,
 .dm-codegen::-webkit-scrollbar,
@@ -940,6 +942,8 @@ body {
 
 .dm-sidebar-tree::-webkit-scrollbar-thumb,
 .dm-pane-body::-webkit-scrollbar-thumb,
+.dm-settings-body::-webkit-scrollbar-thumb,
+.dm-settings-nav::-webkit-scrollbar-thumb,
 .dm-runtime-scroll::-webkit-scrollbar-thumb,
 .dm-ddl::-webkit-scrollbar-thumb,
 .dm-codegen::-webkit-scrollbar-thumb,
@@ -954,6 +958,8 @@ body {
 
 .dm-sidebar-tree::-webkit-scrollbar-thumb:hover,
 .dm-pane-body::-webkit-scrollbar-thumb:hover,
+.dm-settings-body::-webkit-scrollbar-thumb:hover,
+.dm-settings-nav::-webkit-scrollbar-thumb:hover,
 .dm-runtime-scroll::-webkit-scrollbar-thumb:hover,
 .dm-codegen::-webkit-scrollbar-thumb:hover,
 .ant-table-body::-webkit-scrollbar-thumb:hover {
@@ -2001,41 +2007,96 @@ body.dm-col-resizing * {
   gap: 6px;
 }
 
-/* ---- settings dialog ------------------------------------------------------ */
+/* ---- settings page --------------------------------------------------------
+   The nav is a column on the left and every section sits in the scroll box
+   beside it. The two are one thing — the highlight follows the scroll, and a
+   click moves the scroll — so the nav must not scroll away with the sections it
+   names, and every section has to be present for a scroll position to mean
+   anything. */
 
-.dm-settings-pane {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  /* Tall enough that the sections below the nav do not make the page jump, short
-     enough that it never grows past a small laptop screen; the settings page
-     lifts both (see .dm-settings-page). */
-  min-height: 260px;
-  max-height: 62vh;
-  overflow: auto;
-}
-
-/* The settings page: the section nav stays put and the sections beneath it
-   scroll, which on a page means the page itself scrolls rather than a frame
-   inside it — a scrollbar inside a scrollbar reads as a broken window. */
 .dm-settings-page {
   flex: 1 1 auto;
   min-height: 0;
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.dm-settings-nav {
+  flex: 0 0 auto;
+  width: 176px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  overflow: auto;
+  border-inline-end: 1px solid var(--dm-border);
+  background: var(--dm-sidebar-bg);
+}
+
+.dm-settings-nav-item {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12.5px;
+  text-align: start;
+  opacity: 0.75;
+  cursor: pointer;
+}
+
+.dm-settings-nav-item:hover {
+  opacity: 1;
+  background: var(--dm-tree-hover);
+}
+
+.dm-settings-nav-item.is-active {
+  opacity: 1;
+  font-weight: 600;
+  color: var(--dm-accent-text);
+  background: var(--dm-tree-hover);
+  box-shadow: inset 2px 0 0 var(--dm-accent);
+}
+
+/* The scroll box. It keeps no top padding: the marker that decides which section
+   is being read measures from this box's top edge, and padding here would sit
+   between the two. */
+.dm-settings-body {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: auto;
   padding: 0 16px 24px;
 }
 
-.dm-settings-page .dm-settings-pane,
+/* A settings page given the whole window would read as a wall of text on a wide
+   screen, so the sections keep a reading width. */
+.dm-settings-section {
+  max-width: 1100px;
+  padding-top: 20px;
+}
+
+.dm-settings-section + .dm-settings-section {
+  margin-top: 24px;
+  border-top: 1px solid var(--dm-border);
+}
+
+.dm-settings-section-title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+
+/* The placeholder editor is a pane of its own elsewhere; here it is a section,
+   so it must not scroll inside the box that is already scrolling. */
 .dm-settings-page .dm-custom-pane {
   min-height: 0;
   max-height: none;
   overflow: visible;
-}
-
-/* A settings page that has been given the whole window would read as a wall of
-   text on a wide screen, so the sections keep a reading width. */
-.dm-settings-page > * {
-  max-width: 1100px;
 }
 
 .dm-settings-row-title {

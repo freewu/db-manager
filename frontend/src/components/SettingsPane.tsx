@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Alert,
   App as AntApp,
@@ -33,6 +33,19 @@ const TABS: { key: SettingsTab; label: string }[] = [
   { key: 'data', label: 'Data folder' },
   { key: 'about', label: 'About' },
 ]
+
+/** The id a section carries, so the nav can point at it and the scroll can find it. */
+const sectionId = (key: SettingsTab) => `dm-settings-${key}`
+
+/**
+ * How far below the top of the scroll box a heading has to be for the section to
+ * count as the one being read. A small offset rather than zero, because a heading
+ * exactly level with the edge is half cut off and does not read as "here".
+ */
+const SECTION_MARKER = 24
+
+/** How long a nav click's smooth scroll is given before scrolling is read again. */
+const SCROLL_SETTLE_MS = 420
 
 /** The languages a code window can open in, listed by the name they go by. */
 const LANGUAGE_OPTIONS = [...CODE_LANGUAGES]
@@ -74,6 +87,65 @@ export function SettingsPane() {
   const [outcome, setOutcome] = useState<DataDirMoveResult | undefined>()
   const [error, setError] = useState<string | undefined>()
 
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  // The section a click asked for, held while its smooth scroll is animating.
+  // Those scroll events are the nav's own doing, and reading them back would run
+  // the highlight through every section on the way there.
+  const scrollingTo = useRef<SettingsTab | undefined>(undefined)
+  const settleTimer = useRef<number | undefined>(undefined)
+
+  const sectionOf = useCallback((key: SettingsTab): HTMLElement | null => {
+    return bodyRef.current?.querySelector<HTMLElement>(`#${sectionId(key)}`) ?? null
+  }, [])
+
+  /**
+   * Reads the scroll position back into the nav.
+   *
+   * The section being read is the last one whose heading has reached the top of
+   * the box — the sections are stacked in the nav's order, so the last one that
+   * has arrived is the one on screen. The end of the list is the exception: the
+   * final section can be too short to ever reach the top, so the bottom of the
+   * scroll means the bottom of the list.
+   */
+  const syncFromScroll = useCallback(() => {
+    const body = bodyRef.current
+    if (!body || scrollingTo.current) return
+    const top = body.getBoundingClientRect().top
+    let current = TABS[0].key
+    for (const entry of TABS) {
+      const section = sectionOf(entry.key)
+      if (section && section.getBoundingClientRect().top - top <= SECTION_MARKER) {
+        current = entry.key
+      }
+    }
+    if (body.scrollTop + body.clientHeight >= body.scrollHeight - 2) {
+      current = TABS[TABS.length - 1].key
+    }
+    setTab(current)
+  }, [sectionOf])
+
+  /** Moves the scroll to a section, and the nav with it. */
+  const goTo = useCallback(
+    (key: SettingsTab) => {
+      const body = bodyRef.current
+      const section = sectionOf(key)
+      setTab(key)
+      if (!body || !section) return
+      scrollingTo.current = key
+      const top =
+        body.scrollTop + section.getBoundingClientRect().top - body.getBoundingClientRect().top
+      body.scrollTo({ top, behavior: 'smooth' })
+      window.clearTimeout(settleTimer.current)
+      settleTimer.current = window.setTimeout(() => {
+        scrollingTo.current = undefined
+        syncFromScroll()
+      }, SCROLL_SETTLE_MS)
+    },
+    [sectionOf, syncFromScroll],
+  )
+
+  useEffect(() => () => window.clearTimeout(settleTimer.current), [])
+
   // Re-read on coming back to the front, and whenever a move left something to
   // report: what the folder holds is what the page is about.
   useEffect(() => {
@@ -82,6 +154,14 @@ export function SettingsPane() {
     setError(undefined)
     void refreshDataDir().catch((err) => setError(toMessage(err)))
   }, [active, refreshDataDir])
+
+  // Coming back to the front re-measures as well: a section can have grown while
+  // it was hidden (the folder listing arrives with file sizes), which moves every
+  // heading below it.
+  useEffect(() => {
+    if (!active) return
+    syncFromScroll()
+  }, [active, syncFromScroll])
 
   const pickAndMove = useCallback(
     async (reset: boolean) => {
@@ -125,112 +205,141 @@ export function SettingsPane() {
       </div>
 
       <div className="dm-settings-page">
-        <nav className="dm-form-tabs" role="tablist" aria-label="Settings">
+        <nav className="dm-settings-nav" role="tablist" aria-label="Settings">
           {TABS.map((entry) => (
             <button
               key={entry.key}
               type="button"
               role="tab"
               aria-selected={tab === entry.key}
-              className={`dm-form-tab${tab === entry.key ? ' is-active' : ''}`}
-              onClick={() => setTab(entry.key)}
+              aria-controls={sectionId(entry.key)}
+              className={`dm-settings-nav-item${tab === entry.key ? ' is-active' : ''}`}
+              onClick={() => goTo(entry.key)}
             >
               {entry.label}
             </button>
           ))}
         </nav>
 
-      {tab === 'appearance' ? (
-        <div className="dm-settings-pane">
-          <SettingRow
-            title="Display theme"
-            hint="On System the window follows the operating system and switches the moment it does."
+        {/* Every section lives in one scroll box: the nav beside it is read back
+            from that scroll, and a click moves it, so the two always agree. */}
+        <div className="dm-settings-body" ref={bodyRef} onScroll={syncFromScroll}>
+          <section
+            className="dm-settings-section"
+            id={sectionId('appearance')}
+            role="tabpanel"
+            aria-label="Appearance"
           >
-            <Segmented
-              value={theme}
-              options={THEME_MODES.map((mode) => ({
-                value: mode.value,
-                label: (
-                  <Tooltip title={mode.hint}>
-                    <span>{mode.label}</span>
-                  </Tooltip>
-                ),
-              }))}
-              onChange={(value) => setTheme(value as ThemeMode)}
-            />
-          </SettingRow>
-        </div>
-      ) : null}
+            <h2 className="dm-settings-section-title">Appearance</h2>
+            <SettingRow
+              title="Display theme"
+              hint="On System the window follows the operating system and switches the moment it does."
+            >
+              <Segmented
+                value={theme}
+                options={THEME_MODES.map((mode) => ({
+                  value: mode.value,
+                  label: (
+                    <Tooltip title={mode.hint}>
+                      <span>{mode.label}</span>
+                    </Tooltip>
+                  ),
+                }))}
+                onChange={(value) => setTheme(value as ThemeMode)}
+              />
+            </SettingRow>
+          </section>
 
-      {tab === 'code' ? (
-        <div className="dm-settings-pane">
-          <SettingRow
-            title="Default code language"
-            hint="What a new code window opens in. Each window can be switched to another language on the spot; this is the one it starts from."
+          <section
+            className="dm-settings-section"
+            id={sectionId('code')}
+            role="tabpanel"
+            aria-label="Code generation"
           >
-            <Select
-              showSearch
-              optionFilterProp="label"
-              style={{ width: 240 }}
-              value={codegenLanguage}
-              options={LANGUAGE_OPTIONS}
-              onChange={setCodegenLanguage}
-            />
-          </SettingRow>
-        </div>
-      ) : null}
+            <h2 className="dm-settings-section-title">Code generation</h2>
+            <SettingRow
+              title="Default code language"
+              hint="What a new code window opens in. Each window can be switched to another language on the spot; this is the one it starts from."
+            >
+              <Select
+                showSearch
+                optionFilterProp="label"
+                style={{ width: 240 }}
+                value={codegenLanguage}
+                options={LANGUAGE_OPTIONS}
+                onChange={setCodegenLanguage}
+              />
+            </SettingRow>
+          </section>
 
-      {tab === 'mock' ? <MockPlaceholderSettings /> : null}
-
-      {tab === 'data' ? (
-        <div className="dm-settings-pane">
-          <SettingRow
-            title="Data folder"
-            hint="Connections, query favourites, window state and the password key live here; moving the folder takes them all along."
+          <section
+            className="dm-settings-section"
+            id={sectionId('mock')}
+            role="tabpanel"
+            aria-label="Mock placeholders"
           >
-            <DataDirPath info={dataDir} />
-            <Space wrap>
-              <Button
-                icon={<FolderOpenOutlined />}
-                onClick={() => void api.revealInExplorer(dataDir?.path ?? '')}
-              >
-                Open folder
-              </Button>
-              <Button
-                icon={<SwapOutlined />}
-                loading={busy === 'pick' || busy === 'move'}
-                onClick={() => void pickAndMove(false)}
-              >
-                Change…
-              </Button>
-              <Button
-                icon={<ReloadOutlined />}
-                disabled={dataDir?.isDefault ?? true}
-                loading={busy === 'reset'}
-                onClick={() => void pickAndMove(true)}
-              >
-                Use the default
-              </Button>
-            </Space>
-          </SettingRow>
+            <h2 className="dm-settings-section-title">Mock placeholders</h2>
+            <MockPlaceholderSettings />
+          </section>
 
-          {error ? (
-            <Alert type="error" showIcon title="The move did not finish cleanly" description={error} />
-          ) : null}
+          <section
+            className="dm-settings-section"
+            id={sectionId('data')}
+            role="tabpanel"
+            aria-label="Data folder"
+          >
+            <h2 className="dm-settings-section-title">Data folder</h2>
+            <SettingRow
+              title="Where the data lives"
+              hint="Connections, query favourites, window state and the password key live here; moving the folder takes them all along."
+            >
+              <DataDirPath info={dataDir} />
+              <Space wrap>
+                <Button
+                  icon={<FolderOpenOutlined />}
+                  onClick={() => void api.revealInExplorer(dataDir?.path ?? '')}
+                >
+                  Open folder
+                </Button>
+                <Button
+                  icon={<SwapOutlined />}
+                  loading={busy === 'pick' || busy === 'move'}
+                  onClick={() => void pickAndMove(false)}
+                >
+                  Change…
+                </Button>
+                <Button
+                  icon={<ReloadOutlined />}
+                  disabled={dataDir?.isDefault ?? true}
+                  loading={busy === 'reset'}
+                  onClick={() => void pickAndMove(true)}
+                >
+                  Use the default
+                </Button>
+              </Space>
+            </SettingRow>
 
-          {outcome ? <MoveReport result={outcome} /> : null}
+            {error ? (
+              <Alert type="error" showIcon title="The move did not finish cleanly" description={error} />
+            ) : null}
 
-          <ChangeLogSize />
+            {outcome ? <MoveReport result={outcome} /> : null}
 
-          <DataDirFiles info={dataDir} />
+            <ChangeLogSize />
+
+            <DataDirFiles info={dataDir} />
+          </section>
+
+          <section
+            className="dm-settings-section"
+            id={sectionId('about')}
+            role="tabpanel"
+            aria-label="About"
+          >
+            <h2 className="dm-settings-section-title">About</h2>
+            <AboutProject />
+          </section>
         </div>
-      ) : null}
-
-      {tab === 'about' ? (
-        <div className="dm-settings-pane">
-          <AboutProject />
-        </div>
-      ) : null}
       </div>
     </div>
   )
