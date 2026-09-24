@@ -845,7 +845,12 @@ func (m *Manager) ApplyDesign(design models.TableDesign) (*models.DesignResult, 
 	if err != nil {
 		return nil, err
 	}
-	return m.applyPlan(s, design, plan, models.ChangeSourceDesign), nil
+	return m.applyPlan(s, statementPlace{
+		database: design.Database,
+		schema:   design.Schema,
+		object:   design.Object,
+		source:   models.ChangeSourceDesign,
+	}, plan), nil
 }
 
 // PlanCreateDesign renders the script that creates a table that does not exist
@@ -884,35 +889,101 @@ func (m *Manager) ApplyCreateDesign(design models.TableDesign) (*models.DesignRe
 	if err != nil {
 		return nil, err
 	}
-	return m.applyPlan(s, design, plan, models.ChangeSourceCreate), nil
+	return m.applyPlan(s, statementPlace{
+		database: design.Database,
+		schema:   design.Schema,
+		object:   design.Object,
+		source:   models.ChangeSourceCreate,
+	}, plan), nil
+}
+
+// --- table copy ------------------------------------------------------------
+
+// PlanCopyTable renders the script that duplicates a table into a new one.
+// Nothing is executed: this is the preview the explorer's copy window shows
+// beside the name being typed.
+//
+// The structure is read here rather than sent by the window, for the same reason
+// the designer reads it: the copy is rendered from the live catalog, so what the
+// window shows and what runs cannot disagree about what a table's fields are.
+func (m *Manager) PlanCopyTable(req models.CopyTableRequest) (*models.DesignPlan, error) {
+	s, err := m.session(req.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.Object) == "" {
+		return nil, apperr.New(apperr.CodeInvalidConfig, "object name is required")
+	}
+	if strings.TrimSpace(req.Target) == "" {
+		return nil, apperr.New(apperr.CodeInvalidConfig, "the copy needs a name")
+	}
+
+	ctx, cancel := m.ctx(60 * time.Second)
+	defer cancel()
+	current, err := s.conn.Structure(ctx, req.Database, req.Schema, req.Object)
+	if err != nil {
+		return nil, err
+	}
+
+	plan, err := sqlbase.PlanCopy(s.conn.Dialect(), current, req.Target, req.WithData)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInvalidConfig, err, "cannot copy table %s", req.Object)
+	}
+	return &plan, nil
+}
+
+// CopyTable plans the copy again and runs it statement by statement.
+//
+// It is deliberately the same shape as ApplyCreateDesign: the window sends what
+// it wants, never SQL, and a copy is planned here so the script that runs is
+// produced by the code that produced the preview. Copying the rows is part of the
+// same script, because a copy that failed between its CREATE and its INSERT is
+// exactly the kind of half-done table the result has to be able to describe.
+func (m *Manager) CopyTable(req models.CopyTableRequest) (*models.DesignResult, error) {
+	s, err := m.session(req.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if s.readOnly {
+		return nil, apperr.New(apperr.CodeReadOnly, "this connection is read-only")
+	}
+
+	plan, err := m.PlanCopyTable(req)
+	if err != nil {
+		return nil, err
+	}
+	// The statements are all about the table being created, so that is the object
+	// they are logged against; the table being copied is named in the statements
+	// themselves.
+	return m.applyPlan(s, statementPlace{
+		database: req.Database,
+		schema:   req.Schema,
+		object:   req.Target,
+		source:   models.ChangeSourceCopy,
+	}, plan), nil
 }
 
 // applyPlan runs an already-planned script, one statement at a time, and reports
 // how far it got. A plan that is applied is always planned first, so this is the
-// only place where the structure page executes DDL.
+// only place where a window executes DDL.
 //
 // Each statement is written to the change log as it runs, with the object the
-// draft was for: this is the one path that executes statement by statement, so it
+// plan was for: this is the one path that executes statement by statement, so it
 // is the one path that knows the outcome of every line it ran and can record a
 // failure against the statement that caused it.
-func (m *Manager) applyPlan(s *session, design models.TableDesign, plan *models.DesignPlan, source string) *models.DesignResult {
+func (m *Manager) applyPlan(s *session, place statementPlace, plan *models.DesignPlan) *models.DesignResult {
 	result := &models.DesignResult{Plan: *plan, Executed: []string{}, FailedIndex: -1}
 	for i, statement := range plan.Statements {
 		ctx, cancel := m.ctx(QueryTimeout(0))
 		res, err := s.conn.Execute(ctx, drivers.ExecRequest{
-			Database: design.Database,
+			Database: place.database,
 			SQL:      statement,
 		})
 		cancel()
 		// The plan's statements come from the designer's own renderer, so they are
 		// SQL whatever the engine calls it; a keyword that is not one still gets
 		// the classification rather than being left blank.
-		m.logStatement(s, statementPlace{
-			database: design.Database,
-			schema:   design.Schema,
-			object:   design.Object,
-			source:   source,
-		}, statement, statementKind(statement, sqlutil.KindOf(statement)), err)
+		m.logStatement(s, place, statement, statementKind(statement, sqlutil.KindOf(statement)), err)
 		if err != nil {
 			result.FailedIndex = i
 			result.Error = err.Error()

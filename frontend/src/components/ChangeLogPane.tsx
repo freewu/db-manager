@@ -50,6 +50,7 @@ const SOURCE_LABEL: Record<string, string> = {
   design: 'The structure page',
   create: 'The table designer',
   grid: 'The data grid',
+  copy: 'The duplicate-table window',
 }
 
 /**

@@ -13,6 +13,7 @@ import type {
   ConnectionConfig,
   ConnectionGroup,
   ConnectionLayout,
+  CopyTableRequest,
   CreateDatabaseRequest,
   DataDirInfo,
   DataDirMoveResult,
@@ -213,6 +214,11 @@ export const api = {
     invoke<DesignPlan>('PlanCreateTable', design),
   applyCreateTable: (design: TableDesign) =>
     invoke<DesignResult>('ApplyCreateTable', design),
+  /** Duplicating a table: the statement(s) it would take, then the run. */
+  planCopyTable: (req: CopyTableRequest) =>
+    invoke<DesignPlan>('PlanCopyTable', req),
+  copyTable: (req: CopyTableRequest) =>
+    invoke<DesignResult>('CopyTable', req),
 
   // --- data ---------------------------------------------------------------
   fetchRows: (req: FetchRequest) => invoke<FetchResult>('FetchRows', req),

@@ -393,6 +393,26 @@ export interface DesignResult {
   messages?: string[]
 }
 
+/**
+ * Duplicating one table into a new one.
+ *
+ * `withData` is the whole difference between the two entries of the explorer's
+ * copy menu: structure only writes the fields and indexes, structure and data
+ * also moves the rows (one `INSERT ... SELECT`, run by the server). The script
+ * is rendered by the backend from the live catalog — the window only names the
+ * copy — so `DesignPlan`/`DesignResult` describe it like any other design.
+ */
+export interface CopyTableRequest {
+  sessionId: string
+  database?: string
+  schema?: string
+  /** The table being copied. */
+  object: string
+  /** The table being created. */
+  target: string
+  withData: boolean
+}
+
 export interface ColumnMeta {
   name: string
   databaseType?: string

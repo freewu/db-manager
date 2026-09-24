@@ -356,6 +356,30 @@ type DesignResult struct {
 	Messages    []string `json:"messages,omitempty"`
 }
 
+// --- table copy ------------------------------------------------------------
+
+// CopyTableRequest asks for one table to be duplicated into a new one.
+//
+// WithData is the whole difference between the two entries the explorer's copy
+// menu offers: "structure only" writes the fields and indexes of an empty table,
+// "structure and data" appends the rows. Target is the new table's name, which
+// is the only thing the window has to ask for — every other fact about the copy
+// is read from the table being copied, at the moment the script is rendered.
+//
+// The result of planning one is a DesignPlan and the result of running one is a
+// DesignResult: a copy is a CREATE TABLE plus (optionally) an INSERT, so it is
+// previewed, run statement by statement and reported on exactly like a draft of
+// the table designer.
+type CopyTableRequest struct {
+	SessionID string `json:"sessionId"`
+	Database  string `json:"database,omitempty"`
+	Schema    string `json:"schema,omitempty"`
+	// Object is the table being copied, Target the one being created.
+	Object   string `json:"object"`
+	Target   string `json:"target"`
+	WithData bool   `json:"withData"`
+}
+
 // --- databases -------------------------------------------------------------
 
 // DatabaseCharset is one character set (MySQL family) or encoding (PostgreSQL)
@@ -942,6 +966,9 @@ const (
 	// ChangeSourceGrid is the data grid editing or deleting a row: a change
 	// asked for from the result table, not from a script or a design.
 	ChangeSourceGrid = "grid"
+	// ChangeSourceCopy is the explorer duplicating a table: one CREATE TABLE,
+	// the indexes that go with it, and the rows when they were asked for.
+	ChangeSourceCopy = "copy"
 )
 
 // ChangeLogEntry is one statement this application ran that changed schema or

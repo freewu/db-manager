@@ -384,6 +384,17 @@ func (a *App) ApplyCreateTable(design models.TableDesign) (*models.DesignResult,
 	return a.manager.ApplyCreateDesign(design)
 }
 
+// PlanCopyTable returns the script that would duplicate a table into a new one,
+// without running it.
+func (a *App) PlanCopyTable(req models.CopyTableRequest) (*models.DesignPlan, error) {
+	return a.manager.PlanCopyTable(req)
+}
+
+// CopyTable duplicates a table and reports how far the script got.
+func (a *App) CopyTable(req models.CopyTableRequest) (*models.DesignResult, error) {
+	return a.manager.CopyTable(req)
+}
+
 // --- data ------------------------------------------------------------------
 
 // FetchRows returns one page of rows for the data grid.

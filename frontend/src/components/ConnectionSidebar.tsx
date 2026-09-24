@@ -4,6 +4,7 @@ import type { MenuProps, TreeDataNode, TreeProps } from 'antd'
 import {
   AppstoreOutlined,
   CodeOutlined,
+  CopyOutlined,
   DatabaseOutlined,
   DeleteOutlined,
   DisconnectOutlined,
@@ -50,6 +51,7 @@ import {
 } from '../lib/explorer'
 import { useAppStore, type ListScope, type TableView } from '../store/appStore'
 import { ConnectionTypeDropdown, connectionTypeItems, driverFromKey } from './ConnectionTypeMenu'
+import { CopyTableModal, type CopyTableSource } from './CopyTableModal'
 import { NamePromptModal } from './NamePromptModal'
 import { objectIcon } from './objectIcon'
 import { SqlCode } from './SqlCode'
@@ -177,6 +179,8 @@ export function ConnectionSidebar() {
   const blankMenuRef = useRef<HTMLDivElement | null>(null)
   /** Session that the "New database" dialog is creating a database on. */
   const [newDatabase, setNewDatabase] = useState<SessionInfo | null>(null)
+  /** Table the "Duplicate table" window is copying, if any. */
+  const [copyTable, setCopyTable] = useState<CopyTableSource | null>(null)
   /**
    * Connection whose runtime page a double-click asked for. A profile without a
    * stored password connects through a prompt that finishes later, so the page
@@ -586,6 +590,44 @@ export function ConnectionSidebar() {
                           icon: <ExperimentOutlined />,
                           label: 'Data generation…',
                           onClick: () => openDataGenTab(sessionId, database, schema, object.name),
+                        },
+                      ]
+                    : []),
+                  // Only a table can be duplicated: a view has no CREATE of
+                  // its own to write, and a document store has no CREATE TABLE
+                  // at all — the same capability that gates "New table…".
+                  ...(object.kind === 'table' && canCreate
+                    ? [
+                        {
+                          key: 'duplicate',
+                          icon: <CopyOutlined />,
+                          label: 'Duplicate table',
+                          children: [
+                            {
+                              key: 'duplicate-structure',
+                              label: 'Structure only',
+                              onClick: () =>
+                                setCopyTable({
+                                  sessionId,
+                                  driver: driverOfSession(sessionId)?.type,
+                                  database,
+                                  schema,
+                                  object: object.name,
+                                }),
+                            },
+                            {
+                              key: 'duplicate-data',
+                              label: 'Structure and data',
+                              onClick: () =>
+                                setCopyTable({
+                                  sessionId,
+                                  driver: driverOfSession(sessionId)?.type,
+                                  database,
+                                  schema,
+                                  object: object.name,
+                                }),
+                            },
+                          ],
                         },
                       ]
                     : []),
@@ -1808,6 +1850,30 @@ export function ConnectionSidebar() {
       />
 
       <NewDatabaseModal session={newDatabase} onClose={() => setNewDatabase(null)} />
+
+      <CopyTableModal
+        source={copyTable}
+        onClose={() => setCopyTable(null)}
+        onFinished={(target, withData, result) => {
+          if (!copyTable) return
+          const { sessionId, database, schema } = copyTable
+          // The catalog moved either way: a copy that failed halfway may still
+          // have left its table (and some of its indexes) behind.
+          void loadObjects(sessionId, database, schema)
+          void loadIndexes(sessionId, database, schema)
+          if (result.error) return
+          // The window has done its job, so the copy is what the user is left
+          // looking at — on the rows that came with it, or on its structure
+          // when all that was asked for was the shape of the table.
+          openTableTab(
+            sessionId,
+            database,
+            schema,
+            { name: target, kind: 'table', rowEstimate: 0, sizeBytes: 0 },
+            withData ? 'data' : 'structure',
+          )
+        }}
+      />
 
       <GroupNameModal request={groupDialog} onClose={() => setGroupDialog(null)} />
 
