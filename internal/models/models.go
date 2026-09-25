@@ -1106,6 +1106,9 @@ const (
 	// from the difference between two databases: several tables in one run,
 	// which is why the entry points at no single object.
 	ChangeSourceCompare = "compare"
+	// ChangeSourceDataGen is the data generation window appending rows it made
+	// up: one entry per batch, because a batch is what the engine is handed.
+	ChangeSourceDataGen = "datagen"
 )
 
 // ChangeLogEntry is one statement this application ran that changed schema or
@@ -1129,6 +1132,11 @@ const (
 // script goes to the engine in one call, so a run that stops halfway leaves the
 // same message on each of its statements: the entry says what the run said, and
 // never more than the engine did.
+//
+// Rows is how much data the statement changed: the count the engine reported as
+// affected, which is rows inserted, updated or deleted. It is zero for anything
+// that cannot report one — DDL, and a script holding more than one write
+// statement, where no count can be attributed to a single line.
 type ChangeLogEntry struct {
 	Version int   `json:"version"`
 	At      int64 `json:"at"`
@@ -1145,7 +1153,9 @@ type ChangeLogEntry struct {
 	// Source is one of the ChangeSource values above.
 	Source    string `json:"source"`
 	Statement string `json:"statement"`
-	Error     string `json:"error,omitempty"`
+	// Rows is how much data the statement changed, as the engine counted it.
+	Rows  int64  `json:"rows,omitempty"`
+	Error string `json:"error,omitempty"`
 }
 
 // ChangeLogConnection is what an entry remembers about the connection it ran on.
@@ -1185,12 +1195,15 @@ type ChangeLog struct {
 // the log is a shelf rather than a single document: reading it means picking a
 // file, and this is what the window picks from.
 type ChangeLogFile struct {
-	// Name is the file name in the data directory: `changelog.jsonl` for the one
-	// being written, `<yyyymmdd>-<n>.log` for an archived one.
+	// Name is the file name inside the log folder: `<yyyymmdd>.log` for the file
+	// being written, `<yyyymmdd>-<n>.log` for one that was rotated out of the way.
+	// A log written by an older build is named as it was written — the file, or
+	// `changelog.jsonl` — and is listed from the data directory itself.
 	Name string `json:"name"`
 	// Archived marks a file that is complete and will not be written to again.
 	Archived bool `json:"archived"`
-	// At is when the archive was rotated out (millis), and zero for the live file.
+	// At is when the file was last written, and zero for the one being written
+	// right now.
 	At int64 `json:"at,omitempty"`
 	// Bytes is the file's size on disk.
 	Bytes int64 `json:"bytes"`

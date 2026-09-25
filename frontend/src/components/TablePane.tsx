@@ -37,10 +37,12 @@ import {
 import { api, toMessage } from '../api/client'
 import type {
   CellValue,
+  DriverType,
   FetchResult,
   FilterOperator,
   FilterSpec,
   KeyValue,
+  RowDelete,
   SortSpec,
 } from '../api/types'
 import { capabilitiesOf } from '../lib/capabilities'
@@ -48,6 +50,7 @@ import { downloadText, resultToCSV, resultToJSON, toInsertScript } from '../lib/
 import { formatDuration, qualifiedName } from '../lib/format'
 import { useAppStore, type TableView, type WorkspaceTab } from '../store/appStore'
 import { DataGrid } from './DataGrid'
+import { SqlCode } from './SqlCode'
 import { RowDetail } from './RowDetail'
 import { StructureView } from './StructurePane'
 import { t, tn, useLanguage } from '../lib/i18n'
@@ -231,6 +234,8 @@ export function TablePane({ tab }: TablePaneProps) {
 
   const refresh = useCallback(() => setReloadKey((n) => n + 1), [])
 
+  const confirmStatement = useStatementConfirm()
+
   /** Builds the identifying key for a row of the current page. */
   const rowKey = useCallback(
     (rowIndex: number): KeyValue[] => {
@@ -252,13 +257,46 @@ export function TablePane({ tab }: TablePaneProps) {
   const editCell = useCallback(
     async (rowIndex: number, column: string, next: string | null) => {
       if (!data) return
+      const key = rowKey(rowIndex)
+      // Planned by the engine that would run it, and shown before it is sent: the
+      // grid is the one place a change takes a single click, which is exactly
+      // where the statement belongs on screen first. A cancelled dialog resolves
+      // like a successful edit — nothing ran, and the cell goes back to showing
+      // the value the server still holds.
+      //
+      // The preview goes through the row edit rather than the cell one: they
+      // render the same statement (one column is one assignment), and the row
+      // renderer is the one both of them end up in.
+      let statement: string
+      try {
+        statement = await api.planRowUpdate({
+          sessionId: tab.sessionId,
+          database,
+          schema,
+          object,
+          key,
+          values: [{ column, value: next }],
+        })
+      } catch (err) {
+        message.error(toMessage(err))
+        throw err
+      }
+      const agreed = await confirmStatement({
+        title: t('tablePane.edit-cell', { column }),
+        statements: [statement],
+        driver: session?.driver,
+        note: t('tablePane.this-writes-one-row-back-to-the-table'),
+        okText: t('tablePane.save'),
+      })
+      if (!agreed) return
+
       try {
         const affected = await api.updateCell({
           sessionId: tab.sessionId,
           database,
           schema,
           object,
-          key: rowKey(rowIndex),
+          key,
           column,
           value: next,
         })
@@ -273,41 +311,62 @@ export function TablePane({ tab }: TablePaneProps) {
         throw err
       }
     },
-    [data, database, message, object, refresh, rowKey, schema, tab.sessionId],
+    [confirmStatement, data, database, message, object, refresh, rowKey, schema, session?.driver, tab.sessionId],
   )
 
   const deleteRows = useCallback(
     (indexes: number[]) => {
       if (indexes.length === 0) return
-      modal.confirm({
-        title: tn('tablePane.delete-rows', indexes.length),
-        content: t('tablePane.this-cannot-be-undone'),
-        okText: t('tablePane.delete'),
-        okButtonProps: { danger: true },
-        onOk: async () => {
-          let deleted = 0
-          for (const index of indexes) {
-            try {
-              deleted += await api.deleteRow({
-                sessionId: tab.sessionId,
-                database,
-                schema,
-                object,
-                key: rowKey(index),
-              })
-            } catch (err) {
-              message.error(toMessage(err))
-              refresh()
-              return
+      const requests: RowDelete[] = indexes.map((index) => ({
+        sessionId: tab.sessionId,
+        database,
+        schema,
+        object,
+        key: rowKey(index),
+      }))
+      void (async () => {
+        // One statement per selected row, each rendered by the engine that will
+        // run it: the dialog lists what is really about to happen rather than
+        // saying "some rows".
+        let statements: string[]
+        try {
+          statements = await Promise.all(requests.map((request) => api.planRowDelete(request)))
+        } catch (err) {
+          message.error(toMessage(err))
+          return
+        }
+        modal.confirm({
+          title: tn('tablePane.delete-rows', indexes.length),
+          width: 660,
+          icon: null,
+          content: (
+            <StatementPlan
+              statements={statements}
+              driver={session?.driver}
+              note={t('tablePane.this-cannot-be-undone')}
+            />
+          ),
+          okText: t('tablePane.delete'),
+          okButtonProps: { danger: true },
+          onOk: async () => {
+            let deleted = 0
+            for (const request of requests) {
+              try {
+                deleted += await api.deleteRow(request)
+              } catch (err) {
+                message.error(toMessage(err))
+                refresh()
+                return
+              }
             }
-          }
-          message.success(tn('tablePane.deleted-rows', deleted))
-          setSelected([])
-          refresh()
-        },
-      })
+            message.success(tn('tablePane.deleted-rows', deleted))
+            setSelected([])
+            refresh()
+          },
+        })
+      })()
     },
-    [database, message, modal, object, refresh, rowKey, schema, tab.sessionId],
+    [database, message, modal, object, refresh, rowKey, schema, session?.driver, tab.sessionId],
   )
 
   const exportData = useCallback(
@@ -744,5 +803,67 @@ function FilterButton({
         </Space>
       </Modal>
     </>
+  )
+}
+
+/**
+ * The statements a confirmation is about, drawn the way a script reads.
+ *
+ * One highlighted block rather than a list of rows: the statements run in this
+ * order, one after another, and that is what a person is agreeing to. The note
+ * under it says what happens to the data, which the statements themselves only
+ * imply.
+ */
+function StatementPlan({
+  statements,
+  driver,
+  note,
+}: {
+  statements: string[]
+  driver?: DriverType
+  note?: ReactNode
+}) {
+  return (
+    <div className="dm-row-detail-plan">
+      <SqlCode className="dm-ddl" driver={driver} sql={statements.map((statement) => `${statement};`).join('\n')} />
+      {note ? (
+        <Typography.Paragraph type="secondary" style={{ fontSize: 12, margin: 0 }}>
+          {note}
+        </Typography.Paragraph>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * Asks a question with a rendered statement in it, and answers whether the user
+ * agreed.
+ *
+ * A cancel answers `false` rather than rejecting: deciding not to run something
+ * is a decision, not a failure, and every caller here has something to put back
+ * in place when it happens.
+ */
+function useStatementConfirm(): (options: {
+  title: ReactNode
+  statements: string[]
+  driver?: DriverType
+  note?: ReactNode
+  okText: string
+}) => Promise<boolean> {
+  const { modal } = AntApp.useApp()
+  return useCallback(
+    (options: { title: ReactNode; statements: string[]; driver?: DriverType; note?: ReactNode; okText: string }) =>
+      new Promise<boolean>((resolve) => {
+        modal.confirm({
+          title: options.title,
+          width: 660,
+          icon: null,
+          okText: options.okText,
+          content: <StatementPlan statements={options.statements} driver={options.driver} note={options.note} />,
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        })
+      }),
+    [modal],
   )
 }

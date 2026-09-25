@@ -877,9 +877,21 @@ export interface ChangeLogEntry {
   table?: string
   /** The statement's own leading keyword, lowercased: `create`, `alter`, `insert`, … */
   kind: string
-  /** Where it came from: `script`, `design` or `create`. */
+  /**
+   * Which window it came from: `script` (a query window or the DDL editor),
+   * `design` (the structure page), `grid` (a row edited or deleted), `explorer`
+   * (a table truncated or dropped from the tree), `copy`, `compare`, or
+   * `datagen` (a batch of generated rows).
+   */
   source: string
   statement: string
+  /**
+   * How much data the statement changed: the count the engine reported as
+   * affected, so rows inserted, updated or deleted. Absent — not zero — for
+   * anything with nothing to count: DDL, and a script holding more than one
+   * write statement, where no count belongs to a single line.
+   */
+  rows?: number
   /** What the run ended with. A script goes to the engine in one call, so a run
    * that stopped halfway carries its message on every statement of that run. */
   error?: string
@@ -904,11 +916,15 @@ export interface ChangeLogConnection {
  * file, and this is what the window picks from.
  */
 export interface ChangeLogFile {
-  /** The name in the data directory: `changelog.jsonl`, or `20260214-1.log`. */
+  /**
+   * The name inside the log folder: `20260214.log` for the day being written,
+   * `20260214-1.log` for an earlier file of the same day. A log an older build
+   * left in the data directory keeps the name it was written with.
+   */
   name: string
   /** A complete file that will not be written to again. */
   archived: boolean
-  /** When it was rotated out (milliseconds), for an archive. */
+  /** When it was last written (milliseconds), for anything but today's file. */
   at?: number
   bytes: number
   /** How many statements it holds. */

@@ -83,6 +83,11 @@ func TestExecuteLogsTheStatementsThatChangedSomething(t *testing.T) {
 	if !strings.Contains(alter.Statement, "ADD note TEXT") {
 		t.Fatalf("the statement was not kept: %q", alter.Statement)
 	}
+	// Neither statement changed any rows, and a change of structure is not a
+	// change of data: no count is recorded for either.
+	if alter.Rows != 0 || create.Rows != 0 {
+		t.Fatalf("a DDL statement has no row count: %+v %+v", alter, create)
+	}
 
 	// The table being created does not exist when the statement runs, and does
 	// not get the window's object: the entry says what the statement was applied
@@ -101,6 +106,52 @@ func TestExecuteLogsTheStatementsThatChangedSomething(t *testing.T) {
 	}
 	if connection.Address == "" || !strings.HasSuffix(connection.Address, "shop.db") {
 		t.Fatalf("a file-backed connection is addressed by its file, got %q", connection.Address)
+	}
+}
+
+// A script that turns out to be exactly one write statement is answered with one
+// count, so the entry can carry it. The count is the engine's, not the number of
+// statements this build thinks ran.
+func TestExecuteRecordsHowMuchASingleStatementChanged(t *testing.T) {
+	manager := loggedManager(t)
+
+	if _, err := manager.Execute(models.ExecRequest{SessionID: "s1",
+		Database: "main",
+		SQL:      "INSERT INTO orders (id, user_id) VALUES (21, 1), (22, 2);",
+	}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	log, total := entries(t, manager)
+	if total != 1 || len(log) != 1 {
+		t.Fatalf("expected one entry: %+v", log)
+	}
+	if log[0].Rows != 2 {
+		t.Fatalf("the entry should say two rows went in, got %d: %+v", log[0].Rows, log[0])
+	}
+}
+
+// The engine answers a script with one result. With two write statements in it
+// there is no count that belongs to either line, and a number on the wrong line
+// would be worse than no number at all.
+func TestExecuteRecordsNoCountForAScriptItCannotAttribute(t *testing.T) {
+	manager := loggedManager(t)
+
+	if _, err := manager.Execute(models.ExecRequest{SessionID: "s1",
+		Database: "main",
+		SQL:      "INSERT INTO orders (id, user_id) VALUES (31, 1);\nINSERT INTO orders (id, user_id) VALUES (32, 2);",
+	}); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	log, total := entries(t, manager)
+	if total != 2 || len(log) != 2 {
+		t.Fatalf("expected two entries: %+v", log)
+	}
+	for _, entry := range log {
+		if entry.Rows != 0 {
+			t.Fatalf("neither line can claim the run's count: %+v", entry)
+		}
 	}
 }
 
@@ -147,6 +198,13 @@ func TestExecuteRecordsTheMessageARunEndedWith(t *testing.T) {
 	}
 	if !strings.Contains(log[0].Error, "nope") {
 		t.Fatalf("the entry should carry what the engine said: %q", log[0].Error)
+	}
+	// The run ended with an error, and the result that comes back with one
+	// belongs to no single statement: nothing here claims a row count.
+	for _, entry := range log {
+		if entry.Rows != 0 {
+			t.Fatalf("a failed run cannot report a count: %+v", entry)
+		}
 	}
 	// The first statement did land, and the fixture proves it: the row is there.
 	count, err := manager.Execute(models.ExecRequest{SessionID: "s1", Database: "main", SQL: "SELECT count(*) FROM orders;"})
@@ -227,9 +285,20 @@ func TestLoggingWithoutAStoreIsSilent(t *testing.T) {
 	if log.Files == nil {
 		t.Fatalf("the file list should be an empty list, not null: %+v", log)
 	}
-	if log.File != "changelog.jsonl" {
-		t.Fatalf("an empty name is the live log, got %q", log.File)
+	if want := liveLogName(t); log.File != want {
+		t.Fatalf("an empty name is the log being written now, got %q, want %q", log.File, want)
 	}
+}
+
+// liveLogName is the file an append goes into at this moment: the day's own
+// name, which is what an empty file name means now that there is a file a day.
+func liveLogName(t *testing.T) string {
+	t.Helper()
+	name, err := config.ChangeLogName("")
+	if err != nil {
+		t.Fatalf("name the live log: %v", err)
+	}
+	return name
 }
 
 func TestListChangeLogClampsWhatItIsAsked(t *testing.T) {
@@ -285,7 +354,7 @@ func TestListChangeLogRefusesAFileItDidNotWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if log.File != "changelog.jsonl" || len(log.Files) != 1 || log.Files[0].Name != log.File {
+	if log.File != liveLogName(t) || len(log.Files) != 1 || log.Files[0].Name != log.File {
 		t.Fatalf("unexpected listing: %+v", log)
 	}
 	if log.Files[0].Archived || log.Files[0].Entries != 1 {
@@ -304,12 +373,16 @@ func TestListChangeLogReadsAnArchivedFile(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("execute: %v", err)
 	}
-	// Written the way a rotation leaves one: the live file was renamed, so the
-	// archive holds whole entries in the same format.
+	// Written the way a rotation leaves one: the day's file was renamed inside
+	// the log folder, so the archive holds whole entries in the same format.
 	archive := "20260214-1.log"
 	body := `{"version":1,"kind":"drop","source":"script","statement":"DROP TABLE old_orders;"}` + "\n" +
 		`{"version":1,"kind":"alter","source":"design","statement":"ALTER TABLE orders ADD note TEXT;"}` + "\n"
-	if err := os.WriteFile(filepath.Join(manager.storeRef().Dir(), archive), []byte(body), 0o600); err != nil {
+	dir := filepath.Join(manager.storeRef().Dir(), "log")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, archive), []byte(body), 0o600); err != nil {
 		t.Fatalf("write archive: %v", err)
 	}
 
@@ -324,7 +397,7 @@ func TestListChangeLogReadsAnArchivedFile(t *testing.T) {
 		t.Fatalf("the archive is not newest first: %+v", log.Entries)
 	}
 	// Both files are offered, the live one first, and each says how much it holds.
-	if len(log.Files) != 2 || log.Files[0].Name != "changelog.jsonl" || log.Files[0].Entries != 1 {
+	if len(log.Files) != 2 || log.Files[0].Name != liveLogName(t) || log.Files[0].Entries != 1 {
 		t.Fatalf("unexpected file listing: %+v", log.Files)
 	}
 	if !log.Files[1].Archived || log.Files[1].Name != archive || log.Files[1].Entries != 2 {

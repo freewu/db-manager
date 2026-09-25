@@ -1,9 +1,10 @@
 // The change log: what this application ran against the databases it was
 // pointed at.
 //
-//	<data directory>/changelog.jsonl
-//	{"version":1,"at":1730000000000,"connection":{"name":"shop","driver":"mysql",…},"database":"shop","table":"orders","kind":"alter","source":"design","statement":"ALTER TABLE `orders` …"}
-//	<data directory>/20260214-1.log       (an archived log, same format)
+//	<data directory>/log/20260214.log
+//	{"version":1,"at":1730000000000,"connection":{"name":"shop","driver":"mysql",…},"database":"shop","table":"orders","kind":"alter","source":"design","rows":3,"statement":"ALTER TABLE `orders` …"}
+//	<data directory>/log/20260214-1.log   (same day, the earlier file)
+//	<data directory>/log/20260213.log     (the day before)
 //	<data directory>/changelog.json       {"version":1,"maxEntries":2000}
 //
 // One line of JSON per entry, rather than an array in one file, because of how
@@ -12,14 +13,20 @@
 // asking for it. A line that cannot be decoded is one lost entry instead of a
 // whole log that refuses to open.
 //
-// Nothing is ever dropped. When the live file holds as many statements as the
-// user allows it to, it is renamed to `<yyyymmdd>-<n>.log` — the calendar date
-// it was rotated out, then which rotation of that day it was — and a fresh
-// `changelog.jsonl` is started. Renaming a whole file is one atomic step, which
-// is what makes rotating free: no copying, no rewriting, and a log that is
-// being read at that moment is either entirely the old file or entirely the new
-// one. The settings file next to it holds the one number that decides when that
-// happens.
+// A file a day, named for the day: "what ran on the 14th" is one file to open,
+// not a slice of a roll to search for. Nothing is ever dropped. When a day's
+// file holds as many statements as the user allows it to, it is renamed to
+// `<yyyymmdd>-<n>.log` — the day, then which rotation of it this was — and a
+// fresh `<yyyymmdd>.log` is started under the day's own name. Renaming a whole
+// file is one atomic step, which is what makes rotating free: no copying, no
+// rewriting, and a log that is being read at that moment is either entirely the
+// old file or entirely the new one. The settings file holds the one number that
+// decides when that happens.
+//
+// The log folder is a folder and not a fence: logs written by older builds sat
+// in the data directory itself (`changelog.jsonl`, and archives named the same
+// way), and those are still listed and still read. They sort after the folder's
+// files, because a file with no day in its name is the oldest thing here.
 //
 // Nothing in this file is a gate in front of anything: an entry is written after
 // the statement it describes has run, so a log that cannot be written must never
@@ -36,6 +43,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,7 +51,11 @@ import (
 )
 
 const (
-	// changeLogFile is the log inside the data directory.
+	// changeLogDirName is the folder inside the data directory the logs live in.
+	changeLogDirName = "log"
+	// changeLogFile is the live log of builds before the folder existed. It is
+	// still read, and still moved with the rest of the data, but nothing writes
+	// to it any more.
 	changeLogFile = "changelog.jsonl"
 	// changeLogSettingsFile holds the rotation policy. It is separate from the
 	// log itself because it has to be readable without reading the log, and it
@@ -69,8 +81,13 @@ const (
 	// — that is also a sign the file is not one this build wrote, which is one
 	// of the reasons it is rotated away rather than read forever.
 	maxChangeLogBytes = 8 << 20
-	// changeLogArchiveExt is what an archived log is called.
+	// changeLogArchiveExt is what an archived log is called. The file being
+	// written today carries the same extension: it is a log either way, and the
+	// day in its name is what tells a reader which one it is looking at.
 	changeLogArchiveExt = ".log"
+	// changeLogDayFormat is the day at the front of every log file name, and the
+	// layout a day is parsed back with.
+	changeLogDayFormat = "20060102"
 )
 
 // changeLogSettingsFormat is the settings file on disk.
@@ -79,7 +96,8 @@ type changeLogSettingsFormat struct {
 	MaxEntries int `json:"maxEntries"`
 }
 
-// AppendChangeLog adds one entry, archiving the live log first when it is full.
+// AppendChangeLog adds one entry, rotating that day's file first when it is
+// full.
 //
 // The entry is appended rather than written as part of a rewrite: trimming is
 // gone now that a full log is rotated instead, so the append is one small write
@@ -94,10 +112,24 @@ func (s *Store) AppendChangeLog(entry models.ChangeLogEntry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	path := s.changeLogPath()
+	// The entry's own timestamp picks the day's file, rather than the clock
+	// read here: what a reader sees next to the statement is when it ran, and an
+	// entry that is a minute stale at midnight should not land in the new day's
+	// file. A caller that left the timestamp out gets today, which is the only
+	// thing left to say.
+	day := time.Now()
+	if entry.At > 0 {
+		day = time.UnixMilli(entry.At)
+	}
+
+	dir := s.changeLogDir()
+	if err := os.MkdirAll(dir, dirMode); err != nil {
+		return err
+	}
+	path := filepath.Join(dir, changeLogDayName(day))
 	// The rotated file is safe under its new name before the new entry is
 	// written, so a failure from here on costs the entry, never the history.
-	if _, err := s.rotateChangeLogLocked(path, settings.MaxEntries); err != nil {
+	if _, err := s.rotateChangeLogLocked(path, day, settings.MaxEntries); err != nil {
 		return err
 	}
 
@@ -119,9 +151,10 @@ func (s *Store) AppendChangeLog(entry models.ChangeLogEntry) error {
 // ChangeLog reads one file, newest entry first, along with how many entries it
 // holds and the files there are to choose between.
 //
-// An empty file name means the live log. Oldest first on disk and newest first
-// here, because that is the only way it is ever read: the appends go to the end,
-// and a reader wants the last statement that ran, not the first.
+// An empty file name means the file being written right now — today's. Oldest
+// first on disk and newest first here, because that is the only way it is ever
+// read: the appends go to the end, and a reader wants the last statement that
+// ran, not the first.
 func (s *Store) ChangeLog(file string, limit int) (models.ChangeLog, error) {
 	name, err := ChangeLogName(file)
 	if err != nil {
@@ -135,7 +168,7 @@ func (s *Store) ChangeLog(file string, limit int) (models.ChangeLog, error) {
 	if err != nil {
 		return models.ChangeLog{}, err
 	}
-	entries, err := s.readChangeLogLocked(filepath.Join(s.dir, name))
+	entries, err := s.readChangeLogLocked(s.changeLogReadPath(name))
 	if err != nil {
 		return models.ChangeLog{}, err
 	}
@@ -185,7 +218,23 @@ func (s *Store) SaveChangeLogSettings(settings models.ChangeLogSettings) error {
 	return os.Rename(tmp, path)
 }
 
-func (s *Store) changeLogPath() string { return filepath.Join(s.dir, changeLogFile) }
+// changeLogDir is the folder the logs live in.
+func (s *Store) changeLogDir() string { return filepath.Join(s.dir, changeLogDirName) }
+
+// changeLogReadPath is the file to read for a name: the folder first, then the
+// data directory itself, where logs written by an older build are. A name that
+// is nowhere yet answers the folder, which reads as an empty log.
+func (s *Store) changeLogReadPath(name string) string {
+	path := filepath.Join(s.changeLogDir(), name)
+	if _, err := os.Stat(path); err == nil {
+		return path
+	}
+	legacy := filepath.Join(s.dir, name)
+	if _, err := os.Stat(legacy); err == nil {
+		return legacy
+	}
+	return path
+}
 
 func (s *Store) changeLogSettingsLocked() (models.ChangeLogSettings, error) {
 	settings := DefaultChangeLogSettings()
@@ -209,15 +258,15 @@ func (s *Store) changeLogSettingsLocked() (models.ChangeLogSettings, error) {
 	return settings, nil
 }
 
-// rotateChangeLogLocked moves the live log aside when it is full, and answers
-// the name it was given (empty when nothing was rotated).
+// rotateChangeLogLocked moves the file being written aside when it is full, and
+// answers the name it was given (empty when nothing was rotated).
 //
 // The file is renamed, never rewritten or truncated: whatever it holds — a
 // complete log, a line a crash cut in half, something else entirely if the file
 // was padded — moves aside as it is, under a name that says when it was taken
 // out. A file that is somehow larger than this build would ever write is rotated
 // too: it is not one this build is going to keep appending to forever.
-func (s *Store) rotateChangeLogLocked(path string, maxEntries int) (string, error) {
+func (s *Store) rotateChangeLogLocked(path string, day time.Time, maxEntries int) (string, error) {
 	stat, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -235,75 +284,142 @@ func (s *Store) rotateChangeLogLocked(path string, maxEntries int) (string, erro
 		}
 	}
 
-	name := s.freeArchiveNameLocked(time.Now())
-	if err := os.Rename(path, filepath.Join(s.dir, name)); err != nil {
+	name := s.freeArchiveNameLocked(day)
+	if err := os.Rename(path, filepath.Join(s.changeLogDir(), name)); err != nil {
 		return "", err
 	}
 	return name, nil
 }
 
-// freeArchiveNameLocked picks the next archive name for that day: the date it
-// was rotated out, then which rotation of that day it was.
-func (s *Store) freeArchiveNameLocked(at time.Time) string {
-	day := at.Format("20060102")
+// freeArchiveNameLocked picks the next archive name for that day: the day it was
+// rotated out, then which rotation of that day it was.
+//
+// Both places are checked. A name that is already taken in the data directory by
+// a log an older build wrote must not be handed out again: the reader prefers
+// the folder's copy of a name, so reusing it would hide that file.
+func (s *Store) freeArchiveNameLocked(day time.Time) string {
+	date := day.Format(changeLogDayFormat)
 	for n := 1; ; n++ {
-		name := fmt.Sprintf("%s-%d%s", day, n, changeLogArchiveExt)
+		name := fmt.Sprintf("%s-%d%s", date, n, changeLogArchiveExt)
+		if _, err := os.Stat(filepath.Join(s.changeLogDir(), name)); err == nil {
+			continue
+		}
 		if _, err := os.Stat(filepath.Join(s.dir, name)); errors.Is(err, fs.ErrNotExist) {
 			return name
 		}
 	}
 }
 
-// changeLogFilesLocked lists the files the log is spread over: the live one
-// first, then the archives, newest first.
+// changeLogFilesLocked lists the files the log is spread over, newest first,
+// with the one being written right now at the top.
 //
 // The entries in each file are counted, which means reading them — bounded by
 // maxChangeLogBytes each, and a window that shows the wrong number of entries is
 // worse than one that took a moment to open.
 func (s *Store) changeLogFilesLocked() ([]models.ChangeLogFile, error) {
-	files := make([]models.ChangeLogFile, 0, 8)
-	if stat, err := os.Stat(s.changeLogPath()); err == nil && !stat.IsDir() {
-		raw, err := readChangeLogTail(s.changeLogPath())
-		if err != nil {
-			return nil, err
-		}
-		files = append(files, models.ChangeLogFile{
-			Name:    changeLogFile,
-			Bytes:   stat.Size(),
-			Entries: countChangeLogEntries(raw),
-		})
-	}
-	archives, err := s.changeLogArchivesLocked()
+	names, err := s.changeLogNamesLocked()
 	if err != nil {
 		return nil, err
 	}
-	for _, name := range archives {
-		stat, err := os.Stat(filepath.Join(s.dir, name))
-		if err != nil {
+	live := changeLogDayName(time.Now())
+	files := make([]models.ChangeLogFile, 0, len(names))
+	for _, name := range names {
+		path := s.changeLogReadPath(name)
+		stat, err := os.Stat(path)
+		if err != nil || stat.IsDir() {
+			// Gone between the listing and here: a rotation in flight, which is a
+			// file that will be there next time under its other name.
 			continue
 		}
-		raw, err := readChangeLogTail(filepath.Join(s.dir, name))
+		raw, err := readChangeLogTail(path)
 		if err != nil {
 			return nil, err
 		}
 		info := models.ChangeLogFile{
-			Name:     name,
-			Archived: true,
-			Bytes:    stat.Size(),
-			Entries:  countChangeLogEntries(raw),
+			Name:    name,
+			Bytes:   stat.Size(),
+			Entries: countChangeLogEntries(raw),
 		}
-		// The name carries the day it was rotated out; the file's own timestamp
-		// is when the last statement in it ran, which is what a reader wants.
-		info.At = stat.ModTime().UnixMilli()
+		if name != live {
+			// Not the file being written right now, so it is finished: the only
+			// one that is not is today's own name. Its timestamp is when the last
+			// statement in it ran, which is what a reader wants to see.
+			info.Archived = true
+			info.At = stat.ModTime().UnixMilli()
+		}
 		files = append(files, info)
 	}
 	return files, nil
 }
 
-// changeLogArchivesLocked lists the archived logs, oldest first (which is also
-// the order their names are in, since a name starts with its date).
-func (s *Store) changeLogArchivesLocked() ([]string, error) {
-	return changeLogArchivesIn(s.dir)
+// changeLogNamesLocked lists every log file there is to choose between, newest
+// first: today's file (when it exists), the days before it, and — last, because
+// a name with no day in it is the oldest thing here — the live log of a build
+// from before the folder existed.
+func (s *Store) changeLogNamesLocked() ([]string, error) {
+	seen := make(map[string]bool, 8)
+	names := make([]string, 0, 8)
+
+	entries, err := os.ReadDir(s.changeLogDir())
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !isChangeLogFile(entry.Name()) {
+			continue
+		}
+		seen[entry.Name()] = true
+		names = append(names, entry.Name())
+	}
+
+	// The older layout: the log and its archives sat in the data directory
+	// itself. A name the folder also holds is the folder's — that is the one
+	// being written to, and the copy beside it is what a user left behind by
+	// copying files around.
+	legacy := []string{changeLogFile}
+	archives, err := changeLogArchivesIn(s.dir)
+	if err != nil {
+		return nil, err
+	}
+	legacy = append(legacy, archives...)
+	for _, name := range legacy {
+		if seen[name] {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(s.dir, name)); err != nil {
+			continue
+		}
+		names = append(names, name)
+	}
+
+	sort.Slice(names, func(i, j int) bool { return changeLogNewer(names[i], names[j]) })
+	return names, nil
+}
+
+// changeLogNewer orders two names the way a reader wants them: the newest day
+// first, and within a day the file being written — the day's own name, which is
+// still growing — ahead of every rotation of it, then the highest rotation
+// number. A name with no day in it (the log of an older build) is older than
+// everything here and sorts last.
+func changeLogNewer(a, b string) bool {
+	dayA, seqA, datedA := changeLogStamp(a)
+	dayB, seqB, datedB := changeLogStamp(b)
+	if datedA != datedB {
+		return datedA
+	}
+	if !datedA {
+		return a < b
+	}
+	if dayA != dayB {
+		return dayA > dayB
+	}
+	// Within a day, the file still being written is the newest one there is,
+	// whatever number a rotation of it happens to carry: zero is not a
+	// rotation, it is the day itself.
+	if (seqA == 0) != (seqB == 0) {
+		return seqA == 0
+	}
+	return seqA > seqB
 }
 
 // changeLogArchivesIn lists the archived logs in a directory, oldest first.
@@ -312,7 +428,9 @@ func (s *Store) changeLogArchivesLocked() ([]string, error) {
 // names are decided when a log is rotated out: a build cannot know in advance
 // which days it will be used on. Every place that has to know what is in the
 // data directory goes through here (see dataFileNames), so an archive is listed,
-// moved and recognised as ours by the same rule.
+// moved and recognised as ours by the same rule. This is the data directory
+// itself, where logs written by older builds are; the folder the app writes in
+// now is a data folder, and is listed and moved as a whole.
 func changeLogArchivesIn(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -333,7 +451,7 @@ func changeLogArchivesIn(dir string) ([]string, error) {
 }
 
 // ChangeLogName checks a file name a window asked for and answers the file to
-// read. An empty name is the live log.
+// read. An empty name is the file being written right now.
 //
 // The check is a whitelist rather than a cleanup: the only files this build
 // reads are the ones it writes, so anything else — a path, a name in another
@@ -342,12 +460,17 @@ func changeLogArchivesIn(dir string) ([]string, error) {
 func ChangeLogName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return changeLogFile, nil
+		return changeLogDayName(time.Now()), nil
 	}
-	if name == changeLogFile || isChangeLogArchive(name) {
+	if name == changeLogFile || isChangeLogFile(name) {
 		return name, nil
 	}
 	return "", fmt.Errorf("%s is not a change log this program wrote", name)
+}
+
+// changeLogDayName is what a day's log file is called: the day itself.
+func changeLogDayName(at time.Time) string {
+	return at.Format(changeLogDayFormat) + changeLogArchiveExt
 }
 
 // DefaultChangeLogSettings is the rotation policy of a store that has never been
@@ -363,33 +486,61 @@ func DefaultChangeLogSettings() models.ChangeLogSettings {
 	}
 }
 
+// isChangeLogFile reports whether a file name is one of the dated logs this
+// build writes: a day, and — for a file that was rotated out — which rotation of
+// that day it was.
+func isChangeLogFile(name string) bool {
+	_, _, ok := changeLogStamp(name)
+	return ok
+}
+
 // isChangeLogArchive reports whether a file name is one of the rotated logs:
 // eight digits of date, a hyphen, then which rotation of that day it was.
 func isChangeLogArchive(name string) bool {
-	base, ok := strings.CutSuffix(name, changeLogArchiveExt)
-	if !ok {
-		return false
+	_, seq, ok := changeLogStamp(name)
+	return ok && seq > 0
+}
+
+// changeLogStamp reads a dated log file name: the day it belongs to, and which
+// rotation of that day it was — zero for the day's own file, which is the one
+// still being written and therefore the newest of that day.
+func changeLogStamp(name string) (day string, seq int, ok bool) {
+	base, found := strings.CutSuffix(name, changeLogArchiveExt)
+	if !found {
+		return "", 0, false
 	}
-	date, seq, ok := strings.Cut(base, "-")
-	if !ok || len(date) != 8 || seq == "" {
-		return false
+	day, digits, numbered := strings.Cut(base, "-")
+	if numbered {
+		// The number starts at one and is written without padding, so a leading
+		// zero — `-0`, `-007` — is a name this build could not have produced.
+		if digits == "" || digits[0] == '0' {
+			return "", 0, false
+		}
+		n, err := strconv.Atoi(digits)
+		if err != nil || n <= 0 {
+			return "", 0, false
+		}
+		seq = n
 	}
-	// The number starts at one and is written without padding, so a leading zero
-	// — `-0`, `-007` — is a name this build could not have produced.
-	if seq[0] == '0' {
-		return false
+	if len(day) != 8 || !isDigits(day) {
+		return "", 0, false
 	}
-	for _, part := range []string{date, seq} {
-		for _, r := range part {
-			if r < '0' || r > '9' {
-				return false
-			}
+	// The day has to be a real one: a file called 99999999.log is not a log this
+	// build wrote, and the listing should not offer it.
+	if _, err := time.Parse(changeLogDayFormat, day); err != nil {
+		return "", 0, false
+	}
+	return day, seq, true
+}
+
+// isDigits reports whether a string is nothing but ASCII digits.
+func isDigits(text string) bool {
+	for _, r := range text {
+		if r < '0' || r > '9' {
+			return false
 		}
 	}
-	// The date has to be a real one: a file called 99999999-1.log is not a log
-	// this build wrote, and the archive list should not offer it.
-	_, err := time.Parse("20060102", date)
-	return err == nil
+	return true
 }
 
 // readChangeLogLocked reads one log file in file order.

@@ -45,6 +45,17 @@ export const tablePane = {
     '沒有符合的資料列：可能已被他人修改或刪除',
   ],
   'tablePane.updated': ['Updated {column}', '已更新 {column}', '已更新 {column}'],
+  'tablePane.edit-cell': [
+    'Change {column}',
+    '修改 {column}',
+    '修改 {column}',
+  ],
+  'tablePane.this-writes-one-row-back-to-the-table': [
+    'This writes one row back to the table.',
+    '这会把一行写回数据表。',
+    '這會把一列寫回資料表。',
+  ],
+  'tablePane.save': ['Save', '保存', '儲存'],
   'tablePane.delete-rows': [
     'Delete {n} row?|Delete {n} rows?',
     '删除 {n} 行？|删除 {n} 行？',

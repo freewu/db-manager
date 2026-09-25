@@ -15,7 +15,11 @@ export const changeLogPane = {
   'changeLogPane.the-duplicate-table-window': ['The duplicate-table window', '复制表窗口', '複製資料表視窗'],
   'changeLogPane.the-object-explorer': ['The object explorer', '对象浏览器', '物件總管'],
   'changeLogPane.the-database-comparison': ['The database comparison', '数据库对比', '資料庫對比'],
+  'changeLogPane.the-data-generation-window': ['The data generation window', '数据生成窗口', '資料生成視窗'],
   'changeLogPane.change-log': ['Change Log', '变更日志', '變更日誌'],
+  'changeLogPane.rows-changed': ['Rows changed', '数据修改量', '資料修改量'],
+  'changeLogPane.rows': ['{n} row|{n} rows', '{n} 行|{n} 行', '{n} 列|{n} 列'],
+  'changeLogPane.not-counted': ['not counted', '未统计', '未統計'],
   'changeLogPane.no-log-yet': ['No log yet', '暂无日志', '尚無日誌'],
   'changeLogPane.rotated-out-on-archived-logs-are-kept-as-they': [
     'Rotated out on {at}. Archived logs are kept as they were and never written to again.',

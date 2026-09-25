@@ -726,7 +726,7 @@ func (m *Manager) Execute(req models.ExecRequest) (*models.QueryResult, error) {
 	// reached the server is not recorded as a change; the failure itself is
 	// recorded, on the entry, because a script that stopped halfway is part of
 	// what happened to the database.
-	m.logScript(s, req, err)
+	m.logScript(s, req, res, err)
 	return res, err
 }
 
@@ -1077,8 +1077,14 @@ func (m *Manager) applyPlan(s *session, place statementPlace, plan *models.Desig
 		cancel()
 		// The plan's statements come from the designer's own renderer, so they are
 		// SQL whatever the engine calls it; a keyword that is not one still gets
-		// the classification rather than being left blank.
-		m.logStatement(s, place, statement, statementKind(statement, sqlutil.KindOf(statement)), err)
+		// the classification rather than being left blank. The count the engine
+		// reported is how much data the statement changed — zero for DDL, which
+		// has nothing to count.
+		var affected int64
+		if res != nil {
+			affected = res.AffectedRows
+		}
+		m.logStatement(s, place, statement, statementKind(statement, sqlutil.KindOf(statement)), affected, err)
 		if err != nil {
 			result.FailedIndex = i
 			result.Error = err.Error()
@@ -1124,6 +1130,17 @@ func (m *Manager) PlanRowUpdate(req models.RowUpdate) (string, error) {
 	return s.conn.PlanRowUpdate(req)
 }
 
+// PlanRowDelete renders the statement DeleteRow would run. It is what the grid
+// shows before a selection is removed: one statement per row, in the order they
+// would be run, which is the only honest way to say how much is about to go.
+func (m *Manager) PlanRowDelete(req models.RowDelete) (string, error) {
+	s, err := m.editable(req.SessionID, req.Key)
+	if err != nil {
+		return "", err
+	}
+	return s.conn.PlanRowDelete(req)
+}
+
 // UpdateRow applies an edit of one row made in the row detail layer.
 //
 // The statement is rendered first and executed second, and it is the rendered
@@ -1151,7 +1168,7 @@ func (m *Manager) UpdateRow(req models.RowUpdate) (int64, error) {
 		schema:   req.Schema,
 		object:   req.Object,
 		source:   models.ChangeSourceGrid,
-	}, statement, "update", runErr)
+	}, statement, "update", affected, runErr)
 	if runErr != nil {
 		return 0, runErr
 	}
@@ -1178,7 +1195,7 @@ func (m *Manager) DeleteRow(req models.RowDelete) (int64, error) {
 		schema:   req.Schema,
 		object:   req.Object,
 		source:   models.ChangeSourceGrid,
-	}, statement, "delete", runErr)
+	}, statement, "delete", affected, runErr)
 	if runErr != nil {
 		return 0, runErr
 	}
@@ -1219,26 +1236,9 @@ func (m *Manager) editable(sessionID string, key []models.KeyValue) (*session, e
 // refusal ends the batch or is counted over is the window's own decision and
 // arrives in the request (`SkipErrors`); the service only carries it through.
 func (m *Manager) InsertRows(req models.RowInsert) (models.RowInsertResult, error) {
-	s, err := m.session(req.SessionID)
+	s, inserter, err := m.insertTarget(req)
 	if err != nil {
 		return models.RowInsertResult{}, err
-	}
-	if s.readOnly {
-		return models.RowInsertResult{}, apperr.New(apperr.CodeReadOnly, "this connection is read-only")
-	}
-	// Asking the connection rather than the driver's name is what lets a
-	// document store answer honestly: it has no Inserter, so there is nothing
-	// to offer and the window says so.
-	inserter, ok := s.conn.(drivers.Inserter)
-	if !ok {
-		return models.RowInsertResult{}, apperr.New(apperr.CodeUnsupported,
-			"%s cannot write generated rows", s.driver.Info().DisplayName)
-	}
-	if strings.TrimSpace(req.Object) == "" {
-		return models.RowInsertResult{}, apperr.New(apperr.CodeInvalidConfig, "a table name is required")
-	}
-	if len(req.Columns) == 0 {
-		return models.RowInsertResult{}, apperr.New(apperr.CodeInvalidConfig, "there is no column to fill")
 	}
 	if len(req.Rows) == 0 {
 		return models.RowInsertResult{}, apperr.New(apperr.CodeInvalidConfig, "there is no row to insert")
@@ -1253,9 +1253,70 @@ func (m *Manager) InsertRows(req models.RowInsert) (models.RowInsertResult, erro
 	}
 	req.Rows = rows
 
+	// The statement is rendered before it runs and logged with its count after,
+	// so the log line for a batch is the shape of what the engine was handed and
+	// how many rows went in. It is logged even when part of the batch was refused:
+	// the rows that arrived did arrive, and the count beside them says how many.
+	statement, err := inserter.PlanRowInsert(req)
+	if err != nil {
+		return models.RowInsertResult{}, err
+	}
+
 	ctx, cancel := m.ctx(QueryTimeout(0))
 	defer cancel()
-	return inserter.InsertRows(ctx, req)
+	res, runErr := inserter.InsertRows(ctx, req)
+	m.logStatement(s, statementPlace{
+		database: req.Database,
+		schema:   req.Schema,
+		object:   req.Object,
+		source:   models.ChangeSourceDataGen,
+	}, statement, "insert", res.Inserted, runErr)
+	return res, runErr
+}
+
+// PlanInsertRows renders the statement a batch of generated rows goes in as, for
+// the data generation window to show next to the settings that produced it.
+//
+// The values are not there yet when the window asks — they are made up row by row
+// while the run goes on — so what is rendered is the statement's shape: which
+// table, which columns, and that the values arrive as parameters. It is the same
+// renderer InsertRows runs through, so the preview is not a second guess at what
+// the batch becomes.
+func (m *Manager) PlanInsertRows(req models.RowInsert) (string, error) {
+	_, inserter, err := m.insertTarget(req)
+	if err != nil {
+		return "", err
+	}
+	return inserter.PlanRowInsert(req)
+}
+
+// insertTarget is the gate InsertRows and PlanInsertRows share: a live session on
+// a connection that may write, an engine that can take generated rows at all, and
+// a table with at least one column to fill. A request that could not be applied
+// must not get a preview that looks like it would.
+func (m *Manager) insertTarget(req models.RowInsert) (*session, drivers.Inserter, error) {
+	s, err := m.session(req.SessionID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if s.readOnly {
+		return nil, nil, apperr.New(apperr.CodeReadOnly, "this connection is read-only")
+	}
+	// Asking the connection rather than the driver's name is what lets a
+	// document store answer honestly: it has no Inserter, so there is nothing
+	// to offer and the window says so.
+	inserter, ok := s.conn.(drivers.Inserter)
+	if !ok {
+		return nil, nil, apperr.New(apperr.CodeUnsupported,
+			"%s cannot write generated rows", s.driver.Info().DisplayName)
+	}
+	if strings.TrimSpace(req.Object) == "" {
+		return nil, nil, apperr.New(apperr.CodeInvalidConfig, "a table name is required")
+	}
+	if len(req.Columns) == 0 {
+		return nil, nil, apperr.New(apperr.CodeInvalidConfig, "there is no column to fill")
+	}
+	return s, inserter, nil
 }
 
 // maxInsertRows caps one batch. The window sends small batches and reports

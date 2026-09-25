@@ -75,6 +75,11 @@ func TestUpdateRowChangesEveryColumnInOneStatement(t *testing.T) {
 	if entry.Table != "orders" || entry.Database != "main" || entry.Error != "" {
 		t.Fatalf("unexpected entry: %+v", entry)
 	}
+	// One row was identified and changed, and the entry says how much of the
+	// table moved rather than leaving a reader to work it out.
+	if entry.Rows != 1 {
+		t.Fatalf("the entry should say one row changed, got %d: %+v", entry.Rows, entry)
+	}
 	// The logged text is the statement the driver rendered, with every column in
 	// it — the same string the preview showed.
 	for _, column := range []string{"user_id", "total"} {
@@ -177,6 +182,11 @@ func TestUpdateRowLogsAStatementTheEngineRefused(t *testing.T) {
 	if !strings.Contains(log[0].Error, "NOT NULL") {
 		t.Fatalf("the entry does not carry what the engine said: %q", log[0].Error)
 	}
+	// A statement that failed changed nothing as far as anyone can say, so it
+	// carries no count: the error beside it is the answer.
+	if log[0].Rows != 0 {
+		t.Fatalf("a failed statement cannot report a count: %+v", log[0])
+	}
 	if got := cell(t, manager, 1, "user_id"); got != "7" {
 		t.Fatalf("the row changed despite the failure: user_id = %s", got)
 	}
@@ -210,5 +220,8 @@ func TestUpdateCellIsLoggedAsAGridChange(t *testing.T) {
 	}
 	if !strings.Contains(log[0].Statement, "total") {
 		t.Fatalf("the statement does not name the edited column: %q", log[0].Statement)
+	}
+	if log[0].Rows != 1 {
+		t.Fatalf("the entry should say one row changed, got %d: %+v", log[0].Rows, log[0])
 	}
 }

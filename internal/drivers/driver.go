@@ -147,6 +147,11 @@ type Explainer interface {
 // fill, so there is nothing for the window to offer.
 type Inserter interface {
 	InsertRows(ctx context.Context, req models.RowInsert) (models.RowInsertResult, error)
+	// PlanRowInsert is the statement InsertRows would run, for the window to show
+	// before a run starts. The values are made up while the run goes on, so what
+	// it renders is the statement's shape — the table, the columns, and that the
+	// values arrive as parameters — through the same renderer the run uses.
+	PlanRowInsert(req models.RowInsert) (string, error)
 }
 
 // ExplainRequest is the driver-level explain request (no session ids).

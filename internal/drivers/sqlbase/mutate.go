@@ -231,6 +231,33 @@ func (c *Conn) InsertRows(ctx context.Context, req models.RowInsert) (models.Row
 	return models.RowInsertResult{Inserted: landed, Skipped: skipped, Error: firstError}, nil
 }
 
+// PlanRowInsert implements drivers.Inserter: the statement InsertRows runs,
+// with its values left as bind placeholders.
+//
+// Placeholders rather than literals, unlike the row previews: a batch is up to
+// five hundred generated rows, and a preview — or a log line — carrying all of
+// them is neither readable nor small. What is being shown is the statement's
+// shape: which table, which columns, and that the values arrive as parameters,
+// which is also the thing worth being sure about.
+func (c *Conn) PlanRowInsert(req models.RowInsert) (string, error) {
+	object := strings.TrimSpace(req.Object)
+	if object == "" {
+		return "", apperr.New(apperr.CodeInvalidConfig, "an object name is required")
+	}
+	columns, err := insertColumns(req.Columns)
+	if err != nil {
+		return "", err
+	}
+	d := c.spec.Dialect
+	target := d.Qualify(c.resolveDatabase(req.Database), req.Schema, object)
+
+	marks := make([]string, len(columns))
+	for i := range columns {
+		marks[i] = d.Placeholder(i + 1)
+	}
+	return insertHead(d, target, columns) + "(" + strings.Join(marks, ", ") + ")", nil
+}
+
 // insertColumns trims and validates the column list once, up front, so a bad
 // request is refused before anything is sent to the server.
 func insertColumns(columns []string) ([]string, error) {
@@ -253,13 +280,19 @@ func insertColumns(columns []string) ([]string, error) {
 	return out, nil
 }
 
-// execInsert writes rows in one statement, in the order they were given.
-func execInsert(ctx context.Context, db *sql.DB, d drivers.Dialect, target string, columns []string, rows [][]any) (int64, error) {
+// insertHead renders everything before the values of an INSERT: the table, and
+// the columns in the order the rows were built in. Only identifiers go in here,
+// and they go through the dialect's quoting.
+func insertHead(d drivers.Dialect, target string, columns []string) string {
 	quoted := make([]string, len(columns))
 	for i, column := range columns {
 		quoted[i] = d.Quote(column)
 	}
+	return "INSERT INTO " + target + " (" + strings.Join(quoted, ", ") + ") VALUES "
+}
 
+// execInsert writes rows in one statement, in the order they were given.
+func execInsert(ctx context.Context, db *sql.DB, d drivers.Dialect, target string, columns []string, rows [][]any) (int64, error) {
 	args := make([]any, 0, len(rows)*len(columns))
 	values := make([]string, 0, len(rows))
 	for _, row := range rows {
@@ -271,8 +304,7 @@ func execInsert(ctx context.Context, db *sql.DB, d drivers.Dialect, target strin
 		values = append(values, "("+strings.Join(marks, ", ")+")")
 	}
 
-	query := "INSERT INTO " + target +
-		" (" + strings.Join(quoted, ", ") + ") VALUES " + strings.Join(values, ", ")
+	query := insertHead(d, target, columns) + strings.Join(values, ", ")
 	res, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, apperr.Wrap(apperr.CodeQueryFailed, err, "insert row")

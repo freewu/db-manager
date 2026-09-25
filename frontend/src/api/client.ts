@@ -276,6 +276,12 @@ export const api = {
    * would run it. Nothing is executed, so it is safe to ask before agreeing.
    */
   planRowUpdate: (req: RowUpdate) => invoke<string>('PlanRowUpdate', req),
+  /**
+   * The statement one row of a selection would be removed by. The grid asks for
+   * one per row before a batch delete, so the dialog can list what is about to
+   * run instead of saying "some rows". Nothing is executed.
+   */
+  planRowDelete: (req: RowDelete) => invoke<string>('PlanRowDelete', req),
   /** Applies an edit of several columns of one row, as a single statement. */
   updateRow: (req: RowUpdate) => invoke<number>('UpdateRow', req),
   /**
@@ -284,6 +290,12 @@ export const api = {
    * asked to skip — not as a rejection.
    */
   insertRows: (req: RowInsert) => invoke<RowInsertResult>('InsertRows', req),
+  /**
+   * The statement a batch of generated rows goes in as, for the window to show
+   * before a run starts. The values do not exist yet, so what comes back is the
+   * statement's shape: the table, the columns, and bind placeholders.
+   */
+  planInsertRows: (req: RowInsert) => invoke<string>('PlanInsertRows', req),
   /** How many rows one generation run may write, and what it may be set to. */
   dataGenSettings: () => invoke<DataGenSettings>('DataGenSettings'),
   /** Saves it, and answers what is in force — the backend is what decides. */

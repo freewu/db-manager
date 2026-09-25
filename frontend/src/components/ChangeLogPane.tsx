@@ -55,6 +55,7 @@ const SOURCE_LABEL: Record<string, MessageKey> = {
   copy: 'changeLogPane.the-duplicate-table-window',
   explorer: 'changeLogPane.the-object-explorer',
   compare: 'changeLogPane.the-database-comparison',
+  datagen: 'changeLogPane.the-data-generation-window',
 }
 
 /**
@@ -282,6 +283,11 @@ function EntryRow({
           {entry.kind.toUpperCase()}
         </Tag>
         {entry.error ? <ExclamationCircleOutlined style={{ color: '#d4380d' }} /> : null}
+        {entry.rows ? (
+          <span className="dm-changelog-rows">
+            {tn('changeLogPane.rows', entry.rows, { n: entry.rows.toLocaleString() })}
+          </span>
+        ) : null}
         <span className="dm-changelog-where">{where}</span>
       </span>
       <span className="dm-changelog-row-sql">{oneLine(entry.statement)}</span>
@@ -330,6 +336,9 @@ function EntryDetail({ entry, driverName }: { entry: ChangeLogEntry; driverName:
         </Descriptions.Item>
         <Descriptions.Item label={t('changeLogPane.table')}>
           {entry.table || <span className="dm-null">—</span>}
+        </Descriptions.Item>
+        <Descriptions.Item label={t('changeLogPane.rows-changed')}>
+          {entry.rows ? entry.rows.toLocaleString() : <span className="dm-null">{t('changeLogPane.not-counted')}</span>}
         </Descriptions.Item>
         <Descriptions.Item label={t('changeLogPane.run-from')}>
           {entry.source in SOURCE_LABEL ? t(SOURCE_LABEL[entry.source]) : entry.source}

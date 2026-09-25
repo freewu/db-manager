@@ -85,6 +85,7 @@ import {
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { MockPickerModal } from './MockPickerModal'
 import { useColumnResize } from './ResizableHeader'
+import { SqlCode } from './SqlCode'
 import { t, tn, useLanguage } from '../lib/i18n'
 
 /**
@@ -219,7 +220,7 @@ interface DataGenPaneProps {
 export function DataGenPane({ tab }: DataGenPaneProps) {
   const language = useLanguage()
   const sessionId = tab.sessionId
-  const { modal } = AntApp.useApp()
+  const { message, modal } = AntApp.useApp()
   const session = useAppStore((s) => s.sessionOf(sessionId))
   const sessions = useAppStore((s) => s.sessions)
   const drivers = useAppStore((s) => s.drivers)
@@ -665,34 +666,72 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
 
   const generate = useCallback(() => {
     if (blocker || !structure || !object) return
-    modal.confirm({
-      title: tn('dataGenPane.generate-rows-into', rowsToWrite, { object }),
-      content: (
-        <div style={{ fontSize: 12 }}>
-          <div>
-            {t('dataGenPane.n-of-m-columns-are-sent', {
-              sent: ticked.length,
-              total: structure.columns.length,
-            })}{' '}
-            <span className="mono">{ticked.map((row) => row.name).join(', ')}</span>
+    void (async () => {
+      // The statement the batches go in as, rendered by the engine that will run
+      // them, and the same renderer the run uses — so the box below is what is
+      // about to be sent rather than a second guess at it. The values are made up
+      // while the run goes on, so what is shown is the statement's shape: the
+      // table, the columns, and bind placeholders.
+      let statement: string
+      try {
+        statement = await api.planInsertRows({
+          sessionId,
+          database,
+          schema,
+          object,
+          columns: ticked.map((row) => row.name),
+          rows: [],
+        })
+      } catch (error) {
+        message.error(toMessage(error))
+        return
+      }
+      modal.confirm({
+        title: tn('dataGenPane.generate-rows-into', rowsToWrite, { object }),
+        width: 660,
+        icon: null,
+        content: (
+          <div style={{ fontSize: 12 }}>
+            <div>
+              {t('dataGenPane.n-of-m-columns-are-sent', {
+                sent: ticked.length,
+                total: structure.columns.length,
+              })}{' '}
+              <span className="mono">{ticked.map((row) => row.name).join(', ')}</span>
+            </div>
+            <SqlCode className="dm-ddl" driver={session?.driver} sql={statement + ';'} />
+            <div style={{ marginTop: 6 }}>
+              {t('dataGenPane.batches-no-undo', { batch: INSERT_BATCH })}
+            </div>
+            <div style={{ marginTop: 6 }}>
+              {skipErrors
+                ? t('dataGenPane.a-row-the-engine-refuses-is-left-out-and-counted')
+                : t('dataGenPane.the-run-stops-at-the-first-row-the-engine')}
+            </div>
           </div>
-          <div style={{ marginTop: 6 }}>
-            {t('dataGenPane.batches-no-undo', { batch: INSERT_BATCH })}
-          </div>
-          <div style={{ marginTop: 6 }}>
-            {skipErrors
-              ? t('dataGenPane.a-row-the-engine-refuses-is-left-out-and-counted')
-              : t('dataGenPane.the-run-stops-at-the-first-row-the-engine')}
-          </div>
-        </div>
-      ),
-      okText: t('dataGenPane.generate'),
-      // Closing here and running detached: the dialog is not what reports the run.
-      onOk: () => {
-        void runGeneration()
-      },
-    })
-  }, [blocker, structure, object, rowsToWrite, ticked, skipErrors, modal, runGeneration])
+        ),
+        okText: t('dataGenPane.generate'),
+        // Closing here and running detached: the dialog is not what reports the run.
+        onOk: () => {
+          void runGeneration()
+        },
+      })
+    })()
+  }, [
+    blocker,
+    database,
+    message,
+    modal,
+    object,
+    rowsToWrite,
+    runGeneration,
+    schema,
+    session?.driver,
+    sessionId,
+    skipErrors,
+    structure,
+    ticked,
+  ])
 
   /* --- the fields grid --------------------------------------------------- */
 

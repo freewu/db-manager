@@ -46,7 +46,8 @@ const locationFile = "location.json"
 // through DataDirMoveResult.LeftBehind, rather than quietly dropping it.
 // Archived change logs are the one thing that cannot be listed here: they are
 // named for the day they were rotated out, so they are found by scanning the
-// directory instead (see dataFileNames).
+// directory instead (see dataFileNames). The name below is the live log of
+// builds that kept it here; the folder that holds the logs now is in dataDirs.
 var dataFiles = []string{
 	fileName,
 	queriesFile,
@@ -60,11 +61,12 @@ var dataFiles = []string{
 
 // dataDirs are the folders this build keeps in the data directory, next to the
 // files above. They travel with a move exactly like the files do. The query tree
-// is one folder per connection and database, and the custom mock placeholders
-// are one file per placeholder, so both are copied by walking them — but only
-// *these* folders are ever walked, never the whole data directory, which is what
-// keeps "one directory may hold another" true (see MoveData).
-var dataDirs = []string{queryDirName, mockDirName}
+// is one folder per connection and database, the custom mock placeholders are
+// one file per placeholder, and the change log is one file per day, so all three
+// are copied by walking them — but only *these* folders are ever walked, never
+// the whole data directory, which is what keeps "one directory may hold another"
+// true (see MoveData).
+var dataDirs = []string{queryDirName, mockDirName, changeLogDirName}
 
 type locationFormat struct {
 	Version int    `json:"version"`

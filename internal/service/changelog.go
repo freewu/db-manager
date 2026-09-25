@@ -3,17 +3,23 @@
 //
 // Entries are written by the layer that executes statements, at the moment they
 // are executed, so a change cannot be made through the application without
-// leaving a line behind. There are exactly three places that can write one, and
-// they are the three places that execute something other than a read:
+// leaving a line behind. Every place that executes something other than a read
+// writes one:
 //
 //   - Manager.Execute, for a script somebody wrote (the query window, the DDL
 //     editor, a database being created) — one entry per write statement;
 //   - Manager.applyPlan, for the structure page saving a draft, which runs the
 //     planned statements one at a time and therefore knows each outcome;
-//   - nothing else: a cell edited in the grid and a batch of generated rows are
-//     statements this application builds itself, with bound values and no text a
-//     user ever read, so they are out of scope for a log whose every line is
-//     supposed to be a statement that was run.
+//   - Manager.UpdateRow and Manager.DeleteRow, for a row edited or removed from
+//     the result grid: the statement is built by this application rather than
+//     typed by the user, and it is logged as the statement that was run;
+//   - Manager.InsertRows, for a batch of rows the data generation window made
+//     up — one entry per batch, since a batch is what the engine is handed.
+//
+// Every entry carries how much data the statement changed, as the engine counted
+// it (`Rows`, in models.ChangeLogEntry). That number is the point of the record
+// as much as the statement is: "an UPDATE ran" and "an UPDATE rewrote 4,120
+// rows" are different pieces of news.
 //
 // The file itself lives in the data directory and is written by the config store
 // (see config/changelog.go); this file is only about what goes in it.
@@ -145,15 +151,24 @@ type statementPlace struct {
 // object, because the table it names does not exist yet and the name is in the
 // statement itself — so the field says "what this was applied to", not "what it
 // mentions".
+//
+// `rows` is what the engine reported as affected, and zero when nothing reported
+// one: DDL has no count, and a statement that failed changed nothing.
 func (m *Manager) logStatement(
 	s *session,
 	place statementPlace,
 	statement, kind string,
+	rows int64,
 	runErr error,
 ) {
 	table := place.object
 	if sqlutil.CreatesTable(statement) {
 		table = ""
+	}
+	if runErr != nil {
+		// A statement that did not go through changed nothing, whatever a count
+		// from an earlier step of the same run happens to say.
+		rows = 0
 	}
 	m.appendChange(s, models.ChangeLogEntry{
 		Database:  place.database,
@@ -162,6 +177,7 @@ func (m *Manager) logStatement(
 		Kind:      kind,
 		Source:    place.source,
 		Statement: statement,
+		Rows:      rows,
 		Error:     errorText(runErr),
 	})
 }
@@ -172,18 +188,33 @@ func (m *Manager) logStatement(
 // does not recognise (a session variable, a `USE`, a transaction boundary): the
 // log answers "what was done to this database", and lines that cannot be read as
 // an answer to that question make it harder to read.
-func (m *Manager) logScript(s *session, req models.ExecRequest, runErr error) {
+//
+// The row count is the engine's, and the engine answers a script with one result
+// for the whole run — so the count can only be attributed when the script holds a
+// single write statement. With two of them there is no way to say which changed
+// the rows, and a number on the wrong line is worse than no number at all.
+// Nothing is lost from the record itself: a statement that changed rows says so,
+// it just says it without a figure.
+func (m *Manager) logScript(s *session, req models.ExecRequest, res *models.QueryResult, runErr error) {
 	place := statementPlace{
 		database: req.Database,
 		schema:   req.Schema,
 		object:   req.Object,
 		source:   models.ChangeSourceScript,
 	}
+	writes := make([]models.ScriptStatement, 0, 4)
 	for _, statement := range statementsOf(s, req.SQL) {
 		switch statement.Kind {
 		case sqlutil.KindDDL, sqlutil.KindDML:
-			m.logStatement(s, place, statement.SQL, statementKind(statement.SQL, statement.Kind), runErr)
+			writes = append(writes, statement)
 		}
+	}
+	var rows int64
+	if len(writes) == 1 && res != nil {
+		rows = res.AffectedRows
+	}
+	for _, statement := range writes {
+		m.logStatement(s, place, statement.SQL, statementKind(statement.SQL, statement.Kind), rows, runErr)
 	}
 }
 

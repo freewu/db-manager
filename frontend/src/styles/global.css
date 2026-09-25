@@ -2557,6 +2557,16 @@ body.dm-col-resizing * {
   white-space: nowrap;
 }
 
+/* How much data the statement changed. It sits with what was done rather than
+   with the object: the object is pushed to the far end and lines up down the
+   list, and the count would break that column if it followed. */
+.dm-changelog-rows {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--dm-null);
+  white-space: nowrap;
+}
+
 /* Pushed to the far end: what a statement was applied to is the other half of
    "when" and "what", and it lines up down the list. */
 .dm-changelog-where {

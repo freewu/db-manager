@@ -648,16 +648,20 @@ const FILE_PURPOSE: Record<string, MessageKey> = {
   'layout.json': 'settingsPane.file-layout-json',
   'state.json': 'settingsPane.file-state-json',
   'secret.key': 'settingsPane.file-secret-key',
+  'datagen.json': 'settingsPane.file-datagen-json',
   'changelog.jsonl': 'settingsPane.file-changelog-jsonl',
   'changelog.json': 'settingsPane.file-changelog-json',
   '.mock': 'settingsPane.file-mock',
   '.query': 'settingsPane.file-query',
+  log: 'settingsPane.file-log',
 }
 
 /**
  * An archived log — `<date>-<n>.log` — is named when it is rotated out, so it
  * cannot be listed above by name. The rule mirrors the backend's, which is the
- * one that decides what counts as an archive.
+ * one that decides what counts as an archive. The log folder the app writes in
+ * now is listed as one row, so a name that matches here is one an older build
+ * left in the data directory itself.
  */
 const ARCHIVED_LOG = /^\d{8}-[1-9]\d*\.log$/
 
@@ -667,7 +671,7 @@ function purposeOf(name: string): string {
   if (key) return t(key)
   return t(
     ARCHIVED_LOG.test(name)
-      ? 'settingsPane.archived-change-log'
+      ? 'settingsPane.archived-change-log-by-an-older-build'
       : 'settingsPane.written-by-this-program',
   )
 }
