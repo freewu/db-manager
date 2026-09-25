@@ -139,6 +139,14 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
   新的引擎图标放 `asserts/icon/`，在 `frontend/src/lib/assets.ts` 注册（`@asserts` 别名指向该目录）。
 - **主题色 `#36ab60` 写在两处，必须同步**：`frontend/src/App.tsx` 的 `colorPrimary`，
   与 `frontend/src/styles/global.css` 的 `--dm-accent*`。
+- **托盘的菜单只在 `tray.go` 一处**：文字 / 顺序 / 勾在哪一行 / 版本号都出自 `trayMenuRows(prefs)`，
+  `tray_windows.go` 只负责把它递归画成 Win32 菜单（子菜单用 `MF_POPUP` 挂）。菜单里那两档设置
+  （显示主题 / 界面语言）的**偏好仍然只归前端一份**：Go 只把选中的值当事件发出去
+  （`trayThemeEvent` / `trayLanguageEvent`，前端 `lib/tray.ts` 里各写一份同名常量，`tray_test.go`
+  会去读那个文件对一遍），前端用 `setTheme` / `setUiLanguage` 应用并落盘 —— **托盘不写 `state.json`**，
+  否则同一份偏好就有了第二个写者。要勾哪一行读的是 `trayPrefsStore` 里的副本（`startup` 与每次
+  `SaveState` 之后刷新），不是每次右键去读一遍可能写了一半的文件。`trayWordsByLanguage` 是 Go 侧
+  **唯一**翻译过的文案，用词必须与设置页对齐（`libTheme.*`、`settingsPane.*`）；三档语言名自身不翻译。
 - **前端不消费 Wails 生成的绑定**：`frontend/src/api/{types,client}.ts` 是手写的，
   `frontend/wailsjs/` 只是构建产物（已 gitignore）。加后端方法时，两边都要手写。
 - **`tsconfig` 开了 `noUnusedLocals` / `noUnusedParameters`**：删代码时记得删导入，

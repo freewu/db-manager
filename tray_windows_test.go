@@ -68,27 +68,41 @@ func TestMsgCoversTheSDKStruct(t *testing.T) {
 
 // appendTrayRows is what a right click actually builds, so reading the menu back
 // out of Win32 is the closest thing to a test of the menu the user sees: the
-// labels have to arrive intact, the version row has to be greyed out, and the
-// separators have to be separators.
+// labels have to arrive intact — in whichever language is in force — the version
+// row has to be greyed out, the separators have to be separators, and the two
+// settings have to really be submenus with the setting in force ticked.
 func TestTrayMenuReachesWin32(t *testing.T) {
+	// Deliberately not the defaults: the rows a right click builds depend on the
+	// settings, and this is the path that has to carry them through.
+	prefs := trayPrefs{theme: trayThemeDark, language: "zh-TW"}
+
 	menu, _, _ := procCreatePopupMenu.Call()
 	if menu == 0 {
 		t.Fatal("CreatePopupMenu failed")
 	}
 	defer procDestroyMenu.Call(menu)
 
-	appendTrayRows(menu)
+	appendTrayRows(menu, prefs)
+	checkMenu(t, menu, trayMenuRows(prefs), "menu")
+}
+
+// checkMenu reads one level of a Win32 menu back and compares it with the rows the
+// Go side asked for. A row holding a submenu is followed into it, so a heading
+// that was never given one — or a submenu whose ticks went missing — fails here
+// rather than in front of a user.
+func checkMenu(t *testing.T, menu uintptr, rows []trayMenuRow, where string) {
+	t.Helper()
 
 	count, _, _ := procGetMenuItemCount.Call(menu)
-	if rows := len(trayMenuRows()); int(count) != rows {
-		t.Fatalf("the menu has %d rows, want %d", count, rows)
+	if got := int(count); got != len(rows) {
+		t.Fatalf("%s has %d rows, want %d", where, got, len(rows))
 	}
 
-	for i, row := range trayMenuRows() {
+	for i, row := range rows {
 		state, _, _ := procGetMenuState.Call(menu, uintptr(i), menuByPosition)
 		if row.separator {
 			if state&menuSeparator == 0 {
-				t.Errorf("row %d is not a separator", i)
+				t.Errorf("%s: row %d is not a separator", where, i)
 			}
 			continue
 		}
@@ -103,12 +117,28 @@ func TestTrayMenuReachesWin32(t *testing.T) {
 		)
 		runtime.KeepAlive(buf)
 		if got := windows.UTF16ToString(buf[:length]); got != row.label {
-			t.Errorf("row %d says %q, want %q", i, got, row.label)
+			t.Errorf("%s: row %d says %q, want %q", where, i, got, row.label)
 		}
 
 		disabled := state&(menuDisabled|menuGrayed) != 0
 		if disabled == row.enabled {
-			t.Errorf("row %d (%q): clickable=%v, want clickable=%v", i, row.label, !disabled, row.enabled)
+			t.Errorf("%s: row %d (%q): clickable=%v, want clickable=%v", where, i, row.label, !disabled, row.enabled)
+		}
+		if checked := state&menuChecked != 0; checked != row.checked {
+			t.Errorf("%s: row %d (%q): ticked=%v, want ticked=%v", where, i, row.label, checked, row.checked)
+		}
+
+		sub, _, _ := procGetSubMenu.Call(menu, uintptr(i))
+		switch {
+		case row.submenu == nil && sub != 0:
+			t.Errorf("%s: row %d (%q) opened a submenu of its own", where, i, row.label)
+		case row.submenu != nil && sub == 0:
+			t.Errorf("%s: row %d (%q) has no submenu", where, i, row.label)
+		case row.submenu != nil:
+			if state&menuPopup == 0 {
+				t.Errorf("%s: row %d (%q) is not a popup row", where, i, row.label)
+			}
+			checkMenu(t, sub, row.submenu, where+" > "+row.label)
 		}
 	}
 }

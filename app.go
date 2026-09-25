@@ -38,6 +38,11 @@ type App struct {
 	// closed the window" (hide it, stay running) from "the user is done" (go
 	// down).
 	quitting atomic.Bool
+
+	// trayPrefs is the app's copy of the two preferences the tray menu shows —
+	// the display theme and the language. They are the frontend's, and it stores
+	// them through SaveState, which is where this copy is refreshed.
+	trayPrefs trayPrefsStore
 }
 
 // NewApp wires the application layer.
@@ -54,17 +59,58 @@ func NewApp() (*App, error) {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.manager.SetContext(ctx)
+	// The menu ticks the theme and the language in force, and it is drawn before
+	// the frontend has stored anything on a fresh install, so it is seeded here.
+	a.refreshTrayPrefs()
 	a.tray = newTray(a.trayActions())
 }
 
 // trayActions is what the notification-area menu can ask of the app.
 func (a *App) trayActions() trayActions {
 	return trayActions{
-		showWindow: a.showWindow,
-		openRepo:   func() { a.openURL(repoURL) },
-		openIssue:  func() { a.openURL(issuesURL) },
-		quit:       a.quit,
+		showWindow:  a.showWindow,
+		openRepo:    func() { a.openURL(repoURL) },
+		openIssue:   func() { a.openURL(issuesURL) },
+		quit:        a.quit,
+		prefs:       a.trayPrefs.get,
+		setTheme:    a.trayTheme,
+		setLanguage: a.trayLanguage,
 	}
+}
+
+// refreshTrayPrefs re-reads the two preferences the tray menu shows. A state file
+// that cannot be read leaves the defaults in place: a menu with the wrong tick is
+// a much smaller problem than a startup that stops.
+func (a *App) refreshTrayPrefs() {
+	state, err := a.manager.LoadState()
+	if err != nil {
+		return
+	}
+	a.trayPrefs.refresh(state)
+}
+
+// trayTheme is the tray menu's display-mode rows: the frontend owns the
+// preference, paints it and stores it, so the pick is handed over rather than
+// written down here — the same change the settings page makes, through the same
+// code.
+func (a *App) trayTheme(theme string) {
+	a.emitTrayPref(trayThemeEvent, theme)
+}
+
+// trayLanguage is the tray menu's language rows, handed over the same way.
+func (a *App) trayLanguage(language string) {
+	a.emitTrayPref(trayLanguageEvent, language)
+}
+
+// emitTrayPref sends one preference to the interface, which applies and stores it.
+// The context is checked because the tray can exist a moment before Wails has
+// handed us one; a dropped event is a menu row that did nothing, which is what a
+// setting that cannot be applied should do.
+func (a *App) emitTrayPref(event, value string) {
+	if a.ctx == nil {
+		return
+	}
+	wruntime.EventsEmit(a.ctx, event, value)
 }
 
 // shutdown releases every database pool and takes the tray icon down.
@@ -140,7 +186,17 @@ func (a *App) ListDrivers() []models.DriverInfo { return a.manager.Drivers() }
 func (a *App) LoadState() (map[string]any, error) { return a.manager.LoadState() }
 
 // SaveState persists UI preferences.
-func (a *App) SaveState(state map[string]any) error { return a.manager.SaveState(state) }
+//
+// This is also where the tray menu's copy of them is refreshed: the two settings
+// in its menu are written here and nowhere else, so a write is exactly the moment
+// its ticks can have gone stale.
+func (a *App) SaveState(state map[string]any) error {
+	if err := a.manager.SaveState(state); err != nil {
+		return err
+	}
+	a.trayPrefs.refresh(state)
+	return nil
+}
 
 // --- connection profiles ---------------------------------------------------
 

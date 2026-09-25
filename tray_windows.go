@@ -62,6 +62,8 @@ const (
 	menuString     = 0x00000000
 	menuGrayed     = 0x00000001
 	menuDisabled   = 0x00000002
+	menuChecked    = 0x00000008
+	menuPopup      = 0x00000010
 	menuSeparator  = 0x00000800
 	menuRightClick = 0x0002
 
@@ -99,6 +101,7 @@ var (
 	procGetMenuItemCount    = user32.NewProc("GetMenuItemCount")
 	procGetMenuState        = user32.NewProc("GetMenuState")
 	procGetMenuString       = user32.NewProc("GetMenuStringW")
+	procGetSubMenu          = user32.NewProc("GetSubMenu")
 	procGetMessage          = user32.NewProc("GetMessageW")
 	procLoadIcon            = user32.NewProc("LoadIconW")
 	procPostMessage         = user32.NewProc("PostMessageW")
@@ -277,7 +280,19 @@ func (t *tray) serve() {
 }
 
 // dispatch runs the menu row the user picked.
+//
+// The two settings rows are looked up rather than listed: their ids come in
+// groups of three, and the value each one stands for belongs next to the choices
+// in tray.go, not here.
 func (t *tray) dispatch(cmd trayCommand) {
+	if theme, ok := trayThemeOf(cmd); ok {
+		t.actions.setTheme(theme)
+		return
+	}
+	if language, ok := trayLanguageOf(cmd); ok {
+		t.actions.setLanguage(language)
+		return
+	}
 	switch cmd {
 	case trayCommandShowWindow:
 		t.actions.showWindow()
@@ -302,7 +317,7 @@ func (t *tray) showMenu(hwnd windows.Handle) {
 	// so it can follow the version string.
 	defer procDestroyMenu.Call(menu)
 
-	appendTrayRows(menu)
+	appendTrayRows(menu, t.actions.prefs())
 
 	// The window has to be in the foreground or the shell will not dismiss the
 	// menu when the user clicks elsewhere; the null message afterwards is the
@@ -322,19 +337,41 @@ func (t *tray) showMenu(hwnd windows.Handle) {
 	postMessage(hwnd, wmNull, 0, 0)
 }
 
-// appendTrayRows turns trayMenuRows into Win32 rows: a separator for a
-// separator, a clickable row for a command, a greyed-out row for the version.
+// appendTrayRows turns trayMenuRows into Win32 rows, for the settings in force.
 // Split out from showMenu because it can be exercised — and the result read back
-// with GetMenuString — without a window or a message loop.
-func appendTrayRows(menu uintptr) {
-	for _, row := range trayMenuRows() {
+// with GetMenuString and GetMenuState — without a window or a message loop.
+func appendTrayRows(menu uintptr, prefs trayPrefs) {
+	appendRows(menu, trayMenuRows(prefs))
+}
+
+// appendRows draws one level of the menu: a separator for a separator, a
+// greyed-out row for the version, and a tick on the setting in force. A heading
+// gets a popup of its own, which Win32 takes ownership of — it is destroyed with
+// the menu it was appended to, which is why only the top-level one is destroyed
+// by hand in showMenu.
+func appendRows(menu uintptr, rows []trayMenuRow) {
+	for _, row := range rows {
 		switch {
 		case row.separator:
 			procAppendMenu.Call(menu, menuSeparator, 0, 0)
-		case row.enabled:
-			appendMenu(menu, menuString, row.command, row.label)
+		case row.submenu != nil:
+			sub, _, _ := procCreatePopupMenu.Call()
+			if sub == 0 {
+				continue
+			}
+			appendRows(sub, row.submenu)
+			// A popup row is identified by the handle of its submenu rather than by
+			// a command id, which is what MF_POPUP tells the menu.
+			appendMenu(menu, menuString|menuPopup, sub, row.label)
 		default:
-			appendMenu(menu, menuString|menuDisabled|menuGrayed, row.command, row.label)
+			flags := uint32(menuString)
+			switch {
+			case !row.enabled:
+				flags |= menuDisabled | menuGrayed
+			case row.checked:
+				flags |= menuChecked
+			}
+			appendMenu(menu, flags, uintptr(row.command), row.label)
 		}
 	}
 }
@@ -502,13 +539,14 @@ func trayIcon() windows.Handle {
 	return 0
 }
 
-// appendMenu adds one row to the popup.
-func appendMenu(menu uintptr, flags uint32, cmd trayCommand, label string) {
+// appendMenu adds one row to the popup. The id is what the row reports back: a
+// command id for a command, a submenu handle for a heading.
+func appendMenu(menu uintptr, flags uint32, id uintptr, label string) {
 	text, err := windows.UTF16PtrFromString(label)
 	if err != nil {
 		return
 	}
-	procAppendMenu.Call(menu, uintptr(flags), uintptr(cmd), uintptr(unsafe.Pointer(text)))
+	procAppendMenu.Call(menu, uintptr(flags), id, uintptr(unsafe.Pointer(text)))
 	runtime.KeepAlive(text)
 }
 
