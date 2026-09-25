@@ -509,6 +509,116 @@ type SchemaCompare struct {
 	Warnings []string `json:"warnings"`
 }
 
+// --- export ----------------------------------------------------------------
+
+// ExportMode is what one export writes: the shape of the tables, the shape and
+// the rows, or the rows alone.
+//
+// It is one value rather than two flags because the three things the explorer's
+// menu offers are three different files: a structure export is a script that
+// creates empty tables, a data export is rows for tables that already exist,
+// and the middle one is what most people mean by "dump this database".
+type ExportMode string
+
+const (
+	// ExportStructure writes one CREATE per table and nothing else.
+	ExportStructure ExportMode = "structure"
+	// ExportStructureData writes each table's CREATE followed by the statements
+	// that put its rows back.
+	ExportStructureData ExportMode = "structure-data"
+	// ExportData writes rows only, and is the mode that may pick fields: reading
+	// a subset is a question about the rows, not about the table's shape.
+	ExportData ExportMode = "data"
+)
+
+// ExportFormat is how each row is spelled in the file.
+type ExportFormat string
+
+const (
+	// ExportSQL writes INSERT statements. It is the only format the two
+	// structure modes use, because what they write is a script.
+	ExportSQL ExportFormat = "sql"
+	// ExportCSV is RFC 4180 — the same text the result grid's own export
+	// writes, down to the cell quoting rule.
+	ExportCSV ExportFormat = "csv"
+	// ExportJSON is one array of objects and ExportJSONL is one object per
+	// line. They carry the same facts; the line-oriented one can be read while
+	// it is still being written, which is what a large export wants.
+	ExportJSON  ExportFormat = "json"
+	ExportJSONL ExportFormat = "jsonl"
+)
+
+// ExportTable is one table to write, named the way its engine names it.
+//
+// The schema travels beside the name instead of being folded into one qualified
+// string because no level of a qualified name can be recovered by splitting it:
+// an identifier may contain the separator, and every level needs its own
+// quoting.
+type ExportTable struct {
+	Schema string `json:"schema,omitempty"`
+	Name   string `json:"name"`
+}
+
+// ExportRequest is one run of the export window.
+//
+// It carries the whole decision — what, in which format, to which file —
+// because the run writes what it reads straight to disk: the rows never travel
+// back across the bridge, so there is no point at which the window could look
+// at them and change its mind. Which is also why `Path` is in the request
+// rather than being a second call: a run that is already reading has nothing to
+// do with "where should this go?".
+type ExportRequest struct {
+	// ID is the window's own name for this run. It comes back on every progress
+	// tick and is what cancels the run, because the id has to exist before the
+	// call that runs: the window may want to stop an export one keystroke into
+	// it, and a run that could only be cancelled after it returned could not be
+	// cancelled at all.
+	ID        string `json:"id"`
+	SessionID string `json:"sessionId"`
+	Database  string `json:"database,omitempty"`
+
+	Mode   ExportMode    `json:"mode"`
+	Tables []ExportTable `json:"tables"`
+	// Columns are the fields of a data export, in the order they are written.
+	// Empty means every field, in the catalog's own order. The structure modes
+	// ignore it: what shape a table has is the engine's answer, not the user's.
+	Columns []string     `json:"columns,omitempty"`
+	Format  ExportFormat `json:"format,omitempty"`
+	Path    string       `json:"path"`
+}
+
+// ExportProgress is one tick of a running export.
+type ExportProgress struct {
+	ID string `json:"id"`
+	// Done and Total count tables, which is the only total an export knows
+	// without reading twice: counting the rows first would scan every table a
+	// second time just to be able to draw a percentage.
+	Done  int `json:"done"`
+	Total int `json:"total"`
+	// Table is the table being written, empty between two of them.
+	Table string `json:"table,omitempty"`
+	Rows  int64  `json:"rows"`
+	Bytes int64  `json:"bytes"`
+}
+
+// ExportResult is what one run did.
+type ExportResult struct {
+	Path   string `json:"path"`
+	Tables int    `json:"tables"`
+	Rows   int64  `json:"rows"`
+	Bytes  int64  `json:"bytes"`
+	// Cancelled says the user stopped the run. The file holds whatever had been
+	// written when they did; nothing is deleted, because a partial dump that the
+	// user asked to stop is theirs to keep or throw away.
+	Cancelled bool `json:"cancelled"`
+	// Warnings name the tables that could not be written, and why. One table the
+	// user has no privilege to read does not throw away the ten that they can,
+	// so a failure is reported here rather than ending the run — but it is
+	// reported, because a dump that quietly holds eleven of twelve tables is
+	// worse than one that says so.
+	Warnings []string `json:"warnings,omitempty"`
+}
+
 // --- databases -------------------------------------------------------------
 
 // DatabaseCharset is one character set (MySQL family) or encoding (PostgreSQL)

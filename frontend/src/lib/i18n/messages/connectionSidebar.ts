@@ -210,4 +210,11 @@ export const connectionSidebar = {
     '脚本会以 .sql 文件的形式保存在数据目录中，因此之后重命名也能保持它是同一个文件。',
     '指令碼會以 .sql 檔案的形式儲存在資料目錄中，因此之後重新命名也能保持它是同一個檔案。',
   ],
+  'connectionSidebar.export-structure': ['Export structure', '导出结构', '匯出結構'],
+  'connectionSidebar.export-structure-and-data': [
+    'Export structure and data',
+    '导出结构和数据',
+    '匯出結構和資料',
+  ],
+  'connectionSidebar.export-data': ['Export data', '导出数据', '匯出資料'],
 } satisfies AreaMessages

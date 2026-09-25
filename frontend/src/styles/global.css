@@ -2766,3 +2766,73 @@ body.dm-col-resizing * {
   color: var(--dm-null);
   white-space: nowrap;
 }
+
+/* ------------------------------------------------------------ export window */
+
+/* The three modes are one decision with three answers, so they read top to
+   bottom instead of side by side: each line carries the sentence that says
+   what it would write. */
+.dm-export-modes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.dm-export-hint {
+  margin-left: 8px;
+  font-size: 12px;
+}
+
+.dm-export-section {
+  margin-bottom: 16px;
+}
+
+.dm-export-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+/* A scrolling box of its own, so the window keeps its height while the object
+   list is read and while long lists are picked over. */
+.dm-export-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 180px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  overflow: auto;
+  border: 1px solid var(--dm-border);
+  border-radius: 4px;
+}
+
+/* A table's fields are short, so they go in columns when there is room. */
+.dm-export-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 2px 8px;
+}
+
+/* One row per table or field: both antd wrappers are inline by default, which
+   would run a list of them together on one line. */
+.dm-export-row {
+  display: flex;
+  align-items: center;
+  margin-inline: 0;
+  font-size: 12px;
+}
+
+.dm-export-path {
+  display: block;
+  max-width: 100%;
+  font-size: 12px;
+}
+
+.dm-export-warnings {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}

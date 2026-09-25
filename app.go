@@ -565,36 +565,76 @@ func (a *App) SaveDataGenSettings(settings models.DataGenSettings) (models.DataG
 
 // SaveTextFile prompts for a location and writes text content there. The
 // frontend serialises the export (CSV/JSON/SQL) so no data has to travel back
-// through the bridge.
+// through the bridge — which is why this one is handed the whole thing at once,
+// unlike a database export, whose rows are written as they are read.
 func (a *App) SaveTextFile(req models.SaveFileRequest) (string, error) {
-	if strings.TrimSpace(req.DefaultFilename) == "" {
-		req.DefaultFilename = "export.txt"
-	}
-
-	filters := make([]wruntime.FileFilter, 0, len(req.Filters))
-	for _, f := range req.Filters {
-		filters = append(filters, wruntime.FileFilter{DisplayName: f.DisplayName, Pattern: f.Pattern})
-	}
-	if len(filters) == 0 {
-		filters = []wruntime.FileFilter{{DisplayName: "All files", Pattern: "*.*"}}
-	}
-
-	path, err := wruntime.SaveFileDialog(a.ctx, wruntime.SaveDialogOptions{
-		DefaultFilename: req.DefaultFilename,
-		Title:           "Export",
-		Filters:         filters,
-	})
-	if err != nil {
-		return "", apperr.Wrap(apperr.CodeInternal, err, "open save dialog")
-	}
-	if path == "" {
-		// User cancelled: not an error.
-		return "", nil
+	path, err := a.PickSavePath(req.DefaultFilename, req.Filters)
+	if err != nil || path == "" {
+		return "", err
 	}
 	if err := os.WriteFile(path, []byte(req.Content), 0o644); err != nil {
 		return "", apperr.Wrap(apperr.CodeInternal, err, "write %s", filepath.Base(path))
 	}
 	return path, nil
+}
+
+// PickSavePath asks for a destination file and returns it without writing
+// anything.
+//
+// It is the first half of SaveTextFile, split out for the database export: that
+// one writes its file in the backend, over minutes, so it has to know where to
+// write before it starts rather than being handed a path at the end. An empty
+// path means the user closed the dialog, which is not an error — nothing was
+// asked of anyone.
+func (a *App) PickSavePath(defaultFilename string, filters []models.FileFilter) (string, error) {
+	if strings.TrimSpace(defaultFilename) == "" {
+		defaultFilename = "export.txt"
+	}
+
+	dialogFilters := make([]wruntime.FileFilter, 0, len(filters))
+	for _, f := range filters {
+		dialogFilters = append(dialogFilters, wruntime.FileFilter{DisplayName: f.DisplayName, Pattern: f.Pattern})
+	}
+	if len(dialogFilters) == 0 {
+		dialogFilters = []wruntime.FileFilter{{DisplayName: "All files", Pattern: "*.*"}}
+	}
+
+	path, err := wruntime.SaveFileDialog(a.ctx, wruntime.SaveDialogOptions{
+		DefaultFilename: defaultFilename,
+		Title:           "Export",
+		Filters:         dialogFilters,
+	})
+	if err != nil {
+		return "", apperr.Wrap(apperr.CodeInternal, err, "open save dialog")
+	}
+	return path, nil
+}
+
+// --- database export -------------------------------------------------------
+
+// exportProgressEvent carries one tick of a running export.
+const exportProgressEvent = "export:progress"
+
+// ExportDatabase writes the selected tables of one session's database to a file.
+//
+// The rows never come back through the bridge: the run streams them from the
+// engine into the file, and this method answers with a summary when it is done.
+// Progress travels the other way, as events, so a window can show a bar without
+// the call having to return first.
+func (a *App) ExportDatabase(req models.ExportRequest) (models.ExportResult, error) {
+	return a.manager.ExportDatabase(req, func(p models.ExportProgress) {
+		if a.ctx == nil {
+			return
+		}
+		wruntime.EventsEmit(a.ctx, exportProgressEvent, p)
+	})
+}
+
+// CancelExport stops a running export. Cancelling one that has already finished
+// is not an error — the window may ask in the same instant the run reports that
+// it is done.
+func (a *App) CancelExport(id string) error {
+	return a.manager.CancelExport(id)
 }
 
 // PickFile opens a native file chooser (used for SQLite files and TLS

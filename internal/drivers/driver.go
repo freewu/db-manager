@@ -154,6 +154,45 @@ type Inserter interface {
 	PlanRowInsert(req models.RowInsert) (string, error)
 }
 
+// RowStreamer is an optional Conn capability: read a whole object's rows, one
+// at a time.
+//
+// The export window reads a table exactly once and writes what it reads to a
+// file, so the rows must not be collected first: a table with ten million rows
+// is an ordinary thing to export, and reading it page by page would ask the
+// server to skip everything it has already sent (quadratic work for a linear
+// question) while this side held a copy of the whole table. Streaming asks the
+// engine once and hands each row to the caller, who writes it down and forgets
+// it.
+//
+// A driver whose rows cannot be read as one cursor simply does not implement
+// this, and the export window says so instead of writing a different set of
+// rows than the one that was asked for.
+type RowStreamer interface {
+	// StreamRows calls each once per row, in the order the engine returns them.
+	// An error from each stops the read and comes back unchanged, so a caller's
+	// own decision (the user pressed Stop) is not dressed up as a failure of the
+	// query; an error from the engine comes back wrapped in apperr like every
+	// other read.
+	//
+	// The caller's context is the only deadline: a scan that takes a minute is
+	// not a failure, it is a large table, and the caller is the one who knows
+	// whether to wait (it has a Stop button) — so no timeout is invented here.
+	StreamRows(ctx context.Context, req StreamRequest, each func(row []any) error) error
+}
+
+// StreamRequest is the driver-level request for one object's rows.
+type StreamRequest struct {
+	Database string
+	Schema   string
+	Object   string
+	// Columns selects the fields to read, in this order. Empty means every
+	// column, in the order the catalog declares them — which is what a row's
+	// values are lined up with, so a caller that names its columns elsewhere
+	// (a CSV header, an INSERT's column list) passes the same list here.
+	Columns []string
+}
+
 // ExplainRequest is the driver-level explain request (no session ids).
 type ExplainRequest struct {
 	Database  string

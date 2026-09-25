@@ -742,6 +742,76 @@ export interface SaveFileRequest {
   filters?: FileFilter[]
 }
 
+/* --- database export ----------------------------------------------------- */
+
+/**
+ * What a dump holds.
+ *
+ * `structure` is the definitions alone — the file that recreates empty tables —
+ * and `data` is the rows alone, for tables that already exist.
+ */
+export type ExportMode = 'structure' | 'structure-data' | 'data'
+
+/**
+ * How a dump is written.
+ *
+ * Only `sql` can hold more than one table: the others are one table's rows with
+ * nowhere to say which table a line came from.
+ */
+export type ExportFormat = 'sql' | 'csv' | 'json' | 'jsonl'
+
+/** One table to write, with the schema it lives in on engines that have them. */
+export interface ExportTable {
+  schema?: string
+  name: string
+}
+
+/**
+ * One export run.
+ *
+ * The destination is a path the user picked in the native save dialog, not a
+ * name: the file is written by the backend, straight from the driver's rows.
+ */
+export interface ExportRequest {
+  /** Identifies this run, for progress events and for stopping it. */
+  id: string
+  sessionId: string
+  database: string
+  mode: ExportMode
+  tables: ExportTable[]
+  /** The fields to write, for a data export; empty means all of them. */
+  columns?: string[]
+  format: ExportFormat
+  path: string
+}
+
+/**
+ * How far a run has got.
+ *
+ * `done`/`total` count tables, because that is the only total known before the
+ * rows have been read; `rows` is what has been written so far.
+ */
+export interface ExportProgress {
+  id: string
+  done: number
+  total: number
+  table: string
+  rows: number
+  bytes: number
+}
+
+/** What a finished run did, and what it could not do. */
+export interface ExportResult {
+  path: string
+  tables: number
+  rows: number
+  bytes: number
+  /** True when the user stopped it: the file holds what had been written. */
+  cancelled: boolean
+  /** Tables that could not be read; the run carried on with the rest. */
+  warnings?: string[]
+}
+
 export interface AppInfo {
   name: string
   version: string

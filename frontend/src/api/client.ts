@@ -28,7 +28,11 @@ import type {
   ExecRequest,
   ExplainRequest,
   ExplainResult,
+  ExportProgress,
+  ExportRequest,
+  ExportResult,
   FetchRequest,
+  FileFilter,
   FetchResult,
   IndexEntry,
   MockPlaceholder,
@@ -306,6 +310,40 @@ export const api = {
   saveTextFile: (req: SaveFileRequest) => invoke<string>('SaveTextFile', req),
   pickFile: (title: string, patterns: string[]) =>
     invoke<string>('PickFile', title, patterns),
+  /**
+   * The native save dialog, without writing anything.
+   *
+   * The export needs the path before the rows are read — the file is written by
+   * the backend as they arrive — so choosing a destination and writing to it are
+   * two steps here rather than one.
+   */
+  pickSavePath: (defaultFilename: string, filters: FileFilter[]) =>
+    invoke<string>('PickSavePath', defaultFilename, filters),
+
+  // --- database export ----------------------------------------------------
+  /**
+   * Dumps tables to `req.path` and answers what was written.
+   *
+   * Progress arrives as `export:progress` events carrying the run's id (see
+   * `exportProgressEvent`), and the run can be stopped with `cancelExport`.
+   */
+  exportDatabase: (req: ExportRequest) => invoke<ExportResult>('ExportDatabase', req),
+  /** Stops a run. A run that has already finished is not an error. */
+  cancelExport: (id: string) => invoke<void>('CancelExport', id),
+}
+
+/** The event a running export reports itself on. */
+export const exportProgressEvent = 'export:progress'
+
+/**
+ * Watches every running export.
+ *
+ * One subscription rather than one per window: the events carry the run's id, so
+ * whoever cares compares it with their own, and a window that was closed while a
+ * dump was still being written does not leave a listener behind.
+ */
+export function onExportProgress(callback: (progress: ExportProgress) => void): () => void {
+  return runtime.onEvent(exportProgressEvent, (payload) => callback(payload as ExportProgress))
 }
 
 /**

@@ -21,7 +21,8 @@ import (
 
 // backslashEscaper is implemented by dialects where a backslash inside a string
 // literal is an escape character (MySQL and its forks, but not PostgreSQL, where
-// it is an ordinary character unless the string is prefixed with E'').
+// it is an ordinary character unless the string is written as an escape string
+// (`E'…'`)).
 //
 // It is an optional method rather than part of drivers.Dialect: it is the
 // difference between two renderings of the same literal, not a capability every
@@ -74,6 +75,18 @@ func sqlLiteral(d drivers.Dialect, value any) string {
 		return quoteString(d, fmt.Sprintf("%v", typed))
 	}
 }
+
+// Literal renders one value the way a dialect spells it in SQL, for the places
+// that build a statement to be run later rather than to be read now: the export
+// window writes INSERTs into a file, and the file has to be readable by the same
+// engine the rows came out of.
+//
+// It is the exported face of sqlLiteral, which stays unexported because inside
+// this package every caller already has the dialect in hand; scan.go's
+// QuoteLiteral is the other spelling of the same idea, and is dialect-unaware
+// (it cannot know that a backslash is an escape character in MySQL) — so it is
+// the wrong function for a file that may be loaded back.
+func Literal(d drivers.Dialect, value any) string { return sqlLiteral(d, value) }
 
 // quoteString wraps a text value in single quotes, with the quotes inside it
 // doubled — the spelling every SQL engine reads the same way.

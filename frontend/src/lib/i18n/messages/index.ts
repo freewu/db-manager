@@ -25,6 +25,7 @@ import { dataGrid } from './dataGrid'
 import { ddlPane } from './ddlPane'
 import { designGrid } from './designGrid'
 import { erDiagramPane } from './erDiagramPane'
+import { exportModal } from './exportModal'
 import { libAbout } from './libAbout'
 import { libMockCatalog } from './libMockCatalog'
 import { libMockCustom } from './libMockCustom'
@@ -75,6 +76,7 @@ export const MESSAGES = {
   ...ddlPane,
   ...designGrid,
   ...erDiagramPane,
+  ...exportModal,
   ...libAbout,
   ...libMockCatalog,
   ...libMockCustom,

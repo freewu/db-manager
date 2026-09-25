@@ -46,6 +46,19 @@ func TestSQLLiteralDoublesABackslashOnlyWhereItIsAnEscape(t *testing.T) {
 	}
 }
 
+// Literal is what the export window writes into a file, so it has to be the same
+// spelling the preview uses — dialect and all — rather than the simpler,
+// dialect-unaware QuoteLiteral in scan.go.
+func TestLiteralIsTheDialectAwareSpelling(t *testing.T) {
+	const path = `C:\tmp\a`
+	if got, want := Literal(MySQLDialect{}, path), sqlLiteral(MySQLDialect{}, path); got != want {
+		t.Errorf("Literal = %s, sqlLiteral = %s", got, want)
+	}
+	if got, want := Literal(PostgresDialect{}, nil), "NULL"; got != want {
+		t.Errorf("Literal(nil) = %s, want %s", got, want)
+	}
+}
+
 func TestLiteralWhereRendersARowIdentity(t *testing.T) {
 	key := []models.KeyValue{
 		{Column: "id", Value: 1},

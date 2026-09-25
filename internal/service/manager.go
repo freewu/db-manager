@@ -34,6 +34,13 @@ type Manager struct {
 	mu       sync.RWMutex
 	sessions map[string]*session
 	store    *config.Store
+
+	// exportsMu guards the runs in flight, which is a separate lock from the
+	// session lock on purpose: an export is stopped from the window's thread
+	// while the export itself is reading a table, and neither has anything to
+	// do with the other.
+	exportsMu sync.Mutex
+	exports   map[string]func()
 }
 
 type session struct {
@@ -56,6 +63,7 @@ func New() (*Manager, error) {
 		baseCtx:  context.Background(),
 		sessions: map[string]*session{},
 		store:    store,
+		exports:  map[string]func(){},
 	}, nil
 }
 

@@ -11,6 +11,7 @@ import {
   DisconnectOutlined,
   EditOutlined,
   ExperimentOutlined,
+  ExportOutlined,
   FileTextOutlined,
   FolderAddOutlined,
   FolderOutlined,
@@ -34,6 +35,7 @@ import type {
   DatabasePlan,
   DesignPlan,
   DriverInfo,
+  ExportMode,
   IndexEntry,
   ObjectInfo,
   QueryFile,
@@ -56,6 +58,7 @@ import {
 import { useAppStore, type ListScope, type TableView } from '../store/appStore'
 import { ConnectionTypeDropdown, connectionTypeItems, driverFromKey } from './ConnectionTypeMenu'
 import { CopyTableModal, type CopyTableSource } from './CopyTableModal'
+import { ExportModal, type ExportScope } from './ExportModal'
 import { NamePromptModal } from './NamePromptModal'
 import { objectIcon } from './objectIcon'
 import { SqlCode } from './SqlCode'
@@ -187,6 +190,8 @@ export function ConnectionSidebar() {
   const [newDatabase, setNewDatabase] = useState<SessionInfo | null>(null)
   /** Table the "Duplicate table" window is copying, if any. */
   const [copyTable, setCopyTable] = useState<CopyTableSource | null>(null)
+  /** Database (or schema) the export window is dumping, if it is open. */
+  const [exportScope, setExportScope] = useState<ExportScope | null>(null)
   /**
    * Connection whose runtime page a double-click asked for. A profile without a
    * stored password connects through a prompt that finishes later, so the page
@@ -987,6 +992,12 @@ export function ConnectionSidebar() {
                         },
                       ]
                     : []),
+                  ...(relational
+                    ? [
+                        { type: 'divider' as const },
+                        ...exportMenuItems(session, database, schema),
+                      ]
+                    : []),
                   { type: 'divider' as const },
                   {
                     key: 'refresh',
@@ -1010,7 +1021,16 @@ export function ConnectionSidebar() {
 
         return {
           key: encodeNode({ t: 'db', sessionId: session.id, database }),
-          title: database,
+          // The whole database can be dumped from here, which is the one thing
+          // this row offers: the schemas underneath it have menus of their own,
+          // and a database on this engine has no DDL of its own to open.
+          title: relational ? (
+            <NodeMenu items={exportMenuItems(session, database)}>
+              <span>{database}</span>
+            </NodeMenu>
+          ) : (
+            database
+          ),
           icon: <DatabaseOutlined />,
           isLeaf: false,
           children: withQueries(session, database, children),
@@ -1057,6 +1077,9 @@ export function ConnectionSidebar() {
                 label: t('connectionSidebar.reload-objects'),
                 onClick: () => void loadNamespace(session.id, database, database),
               },
+              ...(relational
+                ? [{ type: 'divider' as const }, ...exportMenuItems(session, database)]
+                : []),
             ]}
           >
             <span>{database}</span>
@@ -2024,6 +2047,8 @@ export function ConnectionSidebar() {
         }}
       />
 
+      <ExportModal scope={exportScope} onClose={() => setExportScope(null)} />
+
       <GroupNameModal request={groupDialog} onClose={() => setGroupDialog(null)} />
 
       <QueryNameModal
@@ -2065,6 +2090,53 @@ export function ConnectionSidebar() {
   )
 
   /* --------------------------------------------------------------- menus */
+
+  /**
+   * The export entries of a database's or a schema's menu.
+   *
+   * A dump is asked for from wherever the user happens to be thinking about it —
+   * the whole database, or the one schema they work in — and the three entries
+   * are the three things a dump is ever wanted for: the shape of the tables, the
+   * shape and their contents, or one table's rows for a spreadsheet. They sit
+   * together behind a divider because they are one decision with three answers,
+   * and they only appear on an engine whose objects can be written out as SQL.
+   */
+  function exportMenuItems(
+    session: SessionInfo,
+    database: string,
+    schema?: string,
+  ): NonNullable<MenuProps['items']> {
+    const scope = (mode: ExportMode): ExportScope => ({
+      sessionId: session.id,
+      database,
+      schema,
+      // Whether the objects are read from the database itself or from a schema
+      // under it is the driver's answer, not the node's: the same node shape is
+      // a database on one engine and a schema on another.
+      flatNamespace: capabilitiesOf(driverOfType(session.driver)).flatNamespace,
+      mode,
+    })
+    return [
+      {
+        key: 'export-structure',
+        icon: <CodeOutlined />,
+        label: t('connectionSidebar.export-structure'),
+        onClick: () => setExportScope(scope('structure')),
+      },
+      {
+        key: 'export-structure-data',
+        icon: <ExportOutlined />,
+        label: t('connectionSidebar.export-structure-and-data'),
+        onClick: () => setExportScope(scope('structure-data')),
+      },
+      {
+        key: 'export-data',
+        icon: <UnorderedListOutlined />,
+        label: t('connectionSidebar.export-data'),
+        onClick: () => setExportScope(scope('data')),
+      },
+    ]
+  }
 
   /**
    * A saved script's menu.
