@@ -963,6 +963,101 @@ func (m *Manager) CopyTable(req models.CopyTableRequest) (*models.DesignResult, 
 	}, plan), nil
 }
 
+// --- table operations ------------------------------------------------------
+
+// tableOp is one of the two things the explorer's table menu asks for, as this
+// layer needs it: the verb it is reported with, and the renderer that writes its
+// statement. The two are meant to go together — a message that says "drop"
+// about the script that empties a table would be the only place the user could
+// tell them apart.
+type tableOp struct {
+	verb   string
+	render func(drivers.Dialect, *models.TableStructure) (models.DesignPlan, error)
+}
+
+var (
+	opDropTable  = tableOp{verb: "drop", render: sqlbase.PlanDrop}
+	opEmptyTable = tableOp{verb: "empty", render: sqlbase.PlanTruncate}
+)
+
+// PlanDropTable renders the statement that would remove a table. Nothing is
+// executed: this is the preview the explorer shows before it asks.
+func (m *Manager) PlanDropTable(req models.TableOpRequest) (*models.DesignPlan, error) {
+	return m.planTableOp(req, opDropTable)
+}
+
+// DropTable plans the drop again and runs it.
+//
+// Like every other write, the statement is rendered here from the live catalog
+// rather than sent as SQL by the explorer, so the statement that runs is the one
+// that was previewed. It is a single statement, so the result's FailedIndex is
+// either -1 or 0: there is nothing in between for a drop to stop at.
+func (m *Manager) DropTable(req models.TableOpRequest) (*models.DesignResult, error) {
+	return m.runTableOp(req, opDropTable)
+}
+
+// PlanTruncateTable renders the script that would empty a table. Nothing is
+// executed: this is the preview the explorer shows before it asks.
+func (m *Manager) PlanTruncateTable(req models.TableOpRequest) (*models.DesignPlan, error) {
+	return m.planTableOp(req, opEmptyTable)
+}
+
+// TruncateTable plans the emptying again and runs it. On SQLite the script is a
+// DELETE FROM rather than a TRUNCATE, which is the engine's doing and not the
+// caller's — the plan's warnings say so.
+func (m *Manager) TruncateTable(req models.TableOpRequest) (*models.DesignResult, error) {
+	return m.runTableOp(req, opEmptyTable)
+}
+
+// planTableOp reads the table a one-statement operation is about and renders it.
+func (m *Manager) planTableOp(req models.TableOpRequest, op tableOp) (*models.DesignPlan, error) {
+	s, err := m.session(req.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.Object) == "" {
+		return nil, apperr.New(apperr.CodeInvalidConfig, "object name is required")
+	}
+
+	ctx, cancel := m.ctx(60 * time.Second)
+	defer cancel()
+	current, err := s.conn.Structure(ctx, req.Database, req.Schema, req.Object)
+	if err != nil {
+		return nil, err
+	}
+
+	plan, err := op.render(s.conn.Dialect(), current)
+	if err != nil {
+		return nil, apperr.Wrap(apperr.CodeInvalidConfig, err, "cannot %s table %s", op.verb, req.Object)
+	}
+	return &plan, nil
+}
+
+// runTableOp checks that the write is allowed, plans it and applies it, the way
+// ApplyDesign and CopyTable do.
+func (m *Manager) runTableOp(req models.TableOpRequest, op tableOp) (*models.DesignResult, error) {
+	s, err := m.session(req.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if s.readOnly {
+		return nil, apperr.New(apperr.CodeReadOnly, "this connection is read-only")
+	}
+
+	plan, err := m.planTableOp(req, op)
+	if err != nil {
+		return nil, err
+	}
+	// The statement is about the table it names, which is the table the entry
+	// points at — unlike a copy's CREATE, there is no second object involved.
+	return m.applyPlan(s, statementPlace{
+		database: req.Database,
+		schema:   req.Schema,
+		object:   req.Object,
+		source:   models.ChangeSourceExplorer,
+	}, plan), nil
+}
+
 // applyPlan runs an already-planned script, one statement at a time, and reports
 // how far it got. A plan that is applied is always planned first, so this is the
 // only place where a window executes DDL.

@@ -51,6 +51,7 @@ const SOURCE_LABEL: Record<string, string> = {
   create: 'The table designer',
   grid: 'The data grid',
   copy: 'The duplicate-table window',
+  explorer: 'The object explorer',
 }
 
 /**

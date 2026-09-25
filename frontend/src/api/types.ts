@@ -413,6 +413,24 @@ export interface CopyTableRequest {
   withData: boolean
 }
 
+/**
+ * Emptying one table or removing it outright.
+ *
+ * Both are a single statement about a table that already exists, so the request
+ * is just the name: what the backend writes — the qualified TRUNCATE/DELETE, and
+ * whatever the engine leaves behind — is read from the live catalog when the
+ * preview is rendered. Planning gives a `DesignPlan` and running gives a
+ * `DesignResult`, like every other statement the app writes, which is also where
+ * both are marked `destructive` before anything has run.
+ */
+export interface TableOpRequest {
+  sessionId: string
+  database?: string
+  schema?: string
+  /** The table being emptied or removed. */
+  object: string
+}
+
 export interface ColumnMeta {
   name: string
   databaseType?: string

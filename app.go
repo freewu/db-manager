@@ -395,6 +395,28 @@ func (a *App) CopyTable(req models.CopyTableRequest) (*models.DesignResult, erro
 	return a.manager.CopyTable(req)
 }
 
+// PlanDropTable returns the statement that would remove a table, without
+// running it.
+func (a *App) PlanDropTable(req models.TableOpRequest) (*models.DesignPlan, error) {
+	return a.manager.PlanDropTable(req)
+}
+
+// DropTable removes a table and reports how far the script got.
+func (a *App) DropTable(req models.TableOpRequest) (*models.DesignResult, error) {
+	return a.manager.DropTable(req)
+}
+
+// PlanTruncateTable returns the script that would empty a table, without
+// running it.
+func (a *App) PlanTruncateTable(req models.TableOpRequest) (*models.DesignPlan, error) {
+	return a.manager.PlanTruncateTable(req)
+}
+
+// TruncateTable empties a table and reports how far the script got.
+func (a *App) TruncateTable(req models.TableOpRequest) (*models.DesignResult, error) {
+	return a.manager.TruncateTable(req)
+}
+
 // --- data ------------------------------------------------------------------
 
 // FetchRows returns one page of rows for the data grid.

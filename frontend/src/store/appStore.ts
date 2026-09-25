@@ -495,6 +495,15 @@ interface AppState {
   dropDesign: (tabId: string) => void
 
   closeTab: (tabId: string) => void
+
+  /**
+   * Closes the window showing one table, if it is open.
+   *
+   * Used after a table is dropped: the window is keyed by the table it reads, and
+   * a table that no longer exists is not something a window can keep showing. The
+   * caller names the table it means; the key that window is built from stays here.
+   */
+  closeTableTab: (sessionId: string, database: string, schema: string, object: string) => void
   closeAllTabs: () => void
   setActiveTab: (tabId: string) => void
 
@@ -1550,6 +1559,21 @@ export const useAppStore = create<AppState>((set, get) => ({
         designs: withoutKey(state.designs, tabId),
       }
     })
+  },
+
+  closeTableTab(sessionId, database, schema, object) {
+    // Found rather than spelled out: the key of a table window belongs to
+    // openTableTab, and looking the window up by what it shows keeps the two
+    // from drifting apart.
+    const tab = get().tabs.find(
+      (t) =>
+        t.kind === 'table' &&
+        t.sessionId === sessionId &&
+        t.database === database &&
+        t.schema === schema &&
+        t.object === object,
+    )
+    if (tab) get().closeTab(tab.id)
   },
 
   closeAllTabs() {

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { App as AntApp, AutoComplete, Button, Dropdown, Empty, Input, Menu, Modal, Select, Tooltip, Tree, Typography } from 'antd'
+import { App as AntApp, Alert, AutoComplete, Button, Dropdown, Empty, Input, Menu, Modal, Select, Tooltip, Tree, Typography } from 'antd'
 import type { MenuProps, TreeDataNode, TreeProps } from 'antd'
 import {
   AppstoreOutlined,
+  ClearOutlined,
   CodeOutlined,
   CopyOutlined,
   DatabaseOutlined,
@@ -31,11 +32,13 @@ import type {
   ConnectionConfig,
   DatabaseOptions,
   DatabasePlan,
+  DesignPlan,
   DriverInfo,
   IndexEntry,
   ObjectInfo,
   QueryFile,
   SessionInfo,
+  TableOpRequest,
 } from '../api/types'
 import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
@@ -126,6 +129,7 @@ export function ConnectionSidebar() {
   const openErTab = useAppStore((s) => s.openErTab)
   const openRuntimeTab = useAppStore((s) => s.openRuntimeTab)
   const closeSession = useAppStore((s) => s.closeSession)
+  const closeTableTab = useAppStore((s) => s.closeTableTab)
   const setActiveSession = useAppStore((s) => s.setActiveSession)
   const setActiveConnection = useAppStore((s) => s.setActiveConnection)
   const setActiveNamespace = useAppStore((s) => s.setActiveNamespace)
@@ -337,6 +341,102 @@ export function ConnectionSidebar() {
       openObjectsTab(sessionId, database, schema, list)
     },
     [openObjectsTab, setActiveSession],
+  )
+
+  /**
+   * Empties a table, or removes it, from the explorer's table menu.
+   *
+   * Neither gets a window of its own, because neither has anything to ask: the
+   * statement is rendered by the backend from the live catalog, shown here for
+   * confirmation, and the yes/no is the whole interaction. The preview and the run
+   * are two calls for the same reason the designer's are — the script that runs is
+   * planned again on the other side of the bridge rather than handed back as text.
+   *
+   * A drop closes the window about that table, if one is open: everything it could
+   * show — rows, fields, indexes — is gone, and a window cannot outlive the table
+   * it is named after.
+   */
+  const runTableOp = useCallback(
+    async (
+      op: 'truncate' | 'drop',
+      place: { sessionId: string; database: string; schema: string; object: string },
+    ) => {
+      const request: TableOpRequest = { ...place }
+      const table = place.object
+      let plan: DesignPlan
+      try {
+        plan =
+          op === 'drop'
+            ? await api.planDropTable(request)
+            : await api.planTruncateTable(request)
+      } catch (error) {
+        message.error(toMessage(error))
+        return
+      }
+
+      modal.confirm({
+        title: op === 'drop' ? `Drop table ${table}?` : `Empty table ${table}?`,
+        width: 720,
+        okText: op === 'drop' ? 'Drop' : 'Truncate',
+        okButtonProps: { danger: true },
+        content: (
+          <div>
+            {plan.warnings.length > 0 ? (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 12 }}
+                title="Before this runs"
+                description={
+                  <ul style={{ margin: 0, paddingInlineStart: 18 }}>
+                    {plan.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                }
+              />
+            ) : null}
+            <SqlCode
+              className="dm-ddl"
+              driver={driverOfSession(place.sessionId)?.type}
+              sql={plan.statements.map((s) => `${s};`).join('\n')}
+            />
+            <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
+              {op === 'drop'
+                ? 'The table and every row in it go, and this cannot be undone.'
+                : 'Every row goes; the table, its fields and its indexes stay.'}
+            </Typography.Paragraph>
+          </div>
+        ),
+        onOk: async () => {
+          try {
+            const result =
+              op === 'drop'
+                ? await api.dropTable(request)
+                : await api.truncateTable(request)
+            if (result.error) {
+              message.error(
+                `${op === 'drop' ? 'Dropping' : 'Emptying'} ${table} failed: ${result.error}`,
+              )
+              return
+            }
+            if (op === 'drop') {
+              closeTableTab(place.sessionId, place.database, place.schema, table)
+              message.success(`Table ${table} dropped`)
+            } else {
+              message.success(`Table ${table} is empty`)
+            }
+            // The tree carries the object list and the index list of this
+            // namespace, and one statement can change either.
+            void loadIndexes(place.sessionId, place.database, place.schema)
+            void loadObjects(place.sessionId, place.database, place.schema)
+          } catch (error) {
+            message.error(toMessage(error))
+          }
+        },
+      })
+    },
+    [closeTableTab, driverOfSession, loadIndexes, loadObjects, message, modal],
   )
 
   const refreshSession = useCallback(
@@ -631,6 +731,41 @@ export function ConnectionSidebar() {
                         },
                       ]
                     : []),
+                  // Emptying and removing are writes too, so they need the same
+                  // capability as creating one: an engine this tool can write
+                  // tables for, on a connection that is not read-only. Behind a
+                  // divider of their own, because neither can be undone and
+                  // neither belongs next to "Copy name".
+                  ...(object.kind === 'table' && canCreate
+                    ? [
+                        { type: 'divider' as const },
+                        {
+                          key: 'truncate',
+                          icon: <ClearOutlined />,
+                          label: 'Truncate table',
+                          onClick: () =>
+                            void runTableOp('truncate', {
+                              sessionId,
+                              database,
+                              schema,
+                              object: object.name,
+                            }),
+                        },
+                        {
+                          key: 'drop',
+                          icon: <DeleteOutlined />,
+                          label: 'Drop table',
+                          danger: true,
+                          onClick: () =>
+                            void runTableOp('drop', {
+                              sessionId,
+                              database,
+                              schema,
+                              object: object.name,
+                            }),
+                        },
+                      ]
+                    : []),
                   { type: 'divider' as const },
                   {
                     key: 'copy',
@@ -667,6 +802,7 @@ export function ConnectionSidebar() {
       openList,
       openNewTableTab,
       openObject,
+      runTableOp,
       sessions,
       tree.objects,
     ],

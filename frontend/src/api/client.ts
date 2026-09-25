@@ -47,6 +47,7 @@ import type {
   ServerOverview,
   SessionInfo,
   TableDesign,
+  TableOpRequest,
   TableStructure,
   TestResult,
 } from './types'
@@ -219,6 +220,17 @@ export const api = {
     invoke<DesignPlan>('PlanCopyTable', req),
   copyTable: (req: CopyTableRequest) =>
     invoke<DesignResult>('CopyTable', req),
+  /**
+   * Emptying a table or removing it, asked for from the explorer's menu.
+   *
+   * Same pair as every other write: the plan is what the confirmation shows,
+   * and the run renders it again rather than being handed the previewed text.
+   */
+  planDropTable: (req: TableOpRequest) => invoke<DesignPlan>('PlanDropTable', req),
+  dropTable: (req: TableOpRequest) => invoke<DesignResult>('DropTable', req),
+  planTruncateTable: (req: TableOpRequest) =>
+    invoke<DesignPlan>('PlanTruncateTable', req),
+  truncateTable: (req: TableOpRequest) => invoke<DesignResult>('TruncateTable', req),
 
   // --- data ---------------------------------------------------------------
   fetchRows: (req: FetchRequest) => invoke<FetchResult>('FetchRows', req),

@@ -380,6 +380,26 @@ type CopyTableRequest struct {
 	WithData bool   `json:"withData"`
 }
 
+// --- table operations ------------------------------------------------------
+
+// TableOpRequest names the one table the explorer's menu is about to empty or
+// remove.
+//
+// Both of those are a single statement about a table that already exists, so
+// neither needs a payload beyond the name: what the statement says about the
+// fields, the counter or the indexes is read from the live catalog at the moment
+// it is rendered, exactly like a copy's CREATE is. A plan for one is a
+// DesignPlan and a run is a DesignResult, like every other statement this
+// application writes — which is also where both are marked as destructive
+// before anything has run.
+type TableOpRequest struct {
+	SessionID string `json:"sessionId"`
+	Database  string `json:"database,omitempty"`
+	Schema    string `json:"schema,omitempty"`
+	// Object is the table being emptied or removed.
+	Object string `json:"object"`
+}
+
 // --- databases -------------------------------------------------------------
 
 // DatabaseCharset is one character set (MySQL family) or encoding (PostgreSQL)
@@ -969,6 +989,10 @@ const (
 	// ChangeSourceCopy is the explorer duplicating a table: one CREATE TABLE,
 	// the indexes that go with it, and the rows when they were asked for.
 	ChangeSourceCopy = "copy"
+	// ChangeSourceExplorer is the explorer's own table menu emptying or removing
+	// a table: a change asked for from the tree, without a window showing the
+	// table being opened at all.
+	ChangeSourceExplorer = "explorer"
 )
 
 // ChangeLogEntry is one statement this application ran that changed schema or
