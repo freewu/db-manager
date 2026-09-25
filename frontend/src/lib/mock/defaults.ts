@@ -13,6 +13,7 @@
  * the generated rows keep their keys (see the window for how an empty mock is
  * treated).
  */
+import { t } from '../i18n'
 import type { ColumnInfo } from '../../api/types'
 import { kindOfColumn, type ColumnKind } from '../codegen'
 import type { CompiledTemplate } from './engine'
@@ -152,9 +153,9 @@ export function mockDescription(
   if (compiled.error) return compiled.error
   if (template.trim() === '') {
     return column.autoIncrement
-      ? 'Auto-increment — the engine assigns this column'
-      : 'No mock written — write one, or untick the field'
+      ? t('libMockDefaults.auto-increment')
+      : t('libMockDefaults.no-mock-written')
   }
   if (compiled.note) return compiled.note
-  return 'Literal value, used as is'
+  return t('libMockDefaults.literal-value')
 }

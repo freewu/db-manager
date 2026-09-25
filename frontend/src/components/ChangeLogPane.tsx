@@ -24,6 +24,8 @@ import type { ChangeLogEntry, ChangeLogFile } from '../api/types'
 import { formatBytes, formatTimestamp } from '../lib/format'
 import { useAppStore } from '../store/appStore'
 import { SqlCode } from './SqlCode'
+import { t, tn } from '../lib/i18n'
+import type { MessageKey } from '../lib/i18n'
 
 /** How many entries a window asks for. More than this is not a list any more. */
 const PAGE = 500
@@ -45,14 +47,14 @@ const KIND_COLOR: Record<string, string> = {
   load: 'cyan',
 }
 
-const SOURCE_LABEL: Record<string, string> = {
-  script: 'A script that was run',
-  design: 'The structure page',
-  create: 'The table designer',
-  grid: 'The data grid',
-  copy: 'The duplicate-table window',
-  explorer: 'The object explorer',
-  compare: 'The database comparison',
+const SOURCE_LABEL: Record<string, MessageKey> = {
+  script: 'changeLogPane.a-script-that-was-run',
+  design: 'changeLogPane.the-structure-page',
+  create: 'changeLogPane.the-table-designer',
+  grid: 'changeLogPane.the-data-grid',
+  copy: 'changeLogPane.the-duplicate-table-window',
+  explorer: 'changeLogPane.the-object-explorer',
+  compare: 'changeLogPane.the-database-comparison',
 }
 
 /**
@@ -142,7 +144,7 @@ export function ChangeLogPane() {
   return (
     <div className="dm-pane">
       <div className="dm-editor-toolbar">
-        <Typography.Text strong>Change Log</Typography.Text>
+        <Typography.Text strong>{t('changeLogPane.change-log')}</Typography.Text>
         <Select
           size="small"
           value={file}
@@ -157,23 +159,26 @@ export function ChangeLogPane() {
           }))}
           // A log that has never been written has no file to pick, and one
           // empty select is a clearer answer than a hidden control.
-          placeholder="No log yet"
+          placeholder={t('changeLogPane.no-log-yet')}
         />
         {current?.archived ? (
           <Tooltip
-            title={`Rotated out on ${formatTimestamp(current.at ?? 0)}. Archived logs are kept as they were and never written to again.`}
+            title={t('changeLogPane.rotated-out-on-archived-logs-are-kept-as-they', { at: formatTimestamp(current.at ?? 0) })}
           >
             <Tag color="default" style={{ marginInlineEnd: 0 }}>
-              archived
+              {t('changeLogPane.archived')}
             </Tag>
           </Tooltip>
         ) : null}
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {total === 0
-            ? 'Nothing has been run yet'
+            ? t('changeLogPane.nothing-has-been-run-yet')
             : total > entries.length
-              ? `the newest ${entries.length} of ${total.toLocaleString()} statements`
-              : `${total.toLocaleString()} statement${total === 1 ? '' : 's'}`}
+              ? t('changeLogPane.the-newest-of-statements', {
+                  shown: entries.length,
+                  total: total.toLocaleString(),
+                })
+              : tn('changeLogPane.statement', total, { total: total.toLocaleString() })}
         </Typography.Text>
         <div className="dm-toolbar-right">
           <Input
@@ -182,10 +187,10 @@ export function ChangeLogPane() {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             prefix={<SearchOutlined style={{ opacity: 0.5 }} />}
-            placeholder="Filter by table, database or statement"
+            placeholder={t('changeLogPane.filter-by-table-database-or-statement')}
             style={{ width: 260 }}
           />
-          <Tooltip title="Read the log again">
+          <Tooltip title={t('changeLogPane.read-the-log-again')}>
             <Button
               size="small"
               type="text"
@@ -201,7 +206,7 @@ export function ChangeLogPane() {
         <Alert
           type="error"
           showIcon
-          message="The change log could not be read"
+          message={t('changeLogPane.the-change-log-could-not-be-read')}
           description={error}
           style={{ margin: 8 }}
         />
@@ -215,8 +220,8 @@ export function ChangeLogPane() {
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description={
                   entries.length === 0
-                    ? 'Nothing has been run that changed anything'
-                    : 'No entry matches the filter'
+                    ? t('changeLogPane.nothing-has-been-run-that-changed-anything')
+                    : t('changeLogPane.no-entry-matches-the-filter')
                 }
                 style={{ marginTop: 40 }}
               />
@@ -240,7 +245,7 @@ export function ChangeLogPane() {
             ) : (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="Nothing to show"
+                description={t('changeLogPane.nothing-to-show')}
                 style={{ marginTop: 60 }}
               />
             )}
@@ -294,7 +299,7 @@ function EntryDetail({ entry, driverName }: { entry: ChangeLogEntry; driverName:
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(entry.statement)
-      message.success('Statement copied')
+      message.success(t('changeLogPane.statement-copied'))
     } catch (err) {
       message.error(toMessage(err))
     }
@@ -303,8 +308,8 @@ function EntryDetail({ entry, driverName }: { entry: ChangeLogEntry; driverName:
   return (
     <div className="dm-changelog-body">
       <Descriptions column={1} size="small" colon={false} className="dm-changelog-meta">
-        <Descriptions.Item label="Time">{formatTimestamp(entry.at)}</Descriptions.Item>
-        <Descriptions.Item label="Connection">
+        <Descriptions.Item label={t('changeLogPane.time')}>{formatTimestamp(entry.at)}</Descriptions.Item>
+        <Descriptions.Item label={t('changeLogPane.connection')}>
           {connection.name ? (
             <>
               {connection.name}
@@ -320,22 +325,20 @@ function EntryDetail({ entry, driverName }: { entry: ChangeLogEntry; driverName:
             </Typography.Text>
           )}
         </Descriptions.Item>
-        <Descriptions.Item label="Database">
-          {namespace || <span className="dm-null">none</span>}
+        <Descriptions.Item label={t('changeLogPane.database')}>
+          {namespace || <span className="dm-null">{t('changeLogPane.none')}</span>}
         </Descriptions.Item>
-        <Descriptions.Item label="Table">
+        <Descriptions.Item label={t('changeLogPane.table')}>
           {entry.table || <span className="dm-null">—</span>}
         </Descriptions.Item>
-        <Descriptions.Item label="Run from">
-          {SOURCE_LABEL[entry.source] ?? entry.source}
+        <Descriptions.Item label={t('changeLogPane.run-from')}>
+          {entry.source in SOURCE_LABEL ? t(SOURCE_LABEL[entry.source]) : entry.source}
         </Descriptions.Item>
       </Descriptions>
 
       {entry.table ? null : (
         <Typography.Paragraph type="secondary" className="dm-changelog-note">
-          No table is recorded for this statement: either it is the statement that creates the
-          table — nothing points at it yet, and the name it introduces is in the statement — or the
-          window it was run from was not open on one, as a query window is not.
+          {t('changeLogPane.no-table-is-recorded-for-this-statement-either')}
         </Typography.Paragraph>
       )}
 
@@ -343,15 +346,15 @@ function EntryDetail({ entry, driverName }: { entry: ChangeLogEntry; driverName:
         <Alert
           type="error"
           showIcon
-          message="The run ended with this"
+          message={t('changeLogPane.the-run-ended-with-this')}
           description={entry.error}
           style={{ marginBottom: 12 }}
         />
       ) : null}
 
       <div className="dm-changelog-statement-head">
-        <Typography.Text strong>Executed statement</Typography.Text>
-        <Tooltip title="Copy the statement">
+        <Typography.Text strong>{t('changeLogPane.executed-statement')}</Typography.Text>
+        <Tooltip title={t('changeLogPane.copy-the-statement')}>
           <Button size="small" type="text" icon={<CopyOutlined />} onClick={() => void copy()} />
         </Tooltip>
       </div>
@@ -365,7 +368,10 @@ function EntryDetail({ entry, driverName }: { entry: ChangeLogEntry; driverName:
  * being written says so, an archive says the day it was taken out.
  */
 function fileLabel(file: ChangeLogFile): string {
-  const size = `${formatBytes(file.bytes)}, ${file.entries.toLocaleString()} statement${file.entries === 1 ? '' : 's'}`
+  const size = t('changeLogPane.file-size', {
+    size: formatBytes(file.bytes),
+    statements: tn('changeLogPane.statement', file.entries, { total: file.entries.toLocaleString() }),
+  })
   if (!file.archived) return `${file.name} — being written (${size})`
   return `${file.name} — archived ${shortDay(file.at ?? 0)} (${size})`
 }

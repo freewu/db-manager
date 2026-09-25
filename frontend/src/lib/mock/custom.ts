@@ -11,6 +11,7 @@
  * whether Save is allowed; the picker trusts what was saved, so both ends of the
  * feature agree on what a valid placeholder is by construction.
  */
+import { t } from '../i18n'
 import {
   BUILT_IN_NAMES,
   compileTemplate,
@@ -63,22 +64,22 @@ export function checkCustomPlaceholder(
   const description = draft.description.trim()
 
   if (name === '') {
-    errors.name = 'Give the placeholder a name'
+    errors.name = t('libMockCustom.give-it-a-name')
   } else if (!NAME_PATTERN.test(name)) {
-    errors.name = 'A name starts with a letter or _ and holds only letters, digits and _'
+    errors.name = t('libMockCustom.name-rules')
   } else if (name.length > MAX_NAME_RUNES) {
-    errors.name = `At most ${MAX_NAME_RUNES} characters`
+    errors.name = t('libMockCustom.name-too-long', { max: MAX_NAME_RUNES })
   } else if (BUILT_IN_NAMES.has(name)) {
-    errors.name = `@${name} is already a built-in placeholder`
+    errors.name = t('libMockCustom.built-in-name', { name })
   } else {
     const taken = others.find((other) => other.name.toLowerCase() === name.toLowerCase())
-    if (taken) errors.name = `@${taken.name} already exists`
+    if (taken) errors.name = t('libMockCustom.name-taken', { name: taken.name })
   }
 
   if (template === '') {
-    errors.template = 'Write the template this placeholder stands for'
+    errors.template = t('libMockCustom.write-the-template')
   } else if (template.length > MAX_TEMPLATE_RUNES) {
-    errors.template = `At most ${MAX_TEMPLATE_RUNES} characters`
+    errors.template = t('libMockCustom.template-too-long', { max: MAX_TEMPLATE_RUNES })
   } else if (!errors.name) {
     // Compiled with the draft in place, so `@me` inside `@me` is caught as the
     // cycle it is.
@@ -87,7 +88,7 @@ export function checkCustomPlaceholder(
   }
 
   if (description.length > MAX_DESCRIPTION_RUNES) {
-    errors.description = `At most ${MAX_DESCRIPTION_RUNES} characters`
+    errors.description = t('libMockCustom.description-too-long', { max: MAX_DESCRIPTION_RUNES })
   }
   return errors
 }

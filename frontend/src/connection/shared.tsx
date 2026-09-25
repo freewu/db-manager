@@ -1,4 +1,6 @@
 import { useCallback, type ComponentType } from 'react'
+import { t } from '../lib/i18n'
+
 import {
   App as AntApp,
   Button,
@@ -98,12 +100,15 @@ export interface DriverForm {
  * The first three are the driver's to fill; `Options` belongs to the shell and
  * is on every form, because read-only and the profile colour mean the same
  * thing whatever you are connecting to.
+ *
+ * The label is a message key, not a word: this table is built once at import
+ * time and read on every render, so the dialog resolves it then.
  */
 export const CONNECTION_TABS = [
-  { key: 'basic', label: 'Basic' },
-  { key: 'security', label: 'Security' },
-  { key: 'advanced', label: 'Advanced' },
-  { key: 'options', label: 'Options' },
+  { key: 'basic', label: 'connectionDialog.tab-basic' },
+  { key: 'security', label: 'connectionDialog.tab-security' },
+  { key: 'advanced', label: 'connectionDialog.tab-advanced' },
+  { key: 'options', label: 'connectionDialog.tab-options' },
 ] as const
 
 export type ConnectionTab = (typeof CONNECTION_TABS)[number]['key']
@@ -395,7 +400,7 @@ export function useFilePicker(form: FormInstance<ConnectionValues>) {
   const { message } = AntApp.useApp()
   return useCallback(async () => {
     try {
-      const picked = await api.pickFile('Select a database file', [
+      const picked = await api.pickFile(t('connectionShared.select-a-database-file'), [
         '*.db',
         '*.sqlite',
         '*.sqlite3',

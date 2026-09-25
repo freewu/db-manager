@@ -2,6 +2,7 @@ import { Alert, Descriptions, Typography } from 'antd'
 
 import type { ServerOverview } from '../../api/types'
 import type { OverviewView } from './shared'
+import { t } from '../../lib/i18n'
 
 /**
  * The page for an engine that has no runtime reporting.
@@ -20,34 +21,33 @@ export function unsupportedView(overview: ServerOverview): OverviewView {
       <Alert
         type="info"
         showIcon
-        title={`${overview.driver} does not report runtime state yet`}
+        title={t('overviewUnsupported.does-not-report-runtime-state-yet', { driver: overview.driver })}
         description={
           <Typography.Text style={{ fontSize: 12 }}>
-            The connection is open and usable — queries, the object tree and the designer all work.
-            This page is the only thing this engine cannot fill in.
+            {t('overviewUnsupported.the-connection-is-open-and-usable-queries-the')}
           </Typography.Text>
         }
       />
     ),
     sections: [
       {
-        label: 'Session',
+        label: t('overviewUnsupported.session'),
         node: (
           <section className="dm-metric-group">
             <header className="dm-metric-group-title">
-              <span>Session</span>
+              <span>{t('overviewUnsupported.session')}</span>
             </header>
             <Descriptions size="small" column={1} bordered>
-              <Descriptions.Item label="Connection">{overview.name || '—'}</Descriptions.Item>
-              <Descriptions.Item label="Engine">{overview.driver}</Descriptions.Item>
-              <Descriptions.Item label="Server version">
+              <Descriptions.Item label={t('overviewUnsupported.connection')}>{overview.name || '—'}</Descriptions.Item>
+              <Descriptions.Item label={t('overviewUnsupported.engine')}>{overview.driver}</Descriptions.Item>
+              <Descriptions.Item label={t('overviewUnsupported.server-version')}>
                 {overview.serverVersion || '—'}
               </Descriptions.Item>
-              <Descriptions.Item label="Database">{overview.database || '—'}</Descriptions.Item>
-              <Descriptions.Item label="Read-only">
-                {overview.readOnly ? 'yes' : 'no'}
+              <Descriptions.Item label={t('overviewUnsupported.database')}>{overview.database || '—'}</Descriptions.Item>
+              <Descriptions.Item label={t('overviewUnsupported.read-only')}>
+                {overview.readOnly ? t('overviewUnsupported.yes') : t('overviewUnsupported.no')}
               </Descriptions.Item>
-              <Descriptions.Item label="Connected">
+              <Descriptions.Item label={t('overviewUnsupported.connected')}>
                 {overview.connectedAt ? new Date(overview.connectedAt).toLocaleString() : '—'}
               </Descriptions.Item>
             </Descriptions>

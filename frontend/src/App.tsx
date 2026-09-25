@@ -4,6 +4,8 @@ import { App as AntApp, ConfigProvider, Result, Spin, theme as antdTheme } from 
 import { AppShell } from './components/AppShell'
 import { isDesktop } from './api/client'
 import { useAppStore } from './store/appStore'
+import { antdLocaleOf } from './lib/i18n/antd'
+import { t, useLanguage } from './lib/i18n'
 
 /**
  * Application root: resolves the persisted UI preferences, wires the Ant
@@ -16,6 +18,10 @@ export function AppRoot() {
   // question for the operating system, and the store has already asked it.
   const themeResolved = useAppStore((s) => s.resolvedTheme)
   const bootstrap = useAppStore((s) => s.bootstrap)
+  // Switching the language re-renders everything below this component, which is
+  // what makes an ordinary `t` call in a leaf component correct: the words are
+  // read again because the leaf was drawn again.
+  const language = useLanguage()
 
   // StrictMode runs effects twice in development; bootstrap must be idempotent.
   const started = useRef(false)
@@ -34,6 +40,7 @@ export function AppRoot() {
 
   return (
     <ConfigProvider
+      locale={antdLocaleOf(language)}
       theme={{
         algorithm: dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
         token: {
@@ -76,15 +83,15 @@ function BootSplash() {
       }}
     >
       <Spin size="large" />
-      <span style={{ opacity: 0.6 }}>Starting DB Manager…</span>
+      <span style={{ opacity: 0.6 }}>{t('app.starting')}</span>
     </div>
   )
 }
 
 function BootFailure({ message }: { message?: string }) {
   const detail = isDesktop()
-    ? (message ?? 'The backend failed to start.')
-    : 'This page is not running inside the desktop shell yet. Use `just dev` (which starts `wails dev`) instead of opening the Vite URL directly.'
+    ? (message ?? t('app.backend-failed'))
+    : t('app.not-in-shell')
 
   return (
     <div
@@ -97,7 +104,7 @@ function BootFailure({ message }: { message?: string }) {
     >
       <Result
         status="warning"
-        title="Cannot reach the backend"
+        title={t('app.cannot-reach-backend')}
         subTitle={<span className="mono">{detail}</span>}
       />
     </div>

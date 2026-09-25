@@ -29,6 +29,7 @@ import { isMySQLFamily } from '../lib/sqlFlavor'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { DataGrid } from './DataGrid'
 import { SqlEditor } from './SqlEditor'
+import { t, tn } from '../lib/i18n'
 
 const KIND_COLOR: Record<string, string> = {
   query: 'blue',
@@ -129,7 +130,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
     (script: string) => {
       const text = script.trim()
       if (!text) {
-        message.info('Nothing to run')
+        message.info(t('ddlPane.nothing-to-run'))
         return
       }
       const start = async () => {
@@ -151,8 +152,8 @@ export function DdlPane({ tab }: DdlPaneProps) {
           setResult(res)
           message.success(
             res.hasResultSet
-              ? `${res.rowCount} row(s) returned`
-              : `${res.affectedRows} row(s) affected`,
+              ? tn('ddlPane.rows-returned', res.rowCount)
+              : tn('ddlPane.rows-affected', res.affectedRows),
           )
           // The catalog may have moved: refresh the tree and the open windows.
           const state = useAppStore.getState()
@@ -170,8 +171,8 @@ export function DdlPane({ tab }: DdlPaneProps) {
       if (analysis?.destructive && text === sql.trim()) {
         const reasons = statements.filter((entry) => entry.destructive)
         modal.confirm({
-          title: 'Run a script that destroys data or schema?',
-          okText: 'Run anyway',
+          title: t('ddlPane.run-a-script-that-destroys-data-or-schema'),
+          okText: t('ddlPane.run-anyway'),
           okButtonProps: { danger: true },
           width: 620,
           content: (
@@ -191,7 +192,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
                 ))}
               </ul>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                DDL cannot be rolled back on every engine.
+                {t('ddlPane.ddl-cannot-be-rolled-back-on-every-engine')}
               </Typography.Text>
             </div>
           ),
@@ -221,7 +222,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
     async (text: string, what: string) => {
       try {
         await navigator.clipboard.writeText(text)
-        message.success(`${what} copied`)
+        message.success(t('ddlPane.copied', { what }))
       } catch (err) {
         message.error(toMessage(err))
       }
@@ -231,7 +232,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
 
   const save = useCallback(async () => {
     if (!sql.trim()) {
-      message.info('Nothing to save')
+      message.info(t('ddlPane.nothing-to-save'))
       return
     }
     const name = object ? `${object}.sql` : 'script.sql'
@@ -241,7 +242,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
         content: sql,
         filters: [{ displayName: 'SQL', pattern: '*.sql' }],
       })
-      message.success('Script saved')
+      message.success(t('ddlPane.script-saved'))
     } catch (err) {
       message.error(toMessage(err))
     }
@@ -262,42 +263,42 @@ export function DdlPane({ tab }: DdlPaneProps) {
           loading={running}
           onClick={runAll}
         >
-          Run script
+          {t('ddlPane.run-script')}
         </Button>
-        <Tooltip title="Run the selected statements only">
+        <Tooltip title={t('ddlPane.run-the-selected-statements-only')}>
           <Button size="small" icon={<ThunderboltOutlined />} onClick={runSelection}>
-            Run selection
+            {t('ddlPane.run-selection')}
           </Button>
         </Tooltip>
         {object ? (
-          <Tooltip title="Replace the editor with the object's current definition">
+          <Tooltip title={t('ddlPane.replace-the-editor-with-the-object-s-current')}>
             <Button
               size="small"
               icon={<ReloadOutlined />}
               loading={loadingDefinition}
               onClick={() => void loadDefinition(true)}
             >
-              Reload
+              {t('ddlPane.reload')}
             </Button>
           </Tooltip>
         ) : (
-          <Tooltip title="Start over from a template">
+          <Tooltip title={t('ddlPane.start-over-from-a-template')}>
             <Button
               size="small"
               icon={<ReloadOutlined />}
               onClick={() => setSql(templateFor(driver, database, schema))}
             >
-              Template
+              {t('ddlPane.template')}
             </Button>
           </Tooltip>
         )}
-        <Tooltip title="Copy the script">
-          <Button size="small" icon={<CopyOutlined />} onClick={() => void copy(sql, 'Script')} />
+        <Tooltip title={t('ddlPane.copy-the-script')}>
+          <Button size="small" icon={<CopyOutlined />} onClick={() => void copy(sql, t('ddlPane.script'))} />
         </Tooltip>
-        <Tooltip title="Save the script to a file">
+        <Tooltip title={t('ddlPane.save-the-script-to-a-file')}>
           <Button size="small" icon={<SaveOutlined />} onClick={() => void save()} />
         </Tooltip>
-        <Tooltip title="Clear the editor">
+        <Tooltip title={t('ddlPane.clear-the-editor')}>
           <Button size="small" icon={<ClearOutlined />} onClick={() => setSql('')} />
         </Tooltip>
 
@@ -306,24 +307,24 @@ export function DdlPane({ tab }: DdlPaneProps) {
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {object
             ? qualifiedName(driver ?? '', database, schema, object)
-            : `${database || schema || 'new object'}`}
+            : database || schema || t('ddlPane.new-object')}
         </Typography.Text>
 
         <div className="dm-toolbar-right">
           {analysis ? (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              {statements.length} statement{statements.length === 1 ? '' : 's'}
+              {tn('ddlPane.statements', statements.length)}
             </Typography.Text>
           ) : null}
           {analysis?.destructive ? (
             <Tag color="error" icon={<ExclamationCircleOutlined />}>
-              destructive
+              {t('ddlPane.destructive')}
             </Tag>
           ) : null}
           {readOnly ? (
-            <Tooltip title="Write statements are rejected on this session">
+            <Tooltip title={t('ddlPane.write-statements-are-rejected-on-this-session')}>
               <Typography.Text type="warning" style={{ fontSize: 12 }}>
-                <LockOutlined /> read-only
+                <LockOutlined /> {t('ddlPane.read-only')}
               </Typography.Text>
             </Tooltip>
           ) : null}
@@ -353,7 +354,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
                 <Alert
                   type="error"
                   showIcon
-                  title="Could not load the object definition"
+                  title={t('ddlPane.could-not-load-the-object-definition')}
                   description={
                     <span className="mono" style={{ fontSize: 12 }}>
                       {definitionError}
@@ -361,7 +362,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
                   }
                   action={
                     <Button size="small" onClick={() => void loadDefinition(true)}>
-                      Retry
+                      {t('ddlPane.retry')}
                     </Button>
                   }
                 />
@@ -389,7 +390,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
                   </Tooltip>
                 ))}
                 {analysis?.refused ? (
-                  <Tag color="warning">{analysis.refused} will be refused (read-only)</Tag>
+                  <Tag color="warning">{analysis.refused} {t('ddlPane.will-be-refused-read-only')}</Tag>
                 ) : null}
               </div>
             ) : null}
@@ -399,7 +400,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
                 <Alert
                   type={analysis?.destructive ? 'warning' : 'info'}
                   showIcon
-                  title="Dry run"
+                  title={t('ddlPane.dry-run')}
                   description={
                     <ul style={{ paddingInlineStart: 18, margin: 0 }}>
                       {warnings.map((entry, index) => (
@@ -420,7 +421,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
                   showIcon
                   closable
                   onClose={() => setError(null)}
-                  title="Statement failed"
+                  title={t('ddlPane.statement-failed')}
                   description={
                     <span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
                       {error}
@@ -437,7 +438,9 @@ export function DdlPane({ tab }: DdlPaneProps) {
                     <Alert
                       type="success"
                       showIcon
-                      title={`${result.affectedRows} row(s) affected in ${formatDuration(result.durationMs)}`}
+                      title={tn('ddlPane.rows-affected-in', result.affectedRows, {
+                        durationMs: formatDuration(result.durationMs),
+                      })}
                     />
                   </div>
                 ) : null}
@@ -451,7 +454,10 @@ export function DdlPane({ tab }: DdlPaneProps) {
                   <span className="dm-statusbar-item">{formatDuration(result.durationMs)}</span>
                   {result.statementCount > 1 ? (
                     <span className="dm-statusbar-item">
-                      last statement {result.statementIndex + 1} of {result.statementCount}
+                      {t('ddlPane.statement-n-of-m', {
+                        index: result.statementIndex + 1,
+                        total: result.statementCount,
+                      })}
                     </span>
                   ) : null}
                   <span className="dm-spacer" />
@@ -471,8 +477,8 @@ export function DdlPane({ tab }: DdlPaneProps) {
               >
                 <Typography.Text type="secondary">
                   {loadingDefinition
-                    ? 'Loading the object definition…'
-                    : 'Write a script — the dry run appears here before anything runs.'}
+                    ? t('ddlPane.loading-the-object-definition')
+                    : t('ddlPane.write-a-script-the-dry-run-appears-here-before')}
                 </Typography.Text>
               </div>
             ) : null}
@@ -488,7 +494,7 @@ export function DdlPane({ tab }: DdlPaneProps) {
             {result?.hasResultSet ? (
               <div className="dm-statusbar" style={{ background: 'transparent' }}>
                 <span className="dm-statusbar-item">
-                  {result.rowCount.toLocaleString()} row(s)
+                  {t('ddlPane.rows', { n: result.rowCount.toLocaleString() })}
                 </span>
                 <span className="dm-spacer" />
                 <Space size={4} />

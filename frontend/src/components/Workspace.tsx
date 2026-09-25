@@ -13,6 +13,7 @@ import { QueryPane } from './QueryPane'
 import { RuntimePane } from './RuntimePane'
 import { TablePane } from './TablePane'
 import { WelcomePane } from './WelcomePane'
+import { t } from '../lib/i18n'
 
 /**
  * Tab bar + pane host for the working area — the windows the connections open.
@@ -50,10 +51,10 @@ export function Workspace() {
       return
     }
     modal.confirm({
-      title: `Close “${tab.queryFile.name}” without saving?`,
+      title: t('workspace.close-without-saving', { name: tab.queryFile.name }),
       content:
-        'The window has edits that were never written to its file. Closing it drops them; there is no copy of them anywhere else.',
-      okText: 'Close without saving',
+        t('workspace.the-window-has-edits-that-were-never-written-to'),
+      okText: t('workspace.close-without-saving-2'),
       okButtonProps: { danger: true },
       onOk: () => closeTab(id),
     })
@@ -106,7 +107,7 @@ export function Workspace() {
         tabBarExtraContent={{
           right: (
             <Space size={4} style={{ paddingInline: 8 }}>
-              <Tooltip title="New query tab">
+              <Tooltip title={t('workspace.new-query-tab')}>
                 <Button
                   size="small"
                   type="text"

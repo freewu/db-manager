@@ -2,6 +2,7 @@ import { Typography } from 'antd'
 
 import type { ServerOverview } from '../../api/types'
 import { metricSection, tableSection, type OverviewView } from './shared'
+import { t } from '../../lib/i18n'
 
 /**
  * SQLite's runtime page.
@@ -21,17 +22,16 @@ export function sqliteView(overview: ServerOverview): OverviewView {
   return {
     sections: [
       {
-        label: 'Database file',
+        label: t('overviewSqlite.database-file'),
         node: (
           <section className="dm-metric-group">
             <header className="dm-metric-group-title">
-              <span>Database file</span>
+              <span>{t('overviewSqlite.database-file')}</span>
             </header>
             <div className="dm-sqlite-path mono">{sqlite.path}</div>
             {sqlite.fileSize < 0 ? (
               <div className="dm-metric-note">
-                No such file on disk: either an in-memory database, or one opened through a path
-                this process cannot see.
+                {t('overviewSqlite.no-such-file-on-disk-either-an-in-memory')}
               </div>
             ) : null}
           </section>
@@ -43,8 +43,7 @@ export function sqliteView(overview: ServerOverview): OverviewView {
     ],
     footnote: (
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        SQLite has no server process: every number above describes this file at the moment the
-        snapshot was taken.
+        {t('overviewSqlite.sqlite-has-no-server-process-every-number-above')}
       </Typography.Text>
     ),
   }

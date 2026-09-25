@@ -34,6 +34,7 @@ import {
 } from '../lib/mock'
 import { useSectionScroll } from '../lib/sectionScroll'
 import { useAppStore } from '../store/appStore'
+import { t, tr, useLanguage } from '../lib/i18n'
 
 /** The key of the group holding the user's own placeholders. */
 const CUSTOM_GROUP = 'custom'
@@ -122,19 +123,23 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
     [stored],
   )
 
+  // The group names are built here, so the memo has to be rebuilt when the
+  // language changes — the button that changes it is on another page, and this
+  // window is a page that stays mounted.
+  const language = useLanguage()
   const groups = useMemo<PlaceholderGroup[]>(
     () => [
       ...PLACEHOLDER_GROUPS,
       {
         key: CUSTOM_GROUP,
-        label: 'Custom',
+        label: 'mockPickerModal.custom',
         items: placeholders.map((entry) => ({
           value: `@${entry.name}`,
           desc: entry.description?.trim() || entry.template,
         })),
       },
     ],
-    [placeholders],
+    [language, placeholders],
   )
   const groupKeys = useMemo(() => groups.map((entry) => entry.key), [groups])
 
@@ -209,19 +214,19 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
     for (const entry of groups) {
       for (const item of entry.items) {
         if (item.value.toLowerCase().includes(needle) || item.desc.toLowerCase().includes(needle)) {
-          found.push({ group: entry.label, item })
+          found.push({ group: t(entry.label), item })
         }
       }
     }
     return found
-  }, [needle, groups])
+  }, [language, needle, groups])
 
   const brokenNote = broken.length ? (
     <Typography.Text type="secondary" className="dm-mock-note">
       {broken.length === 1
-        ? `@${broken[0].name} could not be read (${broken[0].broken}) and is not offered.`
-        : `${broken.length} placeholder files could not be read and are not offered.`}{' '}
-      Settings › Mock placeholders lists them so they can be removed.
+        ? t('mockPickerModal.could-not-be-read-and-is-not-offered', { name: broken[0].name, broken: broken[0].broken })
+        : t('mockPickerModal.placeholder-files-could-not-be-read-and-are-not', { n: broken.length })}{' '}
+      {t('mockPickerModal.settings-mock-placeholders-lists-them-so-they')}
     </Typography.Text>
   ) : null
 
@@ -230,13 +235,14 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
     // whether those names are showing or a search's results are not.
     <Modal
       open={open}
-      title={field ? `Placeholder for “${field}”` : 'Placeholder'}
+      title={field ? t('mockPickerModal.placeholder-for', { field }) : t('mockPickerModal.placeholder')}
       onCancel={onClose}
       footer={
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          A mock is a template: text with placeholders in it, so{' '}
-          <span className="mono">user_@natural(1, 999)</span> is a value too. Write{' '}
-          <span className="mono">@@</span> for a literal @.
+          {tr('mockPickerModal.footer-hint', {
+            sample: <span className="mono">{t('mockPickerModal.user-natural-1-999')}</span>,
+            literal: <span className="mono">@@</span>,
+          })}
         </Typography.Text>
       }
       width={880}
@@ -245,7 +251,7 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
       <Input
         allowClear
         autoFocus
-        placeholder="Search a placeholder, e.g. email or 邮箱"
+        placeholder={t('mockPickerModal.search-a-placeholder-e-g-email-or')}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         style={{ marginBottom: 8 }}
@@ -253,7 +259,7 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
       {brokenNote}
       {needle ? (
         matches.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No placeholder matches" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('mockPickerModal.no-placeholder-matches')} />
         ) : (
           <div className="dm-mock-pane">
             <div className="dm-mock-tiles">
@@ -276,7 +282,7 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
           <nav
             className="dm-settings-nav"
             role="tablist"
-            aria-label="Placeholder groups"
+            aria-label={t('mockPickerModal.placeholder-groups')}
             ref={bindNav}
           >
             {groups.map((entry) => (
@@ -289,7 +295,7 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
                 className={`dm-settings-nav-item${group === entry.key ? ' is-active' : ''}`}
                 onClick={() => goTo(entry.key)}
               >
-                {entry.label}
+                {t(entry.label)}
               </button>
             ))}
           </nav>
@@ -300,18 +306,23 @@ export function MockPickerModal({ field, onPick, onClose }: MockPickerModalProps
                 className="dm-settings-section"
                 id={groupPaneId(entry.key)}
                 role="tabpanel"
-                aria-label={entry.label}
+                aria-label={t(entry.label)}
               >
-                <h2 className="dm-settings-section-title">{entry.label}</h2>
+                <h2 className="dm-settings-section-title">{t(entry.label)}</h2>
                 {entry.items.length === 0 ? (
                   <Empty
                     image={Empty.PRESENTED_IMAGE_SIMPLE}
                     description={
                       <span>
-                        No custom placeholder yet.
+                        {t('mockPickerModal.no-custom-placeholder-yet')}
                         <br />
-                        Settings › Mock placeholders writes one — a name for a template such as{' '}
-                        <span className="mono">SO@date(yyyy)@natural(1000, 9999)</span>.
+                        {tr('mockPickerModal.settings-writes-one', {
+                          sample: (
+                            <span className="mono">
+                              {t('mockPickerModal.so-date-yyyy-natural-1000-9999')}
+                            </span>
+                          ),
+                        })}
                       </span>
                     }
                   />

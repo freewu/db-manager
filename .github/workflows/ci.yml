@@ -50,6 +50,11 @@ jobs:
       - run: npm run build
         working-directory: frontend
 
+      # A translation can lose a `{placeholder}` or a `|` plural form without
+      # failing the type checker — the message just reads wrong at runtime.
+      - name: Translations match their English source
+        run: node scripts/i18n.mjs verify
+
   housekeeping:
     name: Housekeeping
     runs-on: ubuntu-latest

@@ -32,6 +32,7 @@ import {
   type CustomDraft,
 } from '../lib/mock'
 import { useAppStore } from '../store/appStore'
+import { t, tr } from '../lib/i18n'
 
 /** How many rows the debug panel renders at a time. */
 const DEBUG_ROWS = 5
@@ -80,18 +81,18 @@ function DebugRows({
   return (
     <div className="dm-custom-debug">
       <div className="dm-custom-debug-head">
-        <span className="dm-custom-label">Try it</span>
+        <span className="dm-custom-label">{t('mockPlaceholderSettings.try-it')}</span>
         <Space size={8}>
-          <Tooltip title="Draw another set of rows from a different random source">
+          <Tooltip title={t('mockPlaceholderSettings.draw-another-set-of-rows-from-a-different-random')}>
             <Button
               size="small"
               icon={<ReloadOutlined />}
               onClick={() => onSeed((seed + 0x9e3779b1) >>> 0)}
             >
-              Reroll
+              {t('mockPlaceholderSettings.reroll')}
             </Button>
           </Tooltip>
-          <span className="dm-custom-hint">seed {seed.toString(16)}</span>
+          <span className="dm-custom-hint">{t('mockPlaceholderSettings.seed')} {seed.toString(16)}</span>
         </Space>
       </div>
       {'error' in rendered ? (
@@ -202,15 +203,15 @@ function PlaceholderEditor({
   return (
     <Modal
       open={open}
-      title={editing ? `Edit @${editing.name}` : 'New custom placeholder'}
+      title={editing ? t('mockPlaceholderSettings.edit', { name: editing.name }) : t('mockPlaceholderSettings.new-custom-placeholder')}
       width={640}
       onCancel={onClose}
       destroyOnHidden
       footer={
         <Space>
-          <Button onClick={onClose}>Cancel</Button>
+          <Button onClick={onClose}>{t('mockPlaceholderSettings.cancel')}</Button>
           <Button type="primary" loading={saving} disabled={!ready} onClick={() => void commit()}>
-            Save
+            {t('mockPlaceholderSettings.save')}
           </Button>
         </Space>
       }
@@ -220,13 +221,13 @@ function PlaceholderEditor({
       ) : null}
       <div className="dm-custom-form">
         <label className="dm-custom-field">
-          <span className="dm-custom-label">Name</span>
+          <span className="dm-custom-label">{t('mockPlaceholderSettings.name')}</span>
           <Input
             value={draft.name}
             // The name is the file name, so it cannot move once the file exists;
             // renaming would be a delete and a create, which this form is not.
             disabled={editing !== undefined}
-            placeholder="orderNo"
+            placeholder={t('mockPlaceholderSettings.orderno')}
             addonBefore="@"
             status={errors.name ? 'error' : undefined}
             onChange={(event) => setDraft({ ...draft, name: event.target.value })}
@@ -234,35 +235,35 @@ function PlaceholderEditor({
           <span className="dm-custom-hint">
             {errors.name ??
               (editing
-                ? 'A name cannot be changed — delete the placeholder and write a new one'
-                : 'What templates write after @. Letters, digits and _ only.')}
+                ? t('mockPlaceholderSettings.a-name-cannot-be-changed-delete-the-placeholder')
+                : t('mockPlaceholderSettings.what-templates-write-after-letters-digits-and'))}
           </span>
         </label>
 
         <label className="dm-custom-field">
-          <span className="dm-custom-label">Template</span>
+          <span className="dm-custom-label">{t('mockPlaceholderSettings.template')}</span>
           <Input
             value={draft.template}
-            placeholder="SO@date(yyyy)@natural(1000, 9999)"
+            placeholder={t('mockPlaceholderSettings.so-date-yyyy-natural-1000-9999')}
             status={errors.template ? 'error' : undefined}
             onChange={(event) => setDraft({ ...draft, template: event.target.value })}
           />
           <span className="dm-custom-hint">
             {errors.template ??
-              'Any built-in placeholder can be used in it, and other custom placeholders too.'}
+              t('mockPlaceholderSettings.any-built-in-placeholder-can-be-used-in-it-and')}
           </span>
         </label>
 
         <label className="dm-custom-field">
-          <span className="dm-custom-label">Description</span>
+          <span className="dm-custom-label">{t('mockPlaceholderSettings.description')}</span>
           <Input
             value={draft.description}
-            placeholder="订单号"
+            placeholder={t('mockPlaceholderSettings.text')}
             status={errors.description ? 'error' : undefined}
             onChange={(event) => setDraft({ ...draft, description: event.target.value })}
           />
           <span className="dm-custom-hint">
-            {errors.description ?? 'Shown beside the placeholder in the picker and in the mock column.'}
+            {errors.description ?? t('mockPlaceholderSettings.shown-beside-the-placeholder-in-the-picker-and')}
           </span>
         </label>
       </div>
@@ -304,15 +305,15 @@ export function MockPlaceholderSettings() {
   const confirmDelete = useCallback(
     (entry: MockPlaceholder) => {
       modal.confirm({
-        title: `Delete @${entry.name}?`,
+        title: t('mockPlaceholderSettings.delete', { name: entry.name }),
         content:
-          'Mocks that use it will report an unknown placeholder until they are changed. The file is removed from the data folder.',
-        okText: 'Delete',
+          t('mockPlaceholderSettings.mocks-that-use-it-will-report-an-unknown'),
+        okText: t('mockPlaceholderSettings.delete-2'),
         okButtonProps: { danger: true },
         onOk: async () => {
           try {
             await remove(entry.name)
-            message.success(`@${entry.name} deleted`)
+            message.success(t('mockPlaceholderSettings.deleted', { name: entry.name }))
           } catch (error) {
             setFailure(toMessage(error))
           }
@@ -331,18 +332,19 @@ export function MockPlaceholderSettings() {
     <div className="dm-custom-pane">
       <div className="dm-custom-head">
         <div>
-          <span className="dm-custom-label">Custom placeholders</span>
+          <span className="dm-custom-label">{t('mockPlaceholderSettings.custom-placeholders')}</span>
           <span className="dm-custom-hint" style={{ display: 'block' }}>
-            One file per placeholder in the data folder's <span className="mono">.mock</span>{' '}
-            subfolder, so they travel with the data folder when it moves.
+            {tr('mockPlaceholderSettings.one-file-per-placeholder', {
+              extension: <span className="mono">{t('mockPlaceholderSettings.mock')}</span>,
+            })}
           </span>
         </div>
         <Space>
           <Button icon={<ReloadOutlined />} onClick={reload}>
-            Refresh
+            {t('mockPlaceholderSettings.refresh')}
           </Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            New
+            {t('mockPlaceholderSettings.new')}
           </Button>
         </Space>
       </div>
@@ -356,14 +358,20 @@ export function MockPlaceholderSettings() {
           image={Empty.PRESENTED_IMAGE_SIMPLE}
           description={
             <span>
-              No custom placeholder yet. One is a name for a template: <b>orderNo</b> for{' '}
-              <span className="mono">SO@date(yyyy)@natural(1000, 9999)</span>, written as{' '}
-              <span className="mono">@orderNo</span> in a mock.
+              {tr('mockPlaceholderSettings.no-custom-placeholder-yet', {
+                example: <b>{t('mockPlaceholderSettings.orderno')}</b>,
+                syntax: (
+                  <span className="mono">
+                    {t('mockPlaceholderSettings.so-date-yyyy-natural-1000-9999')}
+                  </span>
+                ),
+                reference: <span className="mono">{t('mockPlaceholderSettings.orderno-2')}</span>,
+              })}
             </span>
           }
         >
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            New
+            {t('mockPlaceholderSettings.new')}
           </Button>
         </Empty>
       ) : (
@@ -373,7 +381,7 @@ export function MockPlaceholderSettings() {
               <div className="dm-custom-row-main">
                 <span className="mono dm-custom-name">@{entry.name}</span>
                 {entry.broken ? (
-                  <Tag color="error">Unreadable</Tag>
+                  <Tag color="error">{t('mockPlaceholderSettings.unreadable')}</Tag>
                 ) : (
                   <span className="mono dm-custom-template">{entry.template}</span>
                 )}
@@ -381,7 +389,7 @@ export function MockPlaceholderSettings() {
               <div className="dm-custom-row-sub">
                 {entry.broken ? (
                   <span className="dm-custom-bad">
-                    {entry.broken} — the file is listed so it can be deleted.
+                    {entry.broken} {t('mockPlaceholderSettings.the-file-is-listed-so-it-can-be-deleted')}
                   </span>
                 ) : (
                   <>
@@ -398,7 +406,7 @@ export function MockPlaceholderSettings() {
                   disabled={Boolean(entry.broken)}
                   onClick={() => openEdit(entry)}
                 >
-                  Edit
+                  {t('mockPlaceholderSettings.edit-2')}
                 </Button>
                 <Button
                   size="small"
@@ -419,7 +427,7 @@ export function MockPlaceholderSettings() {
         onClose={() => setCreating(false)}
         onSaved={() => {
           setCreating(false)
-          message.success('Placeholder saved')
+          message.success(t('mockPlaceholderSettings.placeholder-saved'))
         }}
       />
     </div>

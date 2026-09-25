@@ -41,6 +41,7 @@ import { DataGrid } from './DataGrid'
 import { NamePromptModal } from './NamePromptModal'
 import { QueryFavorites } from './QueryFavorites'
 import { SqlEditor } from './SqlEditor'
+import { t, tn, useLanguage } from '../lib/i18n'
 
 const MAX_HISTORY = 25
 
@@ -55,8 +56,8 @@ const MAX_HISTORY = 25
  */
 function saveBlocker(hasFile: boolean, connectionId?: string, database?: string): string | null {
   if (hasFile) return null
-  if (!connectionId) return 'This connection has no saved profile, so there is nowhere to keep a script'
-  if (!database) return 'This session has no database picked, so there is no folder to save into'
+  if (!connectionId) return t('queryPane.no-saved-profile-to-keep-a-script-in')
+  if (!database) return t('queryPane.no-database-picked-so-no-folder-to-save-into')
   return null
 }
 
@@ -74,6 +75,7 @@ interface QueryPaneProps {
  * dirty until it has.
  */
 export function QueryPane({ tab }: QueryPaneProps) {
+  const language = useLanguage()
   const session = useAppStore((s) => s.sessionOf(tab.sessionId))
   const drivers = useAppStore((s) => s.drivers)
   const theme = useAppStore((s) => s.resolvedTheme)
@@ -212,7 +214,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
       })
       setFileError(null)
       setTabDirty(tab.id, false)
-      message.success(`Saved ${file.name}`)
+      message.success(t('queryPane.saved', { name: file.name }))
     } catch (err) {
       message.error(toMessage(err))
     } finally {
@@ -236,7 +238,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
       readFor.current = tab.id
       adoptQueryFile(tab.id, created)
       setFileError(null)
-      message.success(`Saved ${created.name}`)
+      message.success(t('queryPane.saved', { name: created.name }))
     },
     [adoptQueryFile, createQueryFile, database, message, sql, tab.id, tab.sessionId],
   )
@@ -246,16 +248,24 @@ export function QueryPane({ tab }: QueryPaneProps) {
   const scriptExport = useMemo(
     () =>
       driver === 'mongodb'
-        ? { menuLabel: 'Export insertMany script', label: 'JavaScript', extension: 'js' }
-        : { menuLabel: 'Export INSERT statements', label: 'SQL', extension: 'sql' },
-    [driver],
+        ? {
+            menuLabel: t('queryPane.export-insertmany-script'),
+            label: t('queryPane.javascript'),
+            extension: 'js',
+          }
+        : {
+            menuLabel: t('queryPane.export-insert-statements'),
+            label: 'SQL',
+            extension: 'sql',
+          },
+    [driver, language],
   )
 
   const execute = useCallback(
     async (statement: string) => {
       const text = statement.trim()
       if (!text) {
-        message.info('Nothing to run')
+        message.info(t('queryPane.nothing-to-run'))
         return
       }
       setRunning(true)
@@ -321,7 +331,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
   const explain = useCallback(async () => {
     const text = targetText().trim()
     if (!text) {
-      message.info('Nothing to explain')
+      message.info(t('queryPane.nothing-to-explain'))
       return
     }
     setExplaining(true)
@@ -360,17 +370,17 @@ export function QueryPane({ tab }: QueryPaneProps) {
     const whole = !view || !view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to).trim()
     const text = whole ? sql : targetText()
     if (!text.trim()) {
-      message.info('Nothing to format')
+      message.info(t('queryPane.nothing-to-format'))
       return
     }
 
     const outcome = formatSql(text, driver)
     if (outcome.unsupported) {
-      message.info('This engine\u2019s statements are not SQL, so there is no SQL formatting for them')
+      message.info(t('queryPane.this-engine-s-statements-are-not-sql-so-there-is'))
       return
     }
     if (outcome.error) {
-      message.error(`Could not format: ${outcome.error}`)
+      message.error(t('queryPane.could-not-format', { error: outcome.error }))
       return
     }
     const formatted = outcome.formatted ?? text
@@ -387,7 +397,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
   const exportResult = useCallback(
     async (format: 'csv' | 'json' | 'sql') => {
       if (!result || result.rows.length === 0) {
-        message.info('There is nothing to export')
+        message.info(t('queryPane.there-is-nothing-to-export'))
         return
       }
       const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
@@ -419,7 +429,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
             },
           ],
         })
-        message.success('Export written')
+        message.success(t('queryPane.export-written'))
       } catch (err) {
         const text = toMessage(err)
         if (/cancel/i.test(text)) return
@@ -434,7 +444,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
     if (!result) return
     try {
       await navigator.clipboard.writeText(resultToCSV(result))
-      message.success('Copied result as CSV')
+      message.success(t('queryPane.copied-result-as-csv'))
     } catch (err) {
       message.error(toMessage(err))
     }
@@ -444,7 +454,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
     () => ({
       items:
         history.length === 0
-          ? [{ key: 'empty', label: 'No statements yet', disabled: true }]
+          ? [{ key: 'empty', label: t('queryPane.no-statements-yet'), disabled: true }]
           : history.map((entry, index) => ({
               key: String(index),
               label: (
@@ -455,7 +465,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
               onClick: () => changeSql(entry),
             })),
     }),
-    [changeSql, history],
+    [language, changeSql, history],
   )
 
   /**
@@ -486,8 +496,8 @@ export function QueryPane({ tab }: QueryPaneProps) {
 
   const exportMenu: MenuProps = {
     items: [
-      { key: 'csv', label: 'Export CSV', onClick: () => void exportResult('csv') },
-      { key: 'json', label: 'Export JSON', onClick: () => void exportResult('json') },
+      { key: 'csv', label: t('queryPane.export-csv'), onClick: () => void exportResult('csv') },
+      { key: 'json', label: t('queryPane.export-json'), onClick: () => void exportResult('json') },
       {
         key: 'sql',
         label: scriptExport.menuLabel,
@@ -506,18 +516,20 @@ export function QueryPane({ tab }: QueryPaneProps) {
           loading={running}
           onClick={runAll}
         >
-          Run
+          {t('queryPane.run')}
         </Button>
-        <Tooltip title="Ctrl/Cmd+Shift+Enter">
+        <Tooltip title={t('queryPane.ctrl-cmd-shift-enter')}>
           <Button size="small" icon={<ThunderboltOutlined />} onClick={runSelection}>
-            Run selection
+            {t('queryPane.run-selection')}
           </Button>
         </Tooltip>
         <Tooltip
           title={
             capabilities.explainable
-              ? 'Plan the current statement without running it'
-              : `${driverInfo?.displayName ?? 'This engine'} has no plan to read`
+              ? t('queryPane.plan-the-current-statement-without-running-it')
+              : t('queryPane.has-no-plan-to-read', {
+                  engine: driverInfo?.displayName ?? t('queryPane.this-engine'),
+                })
           }
         >
           {/* A disabled antd button swallows the hover event, so the tooltip
@@ -530,13 +542,13 @@ export function QueryPane({ tab }: QueryPaneProps) {
               loading={explaining}
               onClick={() => void explain()}
             >
-              Explain
+              {t('queryPane.explain')}
             </Button>
           </span>
         </Tooltip>
         <Dropdown menu={historyMenu} trigger={['click']}>
           <Button size="small" icon={<HistoryOutlined />}>
-            History
+            {t('queryPane.history')}
           </Button>
         </Dropdown>
         <QueryFavorites
@@ -548,8 +560,8 @@ export function QueryPane({ tab }: QueryPaneProps) {
         <Tooltip
           title={
             !canFormat
-              ? 'This engine\u2019s statements are not SQL'
-              : 'Re-indent the selection, or the whole script (Ctrl/Cmd+Shift+F)'
+              ? t('queryPane.this-engine-s-statements-are-not-sql')
+              : t('queryPane.re-indent-the-selection-or-the-whole-script-ctrl')
           }
         >
           <span>
@@ -559,11 +571,11 @@ export function QueryPane({ tab }: QueryPaneProps) {
               disabled={!canFormat}
               onClick={reformat}
             >
-              Format
+              {t('queryPane.format')}
             </Button>
           </span>
         </Tooltip>
-        <Tooltip title="Clear editor">
+        <Tooltip title={t('queryPane.clear-editor')}>
           <Button size="small" icon={<ClearOutlined />} onClick={() => setSql('')} />
         </Tooltip>
         {/* Save is here even before the window has a name: a scratchpad is the
@@ -574,8 +586,8 @@ export function QueryPane({ tab }: QueryPaneProps) {
           title={
             saveBlocked ??
             (file
-              ? 'Ctrl/Cmd+S'
-              : 'Name this script and save it to the data folder (Ctrl/Cmd+S)')
+              ? t('queryPane.ctrl-cmd-s')
+              : t('queryPane.name-this-script-and-save-it-to-the-data-folder'))
           }
         >
           <span>
@@ -586,14 +598,14 @@ export function QueryPane({ tab }: QueryPaneProps) {
               loading={saving}
               onClick={() => void save()}
             >
-              {tab.dirty ? 'Save *' : 'Save'}
+              {tab.dirty ? t('queryPane.save') : t('queryPane.save-2')}
             </Button>
           </span>
         </Tooltip>
 
         <span style={{ opacity: 0.35 }}>|</span>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          max rows
+          {t('queryPane.max-rows')}
         </Typography.Text>
         <InputNumber
           size="small"
@@ -609,18 +621,18 @@ export function QueryPane({ tab }: QueryPaneProps) {
           style={{ width: 110 }}
           onChange={setTimeoutMs}
           options={[
-            { value: 15000, label: '15s timeout' },
-            { value: 60000, label: '60s timeout' },
-            { value: 300000, label: '5m timeout' },
-            { value: 900000, label: '15m timeout' },
+            { value: 15000, label: t('queryPane.15s-timeout') },
+            { value: 60000, label: t('queryPane.60s-timeout') },
+            { value: 300000, label: t('queryPane.5m-timeout') },
+            { value: 900000, label: t('queryPane.15m-timeout') },
           ]}
         />
 
         <div className="dm-toolbar-right">
           {session?.readOnly ? (
-            <Tooltip title="Write statements are rejected on this session">
+            <Tooltip title={t('queryPane.write-statements-are-rejected-on-this-session')}>
               <Typography.Text type="warning" style={{ fontSize: 12 }}>
-                <LockOutlined /> read-only
+                <LockOutlined /> {t('queryPane.read-only')}
               </Typography.Text>
             </Tooltip>
           ) : null}
@@ -629,12 +641,12 @@ export function QueryPane({ tab }: QueryPaneProps) {
               {database}
             </Typography.Text>
           ) : null}
-          <Tooltip title="Copy result as CSV">
+          <Tooltip title={t('queryPane.copy-result-as-csv')}>
             <Button size="small" icon={<CopyOutlined />} disabled={!result} onClick={() => void copyCSV()} />
           </Tooltip>
           <Dropdown menu={exportMenu} trigger={['click']} disabled={!result}>
             <Button size="small" icon={<DownloadOutlined />}>
-              Export
+              {t('queryPane.export')}
             </Button>
           </Dropdown>
         </div>
@@ -645,7 +657,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
           type="warning"
           showIcon
           banner
-          title={`${file.name} could not be read`}
+          title={t('queryPane.could-not-be-read', { name: file.name })}
           description={
             <span className="mono" style={{ fontSize: 12 }}>
               {fileError}
@@ -680,7 +692,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
                 <Alert
                   type="error"
                   showIcon
-                  title="Statement failed"
+                  title={t('queryPane.statement-failed')}
                   description={
                     <span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
                       {error}
@@ -706,14 +718,14 @@ export function QueryPane({ tab }: QueryPaneProps) {
                   size="small"
                   value={answer}
                   options={[
-                    { label: 'Results', value: 'results' },
-                    { label: 'Plan', value: 'plan' },
+                    { label: t('queryPane.results'), value: 'results' },
+                    { label: t('queryPane.plan'), value: 'plan' },
                   ]}
                   onChange={(value) => setAnswer(value as 'results' | 'plan')}
                 />
                 {answer === 'plan' && plan ? (
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    estimated, not measured
+                    {t('queryPane.estimated-not-measured')}
                   </Typography.Text>
                 ) : null}
               </div>
@@ -724,7 +736,10 @@ export function QueryPane({ tab }: QueryPaneProps) {
                 <Alert
                   type="success"
                   showIcon
-                  title={`${result.affectedRows} row(s) affected in ${formatDuration(result.durationMs)}`}
+                  title={tn('queryPane.rows-affected-in', result.affectedRows, {
+                    n: result.affectedRows.toLocaleString(),
+                    durationMs: formatDuration(result.durationMs),
+                  })}
                 />
               </div>
             ) : null}
@@ -734,7 +749,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
                 <Alert
                   type="warning"
                   showIcon
-                  title={`Result truncated at ${result.rowCount.toLocaleString()} rows (max rows = ${maxRows})`}
+                  title={t('queryPane.result-truncated-at-rows-max-rows', { toLocaleString: result.rowCount.toLocaleString(), maxRows })}
                 />
               </div>
             ) : null}
@@ -758,22 +773,22 @@ export function QueryPane({ tab }: QueryPaneProps) {
                 {driverInfo ? (
                   <>
                     <Typography.Text type="secondary">
-                      {running ? 'Running…' : 'Run a statement to see results here.'}
+                      {running ? t('queryPane.running') : t('queryPane.run-a-statement-to-see-results-here')}
                     </Typography.Text>
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                      Ctrl/Cmd+Enter runs everything, Ctrl/Cmd+Shift+Enter runs the selection.
+                      {t('queryPane.ctrl-cmd-enter-runs-everything-ctrl-cmd-shift')}
                     </Typography.Text>
                   </>
                 ) : (
                   <Typography.Text type="danger">
-                    This session is no longer open.
+                    {t('queryPane.this-session-is-no-longer-open')}
                     <Button
                       type="link"
                       size="small"
                       icon={<ReloadOutlined />}
                       onClick={() => window.location.reload()}
                     >
-                      Reload
+                      {t('queryPane.reload')}
                     </Button>
                   </Typography.Text>
                 )}
@@ -794,12 +809,15 @@ export function QueryPane({ tab }: QueryPaneProps) {
                 style={{ borderTop: '1px solid var(--dm-border)', background: 'transparent' }}
               >
                 <span className="dm-statusbar-item">
-                  {result.rowCount.toLocaleString()} row(s)
+                  {tn('queryPane.rows', result.rowCount, { n: result.rowCount.toLocaleString() })}
                 </span>
                 <span className="dm-statusbar-item">{formatDuration(result.durationMs)}</span>
                 {result.statementCount > 1 ? (
                   <span className="dm-statusbar-item">
-                    statement {result.statementIndex + 1} of {result.statementCount}
+                    {t('queryPane.statement-n-of-m', {
+                      index: result.statementIndex + 1,
+                      total: result.statementCount,
+                    })}
                   </span>
                 ) : null}
                 <span className="dm-spacer" />
@@ -842,7 +860,9 @@ export function QueryPane({ tab }: QueryPaneProps) {
                         }}
                       >
                         <span className="dm-statusbar-item">
-                          {plan.rows.length.toLocaleString()} plan step(s)
+                          {tn('queryPane.plan-steps', plan.rows.length, {
+                            n: plan.rows.length.toLocaleString(),
+                          })}
                         </span>
                         <span className="dm-statusbar-item">{formatDuration(plan.durationMs)}</span>
                         <span className="dm-spacer" />
@@ -860,7 +880,7 @@ export function QueryPane({ tab }: QueryPaneProps) {
                       }}
                     >
                       <Typography.Text type="secondary">
-                        The engine returned no plan steps for this statement.
+                        {t('queryPane.the-engine-returned-no-plan-steps-for-this')}
                       </Typography.Text>
                     </div>
                   )}
@@ -879,10 +899,10 @@ export function QueryPane({ tab }: QueryPaneProps) {
                   }}
                 >
                   <Typography.Text type="secondary">
-                    Press Explain to see how the engine would run the current statement.
+                    {t('queryPane.press-explain-to-see-how-the-engine-would-run')}
                   </Typography.Text>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    Nothing is executed. Explaining a statement that writes is safe.
+                    {t('queryPane.nothing-is-executed-explaining-a-statement-that')}
                   </Typography.Text>
                 </div>
               )
@@ -896,11 +916,11 @@ export function QueryPane({ tab }: QueryPaneProps) {
           answer is handed straight back to the window. */}
       <NamePromptModal
         open={naming}
-        title="Save this script"
-        okText="Save"
-        placeholder="Query name"
+        title={t('queryPane.save-this-script')}
+        okText={t('queryPane.save-2')}
+        placeholder={t('queryPane.query-name')}
         initial=""
-        hint="Saved as a .sql file in the data folder, where the tree's Queries folder lists it. A name that is already taken is refused."
+        hint={t('queryPane.saved-as-a-sql-file-in-the-data-folder-where-the')}
         onClose={() => setNaming(false)}
         onSubmit={saveAs}
       />

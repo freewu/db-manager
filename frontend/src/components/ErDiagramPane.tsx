@@ -34,6 +34,7 @@ import { api, toMessage } from '../api/client'
 import type { GraphEdge, GraphNode, SchemaGraph } from '../api/types'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import type { ResolvedTheme } from '../lib/theme'
+import { t, tn } from '../lib/i18n'
 
 /* Node geometry, in diagram units (1 unit = 1 px at 100% zoom). */
 const BOX_W = 268
@@ -70,7 +71,7 @@ function paletteOf(theme: ResolvedTheme): Palette {
         border: '#3b3b44',
         accent: '#36ab60',
         pk: '#d8a72a',
-        text: '#e8e8ea',
+        text: t('erDiagramPane.e8e8ea'),
         dim: '#9a9aa3',
         edge: '#7d7d8a',
       }
@@ -81,7 +82,7 @@ function paletteOf(theme: ResolvedTheme): Palette {
         border: '#d8d8de',
         accent: '#36ab60',
         pk: '#b8860b',
-        text: '#1f1f22',
+        text: t('erDiagramPane.1f1f22'),
         dim: '#8c8c94',
         edge: '#c2c2c9',
       }
@@ -477,10 +478,10 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
     try {
       await api.saveTextFile({
         defaultFilename: filename,
-        content: `<?xml version="1.0" encoding="UTF-8"?>\n${content}`,
+        content: t('erDiagramPane.xml-version-1-0-encoding-utf-8', { content }),
         filters: [{ displayName: 'SVG', pattern: '*.svg' }],
       })
-      message.success('Diagram exported')
+      message.success(t('erDiagramPane.diagram-exported'))
     } catch (err) {
       message.error(toMessage(err))
     }
@@ -500,7 +501,7 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
         <Alert
           type="error"
           showIcon
-          title="Could not read the schema"
+          title={t('erDiagramPane.could-not-read-the-schema')}
           description={
             <span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
               {error}
@@ -508,7 +509,7 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
           }
           action={
             <Button size="small" icon={<ReloadOutlined />} onClick={() => setAttempt((n) => n + 1)}>
-              Retry
+              {t('erDiagramPane.retry')}
             </Button>
           }
         />
@@ -526,24 +527,24 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
           size="small"
           allowClear
           prefix={<SearchOutlined style={{ opacity: 0.5 }} />}
-          placeholder="Find a table"
+          placeholder={t('erDiagramPane.find-a-table')}
           value={query}
           style={{ width: 200 }}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <Tooltip title="Zoom out">
+        <Tooltip title={t('erDiagramPane.zoom-out')}>
           <Button size="small" icon={<ZoomOutOutlined />} onClick={() => zoomBy(1 / 1.2)} />
         </Tooltip>
         <Typography.Text type="secondary" style={{ fontSize: 12, width: 42, textAlign: 'center' }}>
           {Math.round(view.k * 100)}%
         </Typography.Text>
-        <Tooltip title="Zoom in">
+        <Tooltip title={t('erDiagramPane.zoom-in')}>
           <Button size="small" icon={<ZoomInOutlined />} onClick={() => zoomBy(1.2)} />
         </Tooltip>
-        <Tooltip title="Fit to window">
+        <Tooltip title={t('erDiagramPane.fit-to-window')}>
           <Button size="small" icon={<ExpandOutlined />} onClick={fit} />
         </Tooltip>
-        <Tooltip title="Show the object's columns in each box">
+        <Tooltip title={t('erDiagramPane.show-the-object-s-columns-in-each-box')}>
           <Space size={4}>
             <EyeOutlined style={{ opacity: 0.6 }} />
             <Switch size="small" checked={showColumns} onChange={setShowColumns} />
@@ -553,18 +554,20 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
           size="small"
           value={showGrid ? 'grid' : 'plain'}
           options={[
-            { label: 'Grid', value: 'grid' },
-            { label: 'Plain', value: 'plain' },
+            { label: t('erDiagramPane.grid'), value: 'grid' },
+            { label: t('erDiagramPane.plain'), value: 'plain' },
           ]}
           onChange={(value) => setShowGrid(value === 'grid')}
         />
 
         <div className="dm-toolbar-right">
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {nodes.length} object{nodes.length === 1 ? '' : 's'} · {edges.length} relation
-            {edges.length === 1 ? '' : 's'}
+            {t('erDiagramPane.objects-and-relations', {
+              objects: tn('erDiagramPane.n-objects', nodes.length),
+              relations: tn('erDiagramPane.n-relations', edges.length),
+            })}
           </Typography.Text>
-          <Tooltip title="Refresh">
+          <Tooltip title={t('erDiagramPane.refresh')}>
             <Button
               size="small"
               icon={<ReloadOutlined />}
@@ -572,7 +575,7 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
               onClick={() => setAttempt((n) => n + 1)}
             />
           </Tooltip>
-          <Tooltip title="Export the diagram as SVG">
+          <Tooltip title={t('erDiagramPane.export-the-diagram-as-svg')}>
             <Button size="small" icon={<DownloadOutlined />} onClick={() => void exportSvg()} />
           </Tooltip>
         </div>
@@ -583,8 +586,8 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
           <Alert
             type="warning"
             showIcon
-            title="Only the first 300 objects are shown"
-            description="Open the namespace in a narrower scope (a schema, or a database per schema) to see the rest."
+            title={t('erDiagramPane.only-the-first-300-objects-are-shown')}
+            description={t('erDiagramPane.open-the-namespace-in-a-narrower-scope-a-schema')}
           />
         </div>
       ) : null}
@@ -594,7 +597,7 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
           <Alert
             type="warning"
             showIcon
-            title={`${graph.warnings.length} object(s) could not be read in full`}
+            title={tn('erDiagramPane.objects-not-read-in-full', graph.warnings.length)}
             description={
               <ul style={{ paddingInlineStart: 18, margin: 0 }}>
                 {graph.warnings.slice(0, 6).map((warning, index) => (
@@ -610,7 +613,7 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
 
       <div className="dm-er-canvas" ref={wrapperRef}>
         {nodes.length === 0 ? (
-          <Empty description="This namespace has no objects" style={{ marginTop: 80 }} />
+          <Empty description={t('erDiagramPane.this-namespace-has-no-objects')} style={{ marginTop: 80 }} />
         ) : (
           <svg
             ref={svgRef}
@@ -709,10 +712,10 @@ export function ErDiagramPane({ tab }: ErDiagramPaneProps) {
         <span className="dm-statusbar-item">
           {schema ? `${database}.${schema}` : database}
         </span>
-        {hovered ? <span className="dm-statusbar-item">focused: {hovered}</span> : null}
+        {hovered ? <span className="dm-statusbar-item">{t('erDiagramPane.focused')} {hovered}</span> : null}
         <span className="dm-spacer" />
         <span className="dm-statusbar-item">
-          click a box to open it · drag to pan · wheel to zoom
+          {t('erDiagramPane.click-a-box-to-open-it-drag-to-pan-wheel-to-zoom')}
         </span>
       </div>
     </div>
@@ -786,7 +789,7 @@ function Box({
         textAnchor="end"
         style={{ fontFamily: 'inherit' }}
       >
-        {item.external ? 'external' : item.node.kind === 'table' ? '' : item.node.kind}
+        {item.external ? t('erDiagramPane.external') : item.node.kind === 'table' ? '' : item.node.kind}
       </text>
 
       {item.node.columns.slice(0, item.rows).map((column, index) => (
@@ -824,7 +827,7 @@ function Box({
           fontSize={10.5}
           style={{ fontFamily: 'inherit' }}
         >
-          + {item.hidden} more column(s)
+          + {tn('erDiagramPane.more-columns', item.hidden)}
         </text>
       ) : null}
     </g>

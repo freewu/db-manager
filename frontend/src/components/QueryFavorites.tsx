@@ -11,6 +11,7 @@ import {
 import { toMessage } from '../api/client'
 import type { DriverType, SavedQuery } from '../api/types'
 import { useAppStore } from '../store/appStore'
+import { t } from '../lib/i18n'
 
 interface QueryFavoritesProps {
   /** The statement currently in the editor. */
@@ -63,7 +64,7 @@ export function QueryFavorites({ sql, driver, database, onLoad }: QueryFavorites
   const submit = async () => {
     const trimmed = name.trim()
     if (!trimmed) {
-      message.warning('Give the saved query a name')
+      message.warning(t('queryFavorites.give-the-saved-query-a-name'))
       return
     }
     setSaving(true)
@@ -77,7 +78,7 @@ export function QueryFavorites({ sql, driver, database, onLoad }: QueryFavorites
         createdAt: editing?.createdAt ?? 0,
         updatedAt: 0,
       })
-      message.success(editing ? 'Saved query updated' : 'Saved to favourites')
+      message.success(editing ? t('queryFavorites.saved-query-updated') : t('queryFavorites.saved-to-favourites'))
       setOpen(false)
     } catch (err) {
       message.error(toMessage(err))
@@ -89,14 +90,14 @@ export function QueryFavorites({ sql, driver, database, onLoad }: QueryFavorites
   const confirmDelete = (query: SavedQuery) => {
     setMenuOpen(false)
     modal.confirm({
-      title: 'Delete saved query',
-      content: `Remove “${query.name}” from the favourites?`,
-      okText: 'Delete',
+      title: t('queryFavorites.delete-saved-query'),
+      content: t('queryFavorites.remove-from-the-favourites', { name: query.name }),
+      okText: t('queryFavorites.delete'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
           await deleteSavedQuery(query.id)
-          message.success('Saved query deleted')
+          message.success(t('queryFavorites.saved-query-deleted'))
         } catch (err) {
           message.error(toMessage(err))
         }
@@ -107,7 +108,7 @@ export function QueryFavorites({ sql, driver, database, onLoad }: QueryFavorites
   const items: MenuProps['items'] = [
     {
       key: 'save',
-      label: 'Save current SQL…',
+      label: t('queryFavorites.save-current-sql'),
       icon: <SaveOutlined />,
       disabled: !sql.trim(),
     },
@@ -115,7 +116,7 @@ export function QueryFavorites({ sql, driver, database, onLoad }: QueryFavorites
   ]
 
   if (savedQueries.length === 0) {
-    items.push({ key: 'empty', label: 'No saved queries yet', disabled: true })
+    items.push({ key: 'empty', label: t('queryFavorites.no-saved-queries-yet'), disabled: true })
   } else {
     for (const query of savedQueries) {
       items.push({
@@ -130,8 +131,8 @@ export function QueryFavorites({ sql, driver, database, onLoad }: QueryFavorites
               <button
                 type="button"
                 className="dm-fav-action"
-                title="Edit"
-                aria-label={`Edit ${query.name}`}
+                title={t('queryFavorites.edit')}
+                aria-label={t('queryFavorites.edit-2', { name: query.name })}
                 onClick={(event) => {
                   // Keep the menu open and stop it from loading the snippet.
                   event.stopPropagation()
@@ -143,8 +144,8 @@ export function QueryFavorites({ sql, driver, database, onLoad }: QueryFavorites
               <button
                 type="button"
                 className="dm-fav-action is-danger"
-                title="Delete"
-                aria-label={`Delete ${query.name}`}
+                title={t('queryFavorites.delete')}
+                aria-label={t('queryFavorites.delete-2', { name: query.name })}
                 onClick={(event) => {
                   event.stopPropagation()
                   confirmDelete(query)
@@ -169,7 +170,7 @@ export function QueryFavorites({ sql, driver, database, onLoad }: QueryFavorites
     const query = savedQueries.find((entry) => entry.id === key)
     if (!query) return
     onLoad(query.sql)
-    message.success(`Loaded “${query.name}”`)
+    message.success(t('queryFavorites.loaded', { name: query.name }))
   }
 
   return (
@@ -181,7 +182,7 @@ export function QueryFavorites({ sql, driver, database, onLoad }: QueryFavorites
         onOpenChange={setMenuOpen}
       >
         <Button size="small" icon={<StarOutlined />}>
-          Favourites
+          {t('queryFavorites.favourites')}
           {savedQueries.length > 0 ? (
             <span className="dm-fav-count">{savedQueries.length}</span>
           ) : null}
@@ -189,21 +190,21 @@ export function QueryFavorites({ sql, driver, database, onLoad }: QueryFavorites
       </Dropdown>
 
       <Modal
-        title={editing ? 'Edit saved query' : 'Save query to favourites'}
+        title={editing ? t('queryFavorites.edit-saved-query') : t('queryFavorites.save-query-to-favourites')}
         open={open}
-        okText="Save"
+        okText={t('queryFavorites.save')}
         confirmLoading={saving}
         onOk={() => void submit()}
         onCancel={() => setOpen(false)}
         width={560}
       >
         <Form layout="vertical">
-          <Form.Item label="Name" required>
+          <Form.Item label={t('queryFavorites.name')} required>
             <Input
               autoFocus
               maxLength={120}
               value={name}
-              placeholder="e.g. Slow queries"
+              placeholder={t('queryFavorites.e-g-slow-queries')}
               onChange={(event) => setName(event.target.value)}
               onPressEnter={() => void submit()}
             />

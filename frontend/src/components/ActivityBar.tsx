@@ -9,6 +9,8 @@ import {
 import type { ReactNode } from 'react'
 
 import type { AppPage } from '../store/appStore'
+import { t } from '../lib/i18n'
+import type { MessageKey } from '../lib/i18n'
 
 /**
  * The five pages this application has, in the order they are listed.
@@ -19,14 +21,14 @@ import type { AppPage } from '../store/appStore'
  * this program can show are five short names. A page that is locked, or whose
  * click does something else right now, still says so through the overrides below.
  */
-const RAIL_ITEMS: { page: AppPage; icon: ReactNode; name: string }[] = [
-  { page: 'connections', icon: <DatabaseOutlined />, name: 'Connections' },
+const RAIL_ITEMS: { page: AppPage; icon: ReactNode; name: MessageKey }[] = [
+  { page: 'connections', icon: <DatabaseOutlined />, name: 'activityBar.connections' },
   // Between the things somebody looks at and the things they change: comparing
   // two databases reads them both, and what it produces is a script.
-  { page: 'datagen', icon: <ExperimentOutlined />, name: 'Data generation' },
-  { page: 'compare', icon: <SwapOutlined />, name: 'Compare' },
-  { page: 'changelog', icon: <HistoryOutlined />, name: 'Change log' },
-  { page: 'settings', icon: <SettingOutlined />, name: 'Settings' },
+  { page: 'datagen', icon: <ExperimentOutlined />, name: 'activityBar.data-generation' },
+  { page: 'compare', icon: <SwapOutlined />, name: 'activityBar.compare' },
+  { page: 'changelog', icon: <HistoryOutlined />, name: 'activityBar.change-log' },
+  { page: 'settings', icon: <SettingOutlined />, name: 'activityBar.settings' },
 ]
 
 /**
@@ -58,18 +60,18 @@ export function ActivityBar({
   disabledReason?: Partial<Record<AppPage, string>>
 }) {
   return (
-    <nav className="dm-rail" aria-label="Pages">
+    <nav className="dm-rail" aria-label={t('activityBar.pages')}>
       {RAIL_ITEMS.map((item) => (
         <RailItem
           key={item.page}
           page={item.page}
           current={page}
           icon={item.icon}
-          name={item.name}
+          name={t(item.name)}
           // A page that cannot be opened has to say so on the item itself: a door
           // that is there but locked reads better than one that has been taken
           // away, and a locked door has to explain itself.
-          hint={disabledReason?.[item.page] ?? hints?.[item.page] ?? item.name}
+          hint={disabledReason?.[item.page] ?? hints?.[item.page] ?? t(item.name)}
           disabledReason={disabledReason?.[item.page]}
           onSelect={onSelect}
         />

@@ -6,6 +6,7 @@ import { HolderOutlined, KeyOutlined } from '@ant-design/icons'
 import type { DesignColumn, DriverType, TableDesign } from '../api/types'
 import { typeSuggestions } from '../lib/design'
 import { useColumnResize, type ResizableColumns } from './ResizableHeader'
+import { t } from '../lib/i18n'
 
 /** Which row of a designer grid is selected, and how to change that. */
 export interface GridSelection {
@@ -95,7 +96,7 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
       align: 'center',
       resizable: false,
       render: () => (
-        <Tooltip title="Drag to reorder">
+        <Tooltip title={t('designGrid.drag-to-reorder')}>
           <span
             className="dm-drag-handle"
             onMouseDown={() => setArmed(true)}
@@ -118,7 +119,7 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
       ),
     },
     {
-      title: 'Name',
+      title: t('designGrid.name'),
       width: 220,
       render: (_value, row, index) => (
         <Input
@@ -132,7 +133,7 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
       ),
     },
     {
-      title: 'Type',
+      title: t('designGrid.type'),
       width: 220,
       render: (_value, row, index) => (
         <AutoComplete
@@ -143,15 +144,15 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
           options={suggestions}
           disabled={readOnly}
           status={row.dataType.trim() ? undefined : 'error'}
-          placeholder="varchar(255)"
+          placeholder={t('designGrid.varchar-255')}
           onChange={(value: string) => patch(index, { dataType: value })}
         />
       ),
     },
     {
       title: () => (
-        <Tooltip title="Allow NULL values">
-          <span>Null</span>
+        <Tooltip title={t('designGrid.allow-null-values')}>
+          <span>{t('designGrid.null')}</span>
         </Tooltip>
       ),
       width: 60,
@@ -165,7 +166,7 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
       ),
     },
     {
-      title: 'Default',
+      title: t('designGrid.default'),
       width: 180,
       render: (_value, row, index) => (
         <Input
@@ -173,7 +174,7 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
           className="mono"
           value={row.defaultValue ?? ''}
           disabled={readOnly}
-          placeholder="none"
+          placeholder={t('designGrid.none')}
           onChange={(event) =>
             patch(index, { defaultValue: event.target.value === '' ? null : event.target.value })
           }
@@ -182,14 +183,14 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
     },
     {
       title: () => (
-        <Tooltip title="Primary key">
+        <Tooltip title={t('designGrid.primary-key')}>
           <KeyOutlined />
         </Tooltip>
       ),
       width: 44,
       align: 'center',
       render: (_value, row, index) => (
-        <Tooltip title={row.primaryKey ? 'Part of the primary key' : 'Make this field part of the primary key'}>
+        <Tooltip title={row.primaryKey ? t('designGrid.part-of-the-primary-key') : t('designGrid.make-this-field-part-of-the-primary-key')}>
           <Checkbox
             checked={row.primaryKey}
             disabled={readOnly}
@@ -200,8 +201,8 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
     },
     {
       title: () => (
-        <Tooltip title="Auto increment">
-          <span>Auto</span>
+        <Tooltip title={t('designGrid.auto-increment')}>
+          <span>{t('designGrid.auto')}</span>
         </Tooltip>
       ),
       width: 62,
@@ -215,7 +216,7 @@ export function FieldGrid({ design, driver, readOnly, onChange, selection }: Des
       ),
     },
     {
-      title: 'Comment',
+      title: t('designGrid.comment'),
       render: (_value, row, index) => (
         <Input
           size="small"

@@ -45,6 +45,8 @@ import {
 } from '../lib/tree'
 import { designFrom, emptyStructure, newTableDesign } from '../lib/design'
 import { DEFAULT_CODE_LANGUAGE, codeLanguageById } from '../lib/codegen'
+import { getLanguage, parseLanguage, setLanguage as applyLanguage, t } from '../lib/i18n'
+import type { Language } from '../lib/i18n'
 import {
   parseThemeMode,
   resolveTheme,
@@ -263,8 +265,9 @@ interface AppState {
    * Which of the rail's four pages the main area is showing.
    *
    * The rail on the far left picks it: *Connections* is the working area the
-   * tree opens windows into, and the other three are pages that stand by
-   * themselves — the change log, the settings, and the data generation windows.
+   * tree opens windows into, and the other four are pages that stand by
+   * themselves — the change log, the comparison, the data generation windows,
+   * and the settings.
    * It lives here rather than in the shell because commands open pages too: the
    * ribbon's *Settings*, and *Data Generation* from a table's context menu,
    * both have to put the page they open in front of the user (see `front`).
@@ -303,6 +306,21 @@ interface AppState {
   setTheme: (theme: ThemeMode) => void
   /** Sets the language a new code window starts in, and stores it. */
   setCodegenLanguage: (language: string) => void
+  /**
+   * Switches the whole interface to a language, and stores it.
+   *
+   * The choice itself lives in `lib/i18n` (every `t` call has to reach it without
+   * a component being involved); this persists it and renames the windows that
+   * are already open.
+   */
+  setUiLanguage: (language: Language) => void
+  /**
+   * Writes every open window's title again, in the language now in use.
+   *
+   * Called by `setUiLanguage`: a tab holds the finished words it was made with,
+   * so switching language has to go over them (see `titleOf`).
+   */
+  retitleTabs: () => void
   /** Re-reads the data directory (the settings page calls this after a move). */
   refreshDataDir: () => Promise<DataDirInfo>
   /**
@@ -522,10 +540,12 @@ const STATE_KEY = 'ui'
  * other way round.
  */
 function saveUi(state: Pick<AppState, 'theme' | 'codegenLanguage'>): void {
+  // The interface language is read from `lib/i18n` rather than taken as an
+  // argument: that module owns the answer, and asking it here is what keeps the
+  // two from drifting apart.
+  const ui = { theme: state.theme, codegenLanguage: state.codegenLanguage, language: getLanguage() }
   // Fire and forget: a failed preference write must not disturb the UI.
-  void api
-    .saveState({ [STATE_KEY]: { theme: state.theme, codegenLanguage: state.codegenLanguage } })
-    .catch(() => undefined)
+  void api.saveState({ [STATE_KEY]: ui }).catch(() => undefined)
 }
 
 /** Copy of an object without one key (drafts must die with their window). */
@@ -645,6 +665,54 @@ const frontOf = (state: AppState, page: AppPage): string | undefined => {
   return tab && pageOfKind(tab.kind) === page ? id : undefined
 }
 
+/**
+ * The words on a window's tab, in whatever language is in use right now.
+ *
+ * Most titles are words this application chose (`Objects` lists are named after
+ * the folder they show, a designer window says *New table*), and a tab holds the
+ * finished string it was made with. That is why `retitleTabs` exists: the
+ * language can change while windows are open, and a window labelled in the
+ * language the reader has just left would be plainly wrong.
+ *
+ * A window named after something of the user's — a table, a saved script — is
+ * handed back the name it was given: titles that are data are not translated.
+ * The two callers are the opening actions and the retitling, and they agree
+ * because both go through here.
+ */
+function titleOf(tab: Omit<WorkspaceTab, 'title'>): string {
+  switch (tab.kind) {
+    case 'query':
+      return tab.queryFile ? tab.queryFile.name : t('storeApp.query')
+    case 'table':
+      return tab.object ?? ''
+    case 'newtable':
+      return t('storeApp.new-table')
+    case 'objects':
+      return tab.list === 'index' ? t('storeApp.indexes') : t(FOLDER_LABEL[tab.list ?? 'table'])
+    case 'ddl':
+      return tab.object ? t('storeApp.ddl', { object: tab.object }) : t('storeApp.ddl-script')
+    case 'codegen':
+      return t('storeApp.code', { name: tab.object ?? '' })
+    case 'datagen':
+      return t('storeApp.data-generation')
+    case 'er':
+      return tab.schema ? t('storeApp.er', { schema: tab.schema }) : t('storeApp.er-diagram')
+    default:
+      return t('storeApp.runtime')
+  }
+}
+
+/**
+ * A window with its title filled in.
+ *
+ * Every tab is built through this, so there is one place that decides what a
+ * window is called — and the tab that is opened and the tab that is renamed
+ * later cannot disagree.
+ */
+function titled<T extends Omit<WorkspaceTab, 'title'>>(tab: T): T & { title: string } {
+  return { ...tab, title: titleOf(tab) }
+}
+
 export const useAppStore = create<AppState>((set, get) => ({
   boot: 'loading',
   drivers: [],
@@ -703,7 +771,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ])
 
       const stored = persisted?.[STATE_KEY] as
-        | { theme?: unknown; codegenLanguage?: unknown }
+        | { theme?: unknown; codegenLanguage?: unknown; language?: unknown }
         | undefined
       // Navicat's classic look is light; dark stays one toggle away.
       const theme = parseThemeMode(stored?.theme)
@@ -712,6 +780,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       const codegenLanguage = codeLanguageById(
         typeof stored?.codegenLanguage === 'string' ? stored.codegenLanguage : undefined,
       ).id
+      // Before `boot` turns ready, so the first translated frame is already in
+      // the stored language; an unknown or missing value falls back to English.
+      applyLanguage(parseLanguage(stored?.language))
 
       // The OS can be switched to dark while the app is running, and "follow the
       // system" has to follow it live — the listener stays installed for the
@@ -751,6 +822,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   setCodegenLanguage(codegenLanguage) {
     set({ codegenLanguage })
     saveUi(get())
+  },
+
+  setUiLanguage(language) {
+    // The words change first and are stored second: a failed write must not
+    // leave the interface in the language the user just moved away from.
+    applyLanguage(language)
+    get().retitleTabs()
+    saveUi(get())
+  },
+
+  retitleTabs() {
+    set((state) => ({ tabs: state.tabs.map((tab) => ({ ...tab, title: titleOf(tab) })) }))
   },
 
   async refreshDataDir() {
@@ -1171,7 +1254,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   async createQueryFile(sessionId, database, name, sql) {
     const connectionId = get().sessions.find((s) => s.id === sessionId)?.connectionId
-    if (!connectionId) throw new Error('This session has no saved connection profile.')
+    if (!connectionId) throw new Error(t('appStore.no-saved-connection-profile'))
     const file = await api.createQueryFile(connectionId, database, name, sql)
     await get().reloadQueryFolder(connectionId, database)
     return file
@@ -1249,14 +1332,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openQueryTab(sessionId, database, schema) {
     const id = `query:${sessionId}:${Math.random().toString(36).slice(2, 10)}`
-    const tab: WorkspaceTab = {
-      id,
-      kind: 'query',
-      sessionId,
-      title: 'Query',
-      database,
-      schema,
-    }
+    const tab = titled({ id, kind: 'query', sessionId, database, schema } as const)
     set((state) => ({
       tabs: [...state.tabs, tab],
       ...front('query', id),
@@ -1267,14 +1343,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   openQueryFileTab(sessionId, database, name) {
     const connectionId = get().sessions.find((s) => s.id === sessionId)?.connectionId
     if (!connectionId) return
-    const tab: WorkspaceTab = {
+    const tab = titled({
       id: queryFileId(connectionId, database, name),
       kind: 'query',
       sessionId,
-      title: name,
       database,
       queryFile: { connectionId, database, name },
-    }
+    } as const)
     set((state) => {
       // Already open — under this name now, or under the name it had before a
       // rename: the window that is there is the file, so it comes back to the
@@ -1290,15 +1365,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openObjectsTab(sessionId, database, schema, list) {
     const id = `objects:${sessionId}:${database}:${schema}:${list}`
-    const tab: WorkspaceTab = {
-      id,
-      kind: 'objects',
-      sessionId,
-      title: list === 'index' ? 'Indexes' : FOLDER_LABEL[list],
-      database,
-      schema,
-      list,
-    }
+    const tab = titled({ id, kind: 'objects', sessionId, database, schema, list } as const)
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       ...front('objects', id),
@@ -1312,17 +1379,16 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openTableTab(sessionId, database, schema, object, view) {
     const id = `table:${sessionId}:${database}:${schema}:${object.name}`
-    const tab: WorkspaceTab = {
+    const tab = titled({
       id,
       kind: 'table',
       sessionId,
-      title: object.name,
       database,
       schema,
       object: object.name,
       objectKind: object.kind,
       view: view ?? 'data',
-    }
+    } as const)
     set((state) => {
       const existing = state.tabs.find((t) => t.id === id)
       // Re-opening an already open object just brings it back to the requested
@@ -1342,14 +1408,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // Every "new table" window is its own draft, so it gets its own id instead
     // of being deduplicated like a table that has a name to key on.
     const id = `newtable:${sessionId}:${database}:${schema}:${Math.random().toString(36).slice(2, 10)}`
-    const tab: WorkspaceTab = {
-      id,
-      kind: 'newtable',
-      sessionId,
-      title: 'New table',
-      database,
-      schema,
-    }
+    const tab = titled({ id, kind: 'newtable', sessionId, database, schema } as const)
     const driver = get().driverOf(sessionId)?.type
     set((state) => ({
       tabs: [...state.tabs, tab],
@@ -1367,15 +1426,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openDdlTab(sessionId, database, schema, object) {
     const id = `ddl:${sessionId}:${database}:${schema}:${object ?? '*'}`
-    const tab: WorkspaceTab = {
-      id,
-      kind: 'ddl',
-      sessionId,
-      title: object ? `${object} DDL` : 'DDL script',
-      database,
-      schema,
-      object,
-    }
+    const tab = titled({ id, kind: 'ddl', sessionId, database, schema, object } as const)
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       ...front('ddl', id),
@@ -1385,16 +1436,15 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openCodegenTab(sessionId, database, schema, object) {
     const id = `codegen:${sessionId}:${database}:${schema}:${object.name}`
-    const tab: WorkspaceTab = {
+    const tab = titled({
       id,
       kind: 'codegen',
       sessionId,
-      title: `${object.name} code`,
       database,
       schema,
       object: object.name,
       objectKind: object.kind,
-    }
+    } as const)
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       ...front('codegen', id),
@@ -1426,15 +1476,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           ...focused(state, sessionId),
         }
       }
-      const tab: WorkspaceTab = {
-        id,
-        kind: 'datagen',
-        sessionId,
-        title: 'Data generation',
-        database,
-        schema,
-        object,
-      }
+      const tab = titled({ id, kind: 'datagen', sessionId, database, schema, object } as const)
       return {
         tabs: [...state.tabs, tab],
         ...front('datagen', id),
@@ -1445,14 +1487,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   openErTab(sessionId, database, schema) {
     const id = `er:${sessionId}:${database}:${schema}`
-    const tab: WorkspaceTab = {
-      id,
-      kind: 'er',
-      sessionId,
-      title: schema ? `ER · ${schema}` : 'ER diagram',
-      database,
-      schema,
-    }
+    const tab = titled({ id, kind: 'er', sessionId, database, schema } as const)
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       ...front('er', id),
@@ -1465,12 +1500,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     // when you double-click the connection, so a second tab would only be a
     // stale copy of the same numbers.
     const id = `runtime:${sessionId}`
-    const tab: WorkspaceTab = {
-      id,
-      kind: 'runtime',
-      sessionId,
-      title: 'Runtime',
-    }
+    const tab = titled({ id, kind: 'runtime', sessionId } as const)
     set((state) => ({
       tabs: state.tabs.some((t) => t.id === id) ? state.tabs : [...state.tabs, tab],
       ...front('runtime', id),

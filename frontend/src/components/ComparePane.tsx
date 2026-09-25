@@ -32,13 +32,14 @@ import type {
 import { capabilitiesOf, findDriver } from '../lib/capabilities'
 import { useAppStore } from '../store/appStore'
 import { SqlCode } from './SqlCode'
+import { t, tn } from '../lib/i18n'
 
 /** How a status reads as a word and a colour, in one place. */
 const STATUS: Record<DiffStatus, { label: string; color: string }> = {
-  added: { label: 'only left', color: 'green' },
-  removed: { label: 'only right', color: 'red' },
-  changed: { label: 'differs', color: 'gold' },
-  same: { label: 'same', color: 'default' },
+  added: { label: t('comparePane.only-left'), color: 'green' },
+  removed: { label: t('comparePane.only-right'), color: 'red' },
+  changed: { label: t('comparePane.differs'), color: 'gold' },
+  same: { label: t('comparePane.same'), color: 'default' },
 }
 
 /**
@@ -156,14 +157,14 @@ export function ComparePane() {
     <div className="dm-pane">
       <div className="dm-compare-bar">
         <SideField
-          label="Left · the reference"
+          label={t('comparePane.left-the-reference')}
           side={left}
           sessions={sessions}
           drivers={drivers}
           engine={rightDriver}
           onChange={changeLeft}
         />
-        <Tooltip title="Swap the two sides">
+        <Tooltip title={t('comparePane.swap-the-two-sides')}>
           <Button
             className="dm-compare-swap"
             icon={<SwapOutlined />}
@@ -172,7 +173,7 @@ export function ComparePane() {
           />
         </Tooltip>
         <SideField
-          label="Right · the one the script changes"
+          label={t('comparePane.right-the-one-the-script-changes')}
           side={right}
           sessions={sessions}
           drivers={drivers}
@@ -185,28 +186,28 @@ export function ComparePane() {
       </div>
 
       <div className="dm-editor-toolbar dm-compare-toolbar">
-        <Typography.Text strong>Differences</Typography.Text>
+        <Typography.Text strong>{t('comparePane.differences')}</Typography.Text>
         {compare ? (
           <>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {compare.leftLabel} → {compare.rightLabel}
             </Typography.Text>
             <Tag color={STATUS.added.color} style={{ marginInlineEnd: 0 }}>
-              {counts.added} only left
+              {counts.added} {t('comparePane.only-left')}
             </Tag>
             <Tag color={STATUS.removed.color} style={{ marginInlineEnd: 0 }}>
-              {counts.removed} only right
+              {counts.removed} {t('comparePane.only-right')}
             </Tag>
             <Tag color={STATUS.changed.color} style={{ marginInlineEnd: 0 }}>
-              {counts.changed} differ
+              {counts.changed} {t('comparePane.differ')}
             </Tag>
-            <Tag style={{ marginInlineEnd: 0 }}>{counts.same} same</Tag>
+            <Tag style={{ marginInlineEnd: 0 }}>{counts.same} {t('comparePane.same')}</Tag>
           </>
         ) : (
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {ready
-              ? 'Compare the two databases to see what differs'
-              : 'Pick a connection, database and schema on each side'}
+              ? t('comparePane.compare-the-two-databases-to-see-what-differs')
+              : t('comparePane.pick-a-connection-database-and-schema-on-each')}
           </Typography.Text>
         )}
         <div className="dm-toolbar-right">
@@ -215,7 +216,7 @@ export function ComparePane() {
             onChange={(e) => setOnlyDifferences(e.target.checked)}
             disabled={!compare}
           >
-            <Typography.Text style={{ fontSize: 12 }}>Only differences</Typography.Text>
+            <Typography.Text style={{ fontSize: 12 }}>{t('comparePane.only-differences')}</Typography.Text>
           </Checkbox>
           <Button
             size="small"
@@ -225,10 +226,10 @@ export function ComparePane() {
             disabled={!ready}
             onClick={() => void run({ left, right })}
           >
-            Compare
+            {t('comparePane.compare')}
           </Button>
           <Button size="small" disabled={!compare} onClick={() => setScripting(true)}>
-            Generate script
+            {t('comparePane.generate-script')}
           </Button>
         </div>
       </div>
@@ -237,7 +238,7 @@ export function ComparePane() {
         <Alert
           type="error"
           showIcon
-          title="The comparison could not be run"
+          title={t('comparePane.the-comparison-could-not-be-run')}
           description={error}
           style={{ margin: 8 }}
         />
@@ -246,7 +247,7 @@ export function ComparePane() {
         <Alert
           type="warning"
           showIcon
-          title="What this comparison did not look at"
+          title={t('comparePane.what-this-comparison-did-not-look-at')}
           description={
             <ul style={{ margin: 0, paddingInlineStart: 18 }}>
               {compare.warnings.map((warning) => (
@@ -267,8 +268,8 @@ export function ComparePane() {
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   description={
                     compare.tables.length === 0
-                      ? 'Neither database has a table to compare'
-                      : 'Every table is the same on both sides'
+                      ? t('comparePane.neither-database-has-a-table-to-compare')
+                      : t('comparePane.every-table-is-the-same-on-both-sides')
                   }
                   style={{ marginTop: 40 }}
                 />
@@ -296,7 +297,7 @@ export function ComparePane() {
               ) : (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="Nothing to show"
+                  description={t('comparePane.nothing-to-show')}
                   style={{ marginTop: 60 }}
                 />
               )}
@@ -309,8 +310,8 @@ export function ComparePane() {
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             description={
               sessions.length === 0
-                ? 'Open two connections to compare their databases'
-                : 'Compare two databases of the same engine'
+                ? t('comparePane.open-two-connections-to-compare-their-databases')
+                : t('comparePane.compare-two-databases-of-the-same-engine')
             }
             style={{ marginTop: 60 }}
           />
@@ -438,14 +439,15 @@ function SideField({
           size="small"
           style={{ width: 190 }}
           value={side.sessionId || undefined}
-          placeholder="Connection"
+          placeholder={t('comparePane.connection')}
           onChange={(id: string) => onChange({ sessionId: id })}
           options={sessions.map((item) => {
             const designable = capabilitiesOf(findDriver(drivers, item.driver)).designable
             const otherEngine = engine !== undefined && item.driver !== engine
+            const name = item.name || item.driver
             return {
               value: item.id,
-              label: `${item.name || item.driver}${item.readOnly ? ' · read-only' : ''}`,
+              label: item.readOnly ? t('comparePane.name-read-only', { name }) : name,
               disabled: !designable || otherEngine || (requireWritable && item.readOnly),
             }
           })}
@@ -454,7 +456,7 @@ function SideField({
           size="small"
           style={{ width: 150 }}
           value={side.database || undefined}
-          placeholder="Database"
+          placeholder={t('comparePane.database')}
           loading={busy}
           disabled={!side.sessionId}
           onChange={(database: string) => onChange({ sessionId: side.sessionId, database })}
@@ -465,7 +467,7 @@ function SideField({
             size="small"
             style={{ width: 150 }}
             value={side.schema || undefined}
-            placeholder="Schema"
+            placeholder={t('comparePane.schema')}
             disabled={!side.database}
             onChange={(schema: string) => onChange({ ...side, schema })}
             options={schemas.map((name) => ({ value: name, label: name }))}
@@ -476,12 +478,12 @@ function SideField({
           empty, and worth nothing once both are settled. */}
       {!side.sessionId && engine ? (
         <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-          Only {engine} connections are offered: both sides must be the same engine.
+          {t('comparePane.only-engine-connections-are-offered', { engine })}
         </Typography.Text>
       ) : null}
       {!side.sessionId && requireWritable ? (
         <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-          Read-only connections are not offered here: this is the side the script runs against.
+          {t('comparePane.read-only-connections-are-not-offered-here-this')}
         </Typography.Text>
       ) : null}
       {error ? (
@@ -596,30 +598,30 @@ function TableDetail({
             onChange={(e) => setShowSame(e.target.checked)}
             disabled={unchanged === 0 && !showSame}
           >
-            <Typography.Text style={{ fontSize: 12 }}>Show unchanged</Typography.Text>
+            <Typography.Text style={{ fontSize: 12 }}>{t('comparePane.show-unchanged')}</Typography.Text>
           </Checkbox>
         </div>
       </div>
 
       <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
-        Fields
+        {t('comparePane.fields')}
       </Typography.Text>
       {columns.length === 0 ? (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          Every field is the same on both sides.
+          {t('comparePane.every-field-is-the-same-on-both-sides')}
         </Typography.Text>
       ) : (
         columns.map(renderItem)
       )}
 
       <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 10 }}>
-        Indexes
+        {t('comparePane.indexes')}
       </Typography.Text>
       {indexes.length === 0 ? (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {table.indexes.length === 0
-            ? 'Neither side has a secondary index.'
-            : 'Every index is the same on both sides.'}
+            ? t('comparePane.neither-side-has-a-secondary-index')
+            : t('comparePane.every-index-is-the-same-on-both-sides')}
         </Typography.Text>
       ) : (
         indexes.map(renderItem)
@@ -701,7 +703,7 @@ function SyncScriptModal({
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(script)
-      message.success('Script copied')
+      message.success(t('comparePane.script-copied'))
     } catch (err) {
       message.error(toMessage(err))
     }
@@ -713,14 +715,11 @@ function SyncScriptModal({
       const result = await api.applySyncDatabase({ ...request, dropExtra })
       if (result.error) {
         message.error(
-          `The script stopped at statement ${result.failedIndex + 1}: ${result.error}`,
+          t('comparePane.the-script-stopped-at-statement', { failedIndex: result.failedIndex + 1, error: result.error }),
         )
         return
       }
-      const count = result.executed.length
-      message.success(
-        `${count} statement${count === 1 ? '' : 's'} applied to ${rightLabel}`,
-      )
+      message.success(tn('comparePane.statements-applied-to', result.executed.length, { rightLabel }))
       onApplied()
       onClose()
     } catch (err) {
@@ -735,13 +734,13 @@ function SyncScriptModal({
       open={open}
       onCancel={onClose}
       width={860}
-      title={`Update script for ${rightLabel}`}
+      title={t('comparePane.update-script-for', { rightLabel })}
       footer={[
         <Button key="close" onClick={onClose}>
-          Cancel
+          {t('comparePane.cancel')}
         </Button>,
         <Button key="copy" icon={<CopyOutlined />} disabled={empty} onClick={() => void copy()}>
-          Copy
+          {t('comparePane.copy')}
         </Button>,
         <Button
           key="run"
@@ -751,7 +750,7 @@ function SyncScriptModal({
           disabled={empty}
           onClick={() => void apply()}
         >
-          Run script
+          {t('comparePane.run-script')}
         </Button>,
       ]}
     >
@@ -759,7 +758,7 @@ function SyncScriptModal({
         <Alert
           type="error"
           showIcon
-          title="The script could not be generated"
+          title={t('comparePane.the-script-could-not-be-generated')}
           description={error}
           style={{ marginBottom: 12 }}
         />
@@ -770,14 +769,14 @@ function SyncScriptModal({
         onChange={(e) => setDropExtra(e.target.checked)}
         style={{ marginBottom: 12 }}
       >
-        Also drop tables that only the right database has
+        {t('comparePane.also-drop-tables-that-only-the-right-database')}
       </Checkbox>
 
       {plan && plan.warnings.length > 0 ? (
         <Alert
           type="warning"
           showIcon
-          title="Before this runs"
+          title={t('comparePane.before-this-runs')}
           style={{ marginBottom: 12 }}
           description={
             <ul style={{ margin: 0, paddingInlineStart: 18 }}>
@@ -795,8 +794,8 @@ function SyncScriptModal({
         <Alert
           type="success"
           showIcon
-          title="Nothing to do"
-          description="The right database already matches the left one; no statement would run."
+          title={t('comparePane.nothing-to-do')}
+          description={t('comparePane.the-right-database-already-matches-the-left-one')}
         />
       ) : (
         <>
@@ -805,8 +804,7 @@ function SyncScriptModal({
             type="secondary"
             style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}
           >
-            This runs against {rightLabel}, one statement at a time. There is no transaction
-            around it, so a statement that fails stops the rest and reports how far it got.
+            {t('comparePane.runs-against-one-at-a-time', { rightLabel })}
           </Typography.Paragraph>
         </>
       )}

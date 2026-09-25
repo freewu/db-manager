@@ -85,6 +85,7 @@ import {
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { MockPickerModal } from './MockPickerModal'
 import { useColumnResize } from './ResizableHeader'
+import { t, tn, useLanguage } from '../lib/i18n'
 
 /**
  * Rows per request.
@@ -182,17 +183,32 @@ function elapsedText(ms: number): string {
  * out. The skipped count is only worth a clause when there is one.
  */
 function resultHeadline(result: RunResult): string {
-  const rows = (count: number) => `${count.toLocaleString()} row(s)`
-  const skipped = result.skipped > 0 ? ` — ${rows(result.skipped)} skipped` : ''
+  const rows = (count: number) => tn('dataGenPane.n-rows', count)
+  const skipped = result.skipped > 0 ? tn('dataGenPane.rows-skipped', result.skipped) : ''
   switch (result.kind) {
     case 'done':
-      return `Inserted ${rows(result.inserted)} in ${elapsedText(result.ms)}${skipped}`
+      return t('dataGenPane.inserted-in', {
+        rows: rows(result.inserted),
+        elapsed: elapsedText(result.ms),
+        skipped,
+      })
     case 'stopped':
-      return `Stopped after ${rows(result.inserted)} in ${elapsedText(result.ms)}${skipped}`
+      return t('dataGenPane.stopped-after-in', {
+        rows: rows(result.inserted),
+        elapsed: elapsedText(result.ms),
+        skipped,
+      })
     case 'failed':
-      return `Row ${result.row.toLocaleString()} was refused after ${elapsedText(result.ms)} — ${rows(result.inserted)} are in the table`
+      return t('dataGenPane.row-was-refused', {
+        row: result.row.toLocaleString(),
+        elapsed: elapsedText(result.ms),
+        rows: rows(result.inserted),
+      })
     case 'error':
-      return `Insert failed after ${rows(result.inserted)} in ${elapsedText(result.ms)}`
+      return t('dataGenPane.insert-failed-after-in', {
+        rows: rows(result.inserted),
+        elapsed: elapsedText(result.ms),
+      })
   }
 }
 
@@ -201,6 +217,7 @@ interface DataGenPaneProps {
 }
 
 export function DataGenPane({ tab }: DataGenPaneProps) {
+  const language = useLanguage()
   const sessionId = tab.sessionId
   const { modal } = AntApp.useApp()
   const session = useAppStore((s) => s.sessionOf(sessionId))
@@ -419,7 +436,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
       if (!tree.loaded[scope]) return undefined
       const objects = tree.objects[objectsKey(sessionIdHere, db, ns)] ?? []
       const tables = objects.filter((entry) => entry.kind === 'table')
-      if (tables.length === 0) return [placeholder(`placeholder:${scope}`, 'No tables')]
+      if (tables.length === 0) return [placeholder(`placeholder:${scope}`, t('dataGenPane.no-tables'))]
       return tables.map((entry) => ({
         key: encodeNode({
           t: 'object',
@@ -449,7 +466,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
           const schemas = tree.schemas[scope] ?? []
           node.children =
             schemas.length === 0
-              ? [placeholder(`placeholder:${scope}`, 'No schemas')]
+              ? [placeholder(`placeholder:${scope}`, t('dataGenPane.no-schemas'))]
               : schemas.map((schemaName) => ({
                   key: encodeNode({
                     t: 'schema',
@@ -473,7 +490,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
         title: (
           <Space size={6}>
             <span>{entry.name}</span>
-            {canFill ? null : <Typography.Text type="secondary">(cannot insert)</Typography.Text>}
+            {canFill ? null : <Typography.Text type="secondary">{t('dataGenPane.cannot-insert')}</Typography.Text>}
           </Space>
         ),
         isLeaf: false,
@@ -485,12 +502,12 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
         const databases = tree.databases[entry.id] ?? []
         node.children =
           databases.length === 0
-            ? [placeholder(`placeholder:${entry.id}`, 'No databases')]
+            ? [placeholder(`placeholder:${entry.id}`, t('dataGenPane.no-databases'))]
             : databases.map((db) => dbNode(entry.id, db))
       }
       return node
     })
-  }, [sessions, drivers, tree, flatNamespace])
+  }, [language, sessions, drivers, tree, flatNamespace])
 
   const selectedKeys = useMemo(() => {
     if (!object) return []
@@ -553,17 +570,21 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
   /* --- the run ----------------------------------------------------------- */
 
   const blocker = !insertable
-    ? 'This engine cannot insert rows'
+    ? t('dataGenPane.this-engine-cannot-insert-rows')
     : readOnly
-      ? 'This session is read-only'
+      ? t('dataGenPane.this-session-is-read-only')
       : !object
-        ? 'Pick a table on the left'
+        ? t('dataGenPane.pick-a-table-on-the-left')
         : broken.length > 0
-          ? `Fix the mock in ${broken.map((row) => row.name).join(', ')}`
+          ? t('dataGenPane.fix-the-mock-in', {
+              names: broken.map((row) => row.name).join(', '),
+            })
           : missing.length > 0
-            ? `Write a mock for ${missing.map((row) => row.name).join(', ')} or untick the field`
+            ? t('dataGenPane.write-a-mock-for-or-untick', {
+                names: missing.map((row) => row.name).join(', '),
+              })
             : ticked.length === 0
-              ? 'No field is ticked'
+              ? t('dataGenPane.no-field-is-ticked')
               : undefined
 
   /**
@@ -645,25 +666,27 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
   const generate = useCallback(() => {
     if (blocker || !structure || !object) return
     modal.confirm({
-      title: `Generate ${rowsToWrite} row(s) into “${object}”?`,
+      title: tn('dataGenPane.generate-rows-into', rowsToWrite, { object }),
       content: (
         <div style={{ fontSize: 12 }}>
           <div>
-            {ticked.length} of {structure.columns.length} column(s) are sent:{' '}
+            {t('dataGenPane.n-of-m-columns-are-sent', {
+              sent: ticked.length,
+              total: structure.columns.length,
+            })}{' '}
             <span className="mono">{ticked.map((row) => row.name).join(', ')}</span>
           </div>
           <div style={{ marginTop: 6 }}>
-            The rows go straight into the table in batches of {INSERT_BATCH}. There is no undo —
-            delete them the way you would delete any other row.
+            {t('dataGenPane.batches-no-undo', { batch: INSERT_BATCH })}
           </div>
           <div style={{ marginTop: 6 }}>
             {skipErrors
-              ? 'A row the engine refuses is left out and counted; the run carries on without it.'
-              : 'The run stops at the first row the engine refuses and says which one it was.'}
+              ? t('dataGenPane.a-row-the-engine-refuses-is-left-out-and-counted')
+              : t('dataGenPane.the-run-stops-at-the-first-row-the-engine')}
           </div>
         </div>
       ),
-      okText: 'Generate',
+      okText: t('dataGenPane.generate'),
       // Closing here and running detached: the dialog is not what reports the run.
       onOk: () => {
         void runGeneration()
@@ -676,7 +699,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
   const columns: TableColumnsType<FieldRow> = useMemo(
     () => [
       {
-        title: 'Field',
+        title: t('dataGenPane.field'),
         key: 'field',
         dataIndex: 'name',
         width: 200,
@@ -685,14 +708,14 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
             <span className="mono">{name}</span>
             {row.column.primaryKey ? (
               <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                key
+                {t('dataGenPane.key')}
               </Typography.Text>
             ) : null}
           </Space>
         ),
       },
       {
-        title: 'Type',
+        title: t('dataGenPane.type'),
         dataIndex: 'kind',
         width: 160,
         render: (_kind: ColumnKind, row) => (
@@ -702,7 +725,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
         ),
       },
       {
-        title: 'Mock',
+        title: t('dataGenPane.mock'),
         dataIndex: 'template',
         width: 320,
         render: (_value: string, row) => (
@@ -712,10 +735,10 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
               className="mono"
               value={row.template}
               status={selectedOf(row.column) && row.compiled.error ? 'error' : undefined}
-              placeholder="(no mock)"
+              placeholder={t('dataGenPane.no-mock')}
               onChange={(event) => setMock(row.name, event.target.value)}
             />
-            <Tooltip title="Pick a placeholder">
+            <Tooltip title={t('dataGenPane.pick-a-placeholder')}>
               <Button
                 size="small"
                 icon={<ExperimentOutlined />}
@@ -726,7 +749,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
         ),
       },
       {
-        title: 'Description',
+        title: t('dataGenPane.description'),
         key: 'description',
         dataIndex: 'name',
         render: (_name: string, row) => (
@@ -738,7 +761,9 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
         ),
       },
     ],
-    [placeholders, selectedOf, setMock],
+    // The column headers and the mock hints are words, so a language change has
+    // to rebuild the table rather than leave the old ones in place.
+    [language, placeholders, selectedOf, setMock],
   )
 
   const grid = useColumnResize(columns)
@@ -750,11 +775,11 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
           banner
           type="info"
           showIcon
-          title="This engine cannot insert generated rows"
+          title={t('dataGenPane.this-engine-cannot-insert-generated-rows')}
           description={
             driver?.type === 'mongodb'
-              ? 'A collection has no column list, so there is nothing for a batch of generated values to line up with. Generate documents with the query window instead.'
-              : 'The driver for this connection does not implement row inserts.'
+              ? t('dataGenPane.a-collection-has-no-column-list-so-there-is')
+              : t('dataGenPane.the-driver-for-this-connection-does-not')
           }
         />
       </div>
@@ -768,7 +793,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
           <div className="dm-pane-body">
             <div className="dm-datagen-hint">
               <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                {flatNamespace ? 'Connection → database → tables' : 'Connection → database → schema → tables'}
+                {flatNamespace ? t('dataGenPane.connection-database-tables') : t('dataGenPane.connection-database-schema-tables')}
               </Typography.Text>
             </div>
             <Tree
@@ -787,11 +812,11 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
           <div className="dm-pane">
             <div className="dm-editor-toolbar">
               <Typography.Text strong>
-                {object ? <span className="mono">{object}</span> : 'No table picked'}
+                {object ? <span className="mono">{object}</span> : t('dataGenPane.no-table-picked')}
               </Typography.Text>
               {readOnly ? (
                 <Typography.Text type="warning" style={{ fontSize: 12 }}>
-                  read-only
+                  {t('dataGenPane.read-only')}
                 </Typography.Text>
               ) : null}
               <div className="dm-toolbar-right">
@@ -801,7 +826,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                     the one button that must not be the thing that falls off. */}
                 <Space size={6} wrap>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                    Rows
+                    {t('dataGenPane.rows')}
                   </Typography.Text>
                   <InputNumber
                     size="small"
@@ -812,16 +837,16 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                     onChange={(value) => setRowsToWrite(Math.max(1, Math.min(maxRows, Number(value ?? DEFAULT_ROWS))))}
                     style={{ width: 96 }}
                   />
-                  <Tooltip title={`At most ${maxRows.toLocaleString()} rows per run`}>
+                  <Tooltip title={t('dataGenPane.at-most-rows-per-run', { toLocaleString: maxRows.toLocaleString() })}>
                     <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                      max {maxRows.toLocaleString()}
+                      {t('dataGenPane.max')} {maxRows.toLocaleString()}
                     </Typography.Text>
                   </Tooltip>
                   <Tooltip
                     title={
                       skipErrors
-                        ? 'A row the engine refuses is left out and counted, and the run carries on'
-                        : 'The run stops at the first row the engine refuses (tick to carry on instead)'
+                        ? t('dataGenPane.a-row-the-engine-refuses-is-left-out-and-counted-2')
+                        : t('dataGenPane.the-run-stops-at-the-first-row-the-engine-2')
                     }
                   >
                     <Checkbox
@@ -830,7 +855,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                       onChange={(event) => setSkipErrors(event.target.checked)}
                       style={{ fontSize: 12 }}
                     >
-                      Skip bad rows
+                      {t('dataGenPane.skip-bad-rows')}
                     </Checkbox>
                   </Tooltip>
                   <Button
@@ -842,21 +867,21 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                       if (database) void loadObjects(sessionId, database, flatNamespace ? database : schema)
                     }}
                   >
-                    Reload
+                    {t('dataGenPane.reload')}
                   </Button>
-                  <Tooltip title="Put every column back to the mock this table's types suggest, and tick them the way they start">
+                  <Tooltip title={t('dataGenPane.put-every-column-back-to-the-mock-this-table-s')}>
                     <Button size="small" disabled={!object} onClick={resetMocks}>
-                      Reset mocks
+                      {t('dataGenPane.reset-mocks')}
                     </Button>
                   </Tooltip>
                   {running ? (
-                    <Tooltip title="Finish the batch in flight, then stop">
+                    <Tooltip title={t('dataGenPane.finish-the-batch-in-flight-then-stop')}>
                       <Button size="small" danger onClick={() => (stopRef.current = true)}>
-                        Stop
+                        {t('dataGenPane.stop')}
                       </Button>
                     </Tooltip>
                   ) : (
-                    <Tooltip title={blocker ?? 'Insert the generated rows'}>
+                    <Tooltip title={blocker ?? t('dataGenPane.insert-the-generated-rows')}>
                       <Button
                         size="small"
                         type="primary"
@@ -864,7 +889,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                         disabled={Boolean(blocker)}
                         onClick={generate}
                       >
-                        Generate
+                        {t('dataGenPane.generate')}
                       </Button>
                     </Tooltip>
                   )}
@@ -877,8 +902,8 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                 banner
                 type="warning"
                 showIcon
-                title="This session is read-only"
-                description="Connect without the read-only flag to write rows into this table."
+                title={t('dataGenPane.this-session-is-read-only')}
+                description={t('dataGenPane.connect-without-the-read-only-flag-to-write-rows')}
               />
             ) : null}
 
@@ -887,7 +912,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                 banner
                 type="error"
                 showIcon
-                title={`${object} could not be read`}
+                title={t('dataGenPane.could-not-be-read', { object })}
                 description={<span className="mono">{structureError}</span>}
               />
             ) : null}
@@ -896,16 +921,18 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
               <div className="dm-datagen-progress">
                 <div className="dm-datagen-progress-head">
                   <span>
-                    Inserted {progress.done.toLocaleString()} / {progress.total.toLocaleString()}{' '}
-                    row(s)
+                    {t('dataGenPane.inserted-done-of-total-rows', {
+                      done: progress.done.toLocaleString(),
+                      total: progress.total.toLocaleString(),
+                    })}
                     {progress.skipped > 0
-                      ? ` · ${progress.skipped.toLocaleString()} skipped`
+                      ? t('dataGenPane.skipped', { skipped: progress.skipped.toLocaleString() })
                       : ''}
                     {startedAt ? ` · ${elapsedText(Date.now() - startedAt)}` : ''}
                   </span>
-                  <Tooltip title="Finish the batch in flight, then stop">
+                  <Tooltip title={t('dataGenPane.finish-the-batch-in-flight-then-stop')}>
                     <Button size="small" type="link" danger onClick={() => (stopRef.current = true)}>
-                      Stop
+                      {t('dataGenPane.stop')}
                     </Button>
                   </Tooltip>
                 </div>
@@ -934,7 +961,7 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                     </span>
                   ) : result.skipReason ? (
                     <span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
-                      first refusal: {result.skipReason}
+                      {t('dataGenPane.first-refusal')} {result.skipReason}
                     </span>
                   ) : undefined
                 }
@@ -946,8 +973,10 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
                 banner
                 type="error"
                 showIcon
-                title={`Unknown placeholder in ${broken.map((row) => row.name).join(', ')}`}
-                description="A mock is mock.js syntax: an @name this app does not implement cannot be rendered, and is never written as text. Pick one from the catalogue, or write @@ for a literal @."
+                title={t('dataGenPane.unknown-placeholder-in', {
+                  names: broken.map((row) => row.name).join(', '),
+                })}
+                description={t('dataGenPane.a-mock-is-mock-js-syntax-an-name-this-app-does')}
               />
             ) : null}
 
@@ -955,19 +984,19 @@ export function DataGenPane({ tab }: DataGenPaneProps) {
               {!object ? (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="Pick a table to fill"
+                  description={t('dataGenPane.pick-a-table-to-fill')}
                   style={{ marginTop: 60 }}
                 />
               ) : loading && !structure ? (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="Reading the table…"
+                  description={t('dataGenPane.reading-the-table')}
                   style={{ marginTop: 60 }}
                 />
               ) : structure && structure.columns.length === 0 ? (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="This table has no columns"
+                  description={t('dataGenPane.this-table-has-no-columns')}
                   style={{ marginTop: 60 }}
                 />
               ) : structure ? (
@@ -1037,10 +1066,10 @@ function DescriptionCell({
         {selected
           ? mockDescription(row.column, row.template, row.compiled)
           : row.column.autoIncrement
-            ? 'Auto-increment — the engine assigns this column'
-            : 'Not sent — this column is left out of the INSERT'}
+            ? t('dataGenPane.auto-increment-the-engine-assigns-this-column')
+            : t('dataGenPane.not-sent-this-column-is-left-out-of-the-insert')}
       </div>
-      {sample ? <div className="dm-datagen-sample">e.g. {sample}</div> : null}
+      {sample ? <div className="dm-datagen-sample">{t('dataGenPane.e-g')} {sample}</div> : null}
     </div>
   )
 }

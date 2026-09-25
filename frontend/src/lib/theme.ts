@@ -8,6 +8,9 @@
  * the CodeMirror editors and the ER diagram, which read the same value.
  */
 
+import { t } from './i18n'
+import type { MessageKey } from './i18n'
+
 /** What the settings page stores. */
 export type ThemeMode = 'light' | 'dark' | 'system'
 
@@ -17,11 +20,33 @@ export type ResolvedTheme = 'light' | 'dark'
 /** The media query the OS answers: is the system theme dark? */
 export const DARK_QUERY = '(prefers-color-scheme: dark)'
 
-export const THEME_MODES: { value: ThemeMode; label: string; hint: string }[] = [
-  { value: 'light', label: 'Light', hint: 'Always the light theme' },
-  { value: 'dark', label: 'Dark', hint: 'Always the dark theme' },
-  { value: 'system', label: 'System', hint: 'Follow the operating system setting' },
-]
+/**
+ * What each setting is called, and what it means.
+ *
+ * The names live in the message tables rather than here, so that the settings
+ * page can show them in the interface's language — which is read at the moment
+ * the control is drawn, not at the moment this module is loaded.
+ */
+const THEME_WORDS: Record<ThemeMode, { labelKey: MessageKey; hintKey: MessageKey }> = {
+  light: { labelKey: 'libTheme.light', hintKey: 'libTheme.light-hint' },
+  dark: { labelKey: 'libTheme.dark', hintKey: 'libTheme.dark-hint' },
+  system: { labelKey: 'libTheme.system', hintKey: 'libTheme.system-hint' },
+}
+
+/** The three settings, in the order they are offered. */
+export const THEME_MODES: { value: ThemeMode; labelKey: MessageKey; hintKey: MessageKey }[] = (
+  ['light', 'dark', 'system'] as ThemeMode[]
+).map((value) => ({ value, ...THEME_WORDS[value] }))
+
+/** What a setting is called in the interface. */
+export function themeLabel(mode: ThemeMode): string {
+  return t(THEME_WORDS[mode].labelKey)
+}
+
+/** One line about what a setting does, for a tooltip. */
+export function themeHint(mode: ThemeMode): string {
+  return t(THEME_WORDS[mode].hintKey)
+}
 
 /**
  * Whether the operating system is in dark mode.

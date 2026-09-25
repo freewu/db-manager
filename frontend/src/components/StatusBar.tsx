@@ -8,7 +8,8 @@ import {
 
 import { useAppStore } from '../store/appStore'
 import { driverIcon } from '../lib/assets'
-import { THEME_MODES } from '../lib/theme'
+import { THEME_MODES, themeLabel } from '../lib/theme'
+import { t, tn } from '../lib/i18n'
 
 /**
  * Bottom status strip: active session details and global counters.
@@ -67,16 +68,16 @@ export function StatusBar() {
             </span>
           ) : null}
           {session.readOnly ? (
-            <Tooltip title="Write statements are rejected for this session">
+            <Tooltip title={t('statusBar.write-statements-are-rejected-for-this-session')}>
               <span className="dm-statusbar-item">
-                <LockOutlined /> read-only
+                <LockOutlined /> {t('statusBar.read-only')}
               </span>
             </Tooltip>
           ) : null}
           {profile?.color ? (
             <span
               className="dm-statusbar-item"
-              title="Profile colour"
+              title={t('statusBar.profile-colour')}
               style={{
                 width: 8,
                 height: 8,
@@ -88,17 +89,24 @@ export function StatusBar() {
         </>
       ) : (
         <span className="dm-statusbar-item">
-          <DisconnectOutlined /> no active connection
+          <DisconnectOutlined /> {t('statusBar.no-active-connection')}
         </span>
       )}
 
       <span className="dm-spacer" />
 
       <span className="dm-statusbar-item">
-        <TableOutlined /> {tabs.length} tab{tabs.length === 1 ? '' : 's'}
+        <TableOutlined /> {tn('statusBar.tab-count', tabs.length)}
       </span>
-      <span className="dm-statusbar-item">{sessions.length} connected</span>
-      <Tooltip title={`Backend ${appInfo?.version ?? '?'} · ${appInfo?.goVersion ?? ''}`}>
+      <span className="dm-statusbar-item">
+        {tn('statusBar.connection-count', sessions.length)}
+      </span>
+      <Tooltip
+        title={t('statusBar.backend', {
+          version: appInfo?.version ?? '?',
+          goVersion: appInfo?.goVersion ?? '',
+        })}
+      >
         <span className="dm-statusbar-item">v{appInfo?.version ?? '—'}</span>
       </Tooltip>
       {/* The status bar shows the *preference* (so "System" is visible as
@@ -106,8 +114,8 @@ export function StatusBar() {
       <Tooltip
         title={
           theme === 'system'
-            ? `Following the system theme (${resolvedTheme}) — click to switch`
-            : 'Switch theme: light, dark, or follow the system'
+            ? t('statusBar.following-the-system-theme-click-to-switch', { resolvedTheme })
+            : t('statusBar.switch-theme-light-dark-or-follow-the-system')
         }
       >
         <span
@@ -122,8 +130,8 @@ export function StatusBar() {
             }
           }}
         >
-          {theme}
-          {theme === 'system' ? ` (${resolvedTheme})` : ''}
+          {themeLabel(theme)}
+          {theme === 'system' ? t('statusBar.system-theme-suffix', { resolvedTheme }) : ''}
         </span>
       </Tooltip>
     </div>

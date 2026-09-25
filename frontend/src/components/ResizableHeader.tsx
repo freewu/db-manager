@@ -6,6 +6,7 @@ import type {
   ThHTMLAttributes,
 } from 'react'
 import type { TableColumnType, TableColumnsType, TableProps } from 'antd'
+import { t } from '../lib/i18n'
 
 /**
  * Draggable column widths for the grids.
@@ -229,7 +230,7 @@ function ResizableHeaderCell({ dmResize, children, ...rest }: HeaderCellProps) {
           className="dm-col-resizer"
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize column"
+          aria-label={t('resizableHeader.resize-column')}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={finish}

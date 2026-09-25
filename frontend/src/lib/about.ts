@@ -7,6 +7,7 @@
  * for the native packaging metadata) — keep the two in step when it changes.
  */
 import pkg from '../../package.json'
+import { t } from './i18n'
 
 /** Owner and name of the repository; every link below is derived from them. */
 export const REPO_OWNER = 'freewu'
@@ -60,18 +61,25 @@ export const BUILD_RECIPES = ['just build', 'just release', 'just publish']
  * The Justfile as a badge: the label names the file, the value lists the recipes
  * a user would actually type, and the whole pill links to the file itself — a
  * table row would say the same thing with more chrome.
+ *
+ * Built when it is asked for rather than once at the top of the file: the title
+ * is a word the reader may have changed the language of since this module was
+ * first loaded. The badge labels and values are names — `justfile`, `go`,
+ * `windows` — and read the same in every language, so they stay in the source.
  */
-export const BUILD_GROUP: ShieldGroup = {
-  title: 'Build',
-  shields: [
-    {
-      label: 'justfile',
-      value: BUILD_RECIPES.join(' · '),
-      // Same neutral tooling grey as the `just` version badge above.
-      color: '#4B5563',
-      href: JUSTFILE_URL,
-    },
-  ],
+export function buildGroup(): ShieldGroup {
+  return {
+    title: t('libAbout.build'),
+    shields: [
+      {
+        label: 'justfile',
+        value: BUILD_RECIPES.join(' · '),
+        // Same neutral tooling grey as the `just` version badge above.
+        color: '#4B5563',
+        href: JUSTFILE_URL,
+      },
+    ],
+  }
 }
 
 /**
@@ -81,14 +89,16 @@ export const BUILD_GROUP: ShieldGroup = {
  * answers "does it run on my machine?" without the reader having to know which
  * platform the binary in front of them was built for.
  */
-export const PLATFORM_GROUP: ShieldGroup = {
-  title: 'Platforms',
-  shields: [
-    { label: 'windows', value: 'amd64', color: '#0078D4' },
-    { label: 'macos', value: 'universal', color: '#000000' },
-    // Linux yellow is light, so the value needs dark text.
-    { label: 'linux', value: 'amd64', color: '#FCC624', dark: true },
-  ],
+export function platformGroup(): ShieldGroup {
+  return {
+    title: t('libAbout.platforms'),
+    shields: [
+      { label: 'windows', value: 'amd64', color: '#0078D4' },
+      { label: 'macos', value: 'universal', color: '#000000' },
+      // Linux yellow is light, so the value needs dark text.
+      { label: 'linux', value: 'amd64', color: '#FCC624', dark: true },
+    ],
+  }
 }
 
 /**
@@ -141,14 +151,14 @@ function depVersion(name: string): string {
 export function techStack(goVersion?: string): ShieldGroup[] {
   return [
     {
-      title: 'Runtime',
+      title: t('libAbout.runtime'),
       shields: [
         { label: 'go', value: goVersion || 'unknown', color: '#00ADD8' },
         { label: 'typescript', value: depVersion('typescript'), color: '#3178C6' },
       ],
     },
     {
-      title: 'Desktop and UI',
+      title: t('libAbout.desktop-and-ui'),
       shields: [
         { label: 'wails', value: 'v2', color: '#DF0000' },
         { label: 'react', value: depVersion('react'), color: '#61DAFB', dark: true },

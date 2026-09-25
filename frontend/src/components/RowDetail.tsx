@@ -5,6 +5,7 @@ import { CheckOutlined, UndoOutlined } from '@ant-design/icons'
 import { api, toMessage } from '../api/client'
 import type { CellValue, ColumnMeta, KeyValue, RowUpdate } from '../api/types'
 import { looksLikeParagraph } from './DataGrid'
+import { t, tn } from '../lib/i18n'
 
 export interface RowDetailProps {
   /** The row whose detail is on screen, as it came back from the engine. */
@@ -138,25 +139,27 @@ export function RowDetail({
     setBusy(false)
     modal.confirm({
       title:
-        changed.length === 1 ? `Change ${changed[0].name}?` : `Change ${changed.length} columns?`,
+        changed.length === 1
+          ? t('rowDetail.change', { name: changed[0].name })
+          : tn('rowDetail.change-columns', changed.length),
       width: 660,
       icon: null,
       content: (
         <div className="dm-row-detail-plan">
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            This is the statement the engine will run.
+            {t('rowDetail.this-is-the-statement-the-engine-will-run')}
           </Typography.Text>
           <pre className="mono">{statement}</pre>
         </div>
       ),
-      okText: 'Apply',
+      okText: t('rowDetail.apply'),
       onOk: async () => {
         try {
           const affected = await api.updateRow(request())
           if (affected === 0) {
-            message.warning('No row matched: it may have been changed or deleted by someone else')
+            message.warning(t('rowDetail.no-row-matched-it-may-have-been-changed-or'))
           } else {
-            message.success(`Updated ${changed.length} column(s)`)
+            message.success(tn('rowDetail.updated-columns', changed.length))
           }
           onChanged()
         } catch (err) {
@@ -191,7 +194,7 @@ export function RowDetail({
                       PK
                     </Tag>
                   ) : null}
-                  {dirty ? <span className="dm-row-detail-dirty">changed</span> : null}
+                  {dirty ? <span className="dm-row-detail-dirty">{t('rowDetail.changed')}</span> : null}
                 </div>
                 {editable ? (
                   wantsRoom(column, initial[column.name] ?? '') ? (
@@ -227,7 +230,7 @@ export function RowDetail({
       {!readOnly ? (
         <div className="dm-row-detail-footer">
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {changed.length === 0 ? 'No changes' : `${changed.length} column(s) changed`}
+            {changed.length === 0 ? t('rowDetail.no-changes') : tn('rowDetail.columns-changed', changed.length)}
           </Typography.Text>
           <Space size={4}>
             <Button
@@ -236,7 +239,7 @@ export function RowDetail({
               disabled={changed.length === 0 || busy}
               onClick={() => setDrafts(initial)}
             >
-              Reset
+              {t('rowDetail.reset')}
             </Button>
             <Button
               size="small"
@@ -246,7 +249,7 @@ export function RowDetail({
               disabled={changed.length === 0}
               onClick={() => void apply()}
             >
-              Apply
+              {t('rowDetail.apply')}
             </Button>
           </Space>
         </div>

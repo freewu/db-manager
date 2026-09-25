@@ -5,6 +5,7 @@ import { ExperimentOutlined } from '@ant-design/icons'
 
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { DataGenPane } from './DataGenPane'
+import { t } from '../lib/i18n'
 
 /**
  * The data generation page: the windows that write rows.
@@ -44,11 +45,11 @@ export function DataGenWorkspace() {
     <div className="dm-pane">
       <div className="dm-editor-toolbar">
         <ExperimentOutlined style={{ opacity: 0.7 }} />
-        <Typography.Text strong>Data generation</Typography.Text>
+        <Typography.Text strong>{t('dataGenWorkspace.data-generation')}</Typography.Text>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {tabs.length === 1
-            ? 'one open connection'
-            : `${tabs.length} open connections`}
+            ? t('dataGenWorkspace.one-open-connection')
+            : t('dataGenWorkspace.open-connections', { n: tabs.length })}
         </Typography.Text>
       </div>
       {tabs.length === 0 ? (
@@ -60,10 +61,9 @@ export function DataGenWorkspace() {
           style={{ margin: 'auto' }}
           description={
             <Space direction="vertical" size={2}>
-              <Typography.Text>No generation window is open</Typography.Text>
+              <Typography.Text>{t('dataGenWorkspace.no-generation-window-is-open')}</Typography.Text>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                Right-click a table in the explorer and pick “Data generation…”, or press the flask
-                in the page rail.
+                {t('dataGenWorkspace.right-click-a-table-in-the-explorer-and-pick')}
               </Typography.Text>
             </Space>
           }

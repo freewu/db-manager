@@ -6,6 +6,7 @@ import { CloseOutlined, LeftOutlined, RightOutlined } from '@ant-design/icons'
 
 import type { CellValue, ColumnMeta, QueryResult, SortSpec } from '../api/types'
 import { useColumnResize } from './ResizableHeader'
+import { t } from '../lib/i18n'
 
 export interface DataGridProps {
   result: QueryResult
@@ -128,7 +129,7 @@ function CellContent({ value, width = 360 }: { value: CellValue; width?: number 
     return <span className="dm-null">NULL</span>
   }
   if (typeof value === 'boolean') {
-    return <span className="mono">{value ? 'true' : 'false'}</span>
+    return <span className="mono">{value ? t('dataGrid.true') : t('dataGrid.false')}</span>
   }
   const text = String(value)
   // A number is never clipped: its digits are the value, and an ellipsis would
@@ -199,7 +200,7 @@ function EditableCell({
 
   if (!editing) {
     return (
-      <div className="dm-grid-cell" onDoubleClick={begin} title="Double click to edit">
+      <div className="dm-grid-cell" onDoubleClick={begin} title={t('dataGrid.double-click-to-edit')}>
         <CellContent value={value} width={width} />
       </div>
     )
@@ -364,7 +365,7 @@ export function DataGrid({
             index === openAt && openAt !== null ? 'dm-grid-row is-detail' : 'dm-grid-row'
           }
           pagination={false}
-          locale={{ emptyText: loading ? ' ' : 'No rows' }}
+          locale={{ emptyText: loading ? ' ' : t('dataGrid.no-rows') }}
         />
       </div>
       {onPageChange ? (
@@ -384,7 +385,7 @@ export function DataGrid({
           <button
             type="button"
             className="dm-row-detail-close"
-            aria-label="Close row detail"
+            aria-label={t('dataGrid.close-row-detail')}
             onClick={() => onDetailRowChange?.(null)}
           >
             <CloseOutlined />
@@ -452,7 +453,7 @@ function Pager({
       }}
     >
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        rows {first}–{last}
+        {t('dataGrid.rows')} {first}–{last}
       </Typography.Text>
       <Space size={4}>
         <Button
@@ -461,7 +462,7 @@ function Pager({
           disabled={page <= 1}
           onClick={() => onChange(page - 1, pageSize)}
         />
-        <span style={{ fontSize: 12 }}>page {page}</span>
+        <span style={{ fontSize: 12 }}>{t('dataGrid.page')} {page}</span>
         <Button
           size="small"
           icon={<RightOutlined />}
@@ -470,7 +471,7 @@ function Pager({
         />
       </Space>
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        {pageSize}/page
+        {pageSize}{t('dataGrid.page-2')}
       </Typography.Text>
     </div>
   )

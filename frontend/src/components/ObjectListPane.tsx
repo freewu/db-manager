@@ -17,6 +17,7 @@ import {
 import type { IndexEntry, ObjectInfo } from '../api/types'
 import { capabilitiesOf } from '../lib/capabilities'
 import { generatable } from '../lib/codegen'
+import { t, useLanguage } from '../lib/i18n'
 import { formatBytes, formatCount } from '../lib/format'
 import { indexesKey, KIND_SINGULAR, namespaceKey, objectsKey } from '../lib/tree'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
@@ -37,6 +38,7 @@ function measured(kind: ObjectInfo['kind']): boolean {
  * refreshes the cache — and therefore the tree's counts too.
  */
 export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
+  const language = useLanguage()
   const { message } = AntApp.useApp()
   const tree = useAppStore((s) => s.tree)
   const session = useAppStore((s) => s.sessions.find((s) => s.id === tab.sessionId))
@@ -134,9 +136,9 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
     async (name: string) => {
       try {
         await navigator.clipboard.writeText(name)
-        message.success(`Copied ${name}`)
+        message.success(t('objectListPane.copied', { name }))
       } catch {
-        message.warning('Clipboard is not available')
+        message.warning(t('objectListPane.clipboard-is-not-available'))
       }
     },
     [message],
@@ -148,13 +150,13 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         {
           key: 'data',
           icon: <UnorderedListOutlined />,
-          label: 'Open data',
+          label: t('objectListPane.open-data'),
           onClick: () => openObject(object, 'data'),
         },
         {
           key: 'structure',
           icon: <AppstoreOutlined />,
-          label: `Design ${KIND_SINGULAR[object.kind]}`,
+          label: t('objectListPane.design', { kind: t(KIND_SINGULAR[object.kind]) }),
           onClick: () => openObject(object, 'structure'),
         },
         ...(generatable(object.kind)
@@ -162,7 +164,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
               {
                 key: 'codegen',
                 icon: <FunctionOutlined />,
-                label: 'Generate code…',
+                label: t('objectListPane.generate-code'),
                 onClick: () => {
                   if (database && schema) {
                     openCodegenTab(tab.sessionId, database, schema, object)
@@ -176,7 +178,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
               {
                 key: 'datagen',
                 icon: <ExperimentOutlined />,
-                label: 'Data generation…',
+                label: t('objectListPane.data-generation'),
                 onClick: () => {
                   if (database && schema) {
                     openDataGenTab(tab.sessionId, database, schema, object.name)
@@ -189,7 +191,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         {
           key: 'copy',
           icon: <NumberOutlined />,
-          label: 'Copy name',
+          label: t('objectListPane.copy-name'),
           onClick: () => void copyName(object.name),
         },
       ],
@@ -200,7 +202,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
   const objectColumns = useMemo<TableColumnsType<ObjectInfo>>(
     () => [
       {
-        title: 'Name',
+        title: t('objectListPane.name'),
         dataIndex: 'name',
         sorter: (a, b) => a.name.localeCompare(b.name),
         defaultSortOrder: 'ascend',
@@ -212,15 +214,15 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         ),
       },
       {
-        title: 'Type',
+        title: t('objectListPane.type'),
         dataIndex: 'kind',
         width: 150,
         render: (kind: ObjectInfo['kind']) => (
-          <Typography.Text type="secondary">{KIND_SINGULAR[kind]}</Typography.Text>
+          <Typography.Text type="secondary">{t(KIND_SINGULAR[kind])}</Typography.Text>
         ),
       },
       {
-        title: 'Rows',
+        title: t('objectListPane.rows'),
         dataIndex: 'rowEstimate',
         width: 110,
         align: 'right',
@@ -233,7 +235,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
           ),
       },
       {
-        title: 'Size',
+        title: t('objectListPane.size'),
         dataIndex: 'sizeBytes',
         width: 110,
         align: 'right',
@@ -246,14 +248,14 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
           ),
       },
       {
-        title: 'Engine',
+        title: t('objectListPane.engine'),
         dataIndex: 'engine',
         width: 130,
         render: (engine?: string) =>
           engine ? <span className="mono">{engine}</span> : <Typography.Text type="secondary">—</Typography.Text>,
       },
       {
-        title: 'Comment',
+        title: t('objectListPane.comment'),
         dataIndex: 'comment',
         render: (comment?: string) =>
           comment ? (
@@ -282,13 +284,13 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         ),
       },
     ],
-    [rowMenu],
+    [language, rowMenu],
   )
 
   const indexColumns = useMemo<TableColumnsType<IndexEntry>>(
     () => [
       {
-        title: 'Name',
+        title: t('objectListPane.name'),
         dataIndex: 'name',
         sorter: (a, b) => a.name.localeCompare(b.name),
         defaultSortOrder: 'ascend',
@@ -300,13 +302,13 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         ),
       },
       {
-        title: 'Table',
+        title: t('objectListPane.table'),
         dataIndex: 'table',
         sorter: (a, b) => a.table.localeCompare(b.table),
         render: (table: string) => <span className="mono">{table}</span>,
       },
       {
-        title: 'Columns',
+        title: t('objectListPane.columns'),
         dataIndex: 'columns',
         render: (columns: string[]) => (
           <Tooltip title={columns.join(', ')}>
@@ -315,34 +317,34 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
         ),
       },
       {
-        title: 'Unique',
+        title: t('objectListPane.unique'),
         dataIndex: 'unique',
         width: 90,
         align: 'center',
         filters: [
-          { text: 'Unique', value: true },
-          { text: 'Not unique', value: false },
+          { text: t('objectListPane.unique'), value: true },
+          { text: t('objectListPane.not-unique'), value: false },
         ],
         onFilter: (value, row) => String(row.unique) === String(value),
         render: (unique: boolean) =>
           unique ? <CheckOutlined style={{ color: 'var(--dm-accent)' }} /> : null,
       },
       {
-        title: 'Primary',
+        title: t('objectListPane.primary'),
         dataIndex: 'primary',
         width: 90,
         align: 'center',
         render: (primary: boolean) => (primary ? <CheckOutlined style={{ color: '#d4a017' }} /> : null),
       },
       {
-        title: 'Method',
+        title: t('objectListPane.method'),
         dataIndex: 'method',
         width: 130,
         render: (method?: string) =>
           method ? <span className="mono">{method}</span> : <Typography.Text type="secondary">—</Typography.Text>,
       },
     ],
-    [],
+    [language, ],
   )
 
   // Both column sets are resizable; only one of them is on screen at a time.
@@ -351,7 +353,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
   const grid = isIndexes ? indexGrid : objectGrid
 
   if (!database || !schema) {
-    return <Empty description="No namespace selected" style={{ marginTop: 80 }} />
+    return <Empty description={t('objectListPane.no-namespace-selected')} style={{ marginTop: 80 }} />
   }
 
   const path = schema === database ? database : `${database}.${schema}`
@@ -369,7 +371,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {session ? session.name : ''}
           </Typography.Text>
-          <Tooltip title="Reload this list">
+          <Tooltip title={t('objectListPane.reload-this-list')}>
             <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={reload} />
           </Tooltip>
         </div>
@@ -381,7 +383,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
             <Empty
               description={
                 <Space direction="vertical" size={2}>
-                  <Typography.Text>Could not load {tab.title.toLowerCase()}</Typography.Text>
+                  <Typography.Text>{t('objectListPane.could-not-load')} {tab.title.toLowerCase()}</Typography.Text>
                   <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                     {error}
                   </Typography.Text>
@@ -389,7 +391,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
               }
             >
               <Button size="small" icon={<ReloadOutlined />} onClick={reload}>
-                Try again
+                {t('objectListPane.try-again')}
               </Button>
             </Empty>
           </div>
@@ -399,7 +401,7 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
           </div>
         ) : total === 0 ? (
           <div className="dm-empty">
-            <Empty description={`No ${tab.title.toLowerCase()} in ${path}`} />
+            <Empty description={t('objectListPane.no-in', { kind: tab.title.toLowerCase(), path })} />
           </div>
         ) : (
           <Table<ObjectInfo | IndexEntry>
@@ -451,17 +453,17 @@ export function ObjectListPane({ tab }: { tab: WorkspaceTab }) {
           allowClear
           value={filter}
           prefix={<SearchOutlined style={{ opacity: 0.5 }} />}
-          placeholder="Filter"
+          placeholder={t('objectListPane.filter')}
           style={{ width: 200 }}
           onChange={(event) => setFilter(event.target.value)}
         />
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {needle ? `${visible} of ${total}` : `${total}`}{' '}
-          {total === 1 ? 'item' : 'items'}
+          {needle ? t('objectListPane.of', { visible, total }) : `${total}`}{' '}
+          {total === 1 ? t('objectListPane.item') : t('objectListPane.items')}
         </Typography.Text>
         <div className="dm-list-footer-hint">
           <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-            Click to open · double-click to design
+            {t('objectListPane.click-to-open-double-click-to-design')}
           </Typography.Text>
         </div>
       </div>

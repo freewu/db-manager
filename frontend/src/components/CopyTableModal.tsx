@@ -4,6 +4,7 @@ import { Alert, App as AntApp, Input, Modal, Radio, Typography } from 'antd'
 import { api, toMessage } from '../api/client'
 import type { DesignPlan, DesignResult, DriverType } from '../api/types'
 import { SqlCode } from './SqlCode'
+import { t, tn } from '../lib/i18n'
 
 /** The table being duplicated, and where it lives. */
 export interface CopyTableSource {
@@ -134,13 +135,16 @@ export function CopyTableModal({ source, onClose, onFinished }: CopyTableModalPr
           `statement ${result.failedIndex + 1} of ${result.plan.statements.length} failed: ${result.error}`,
         )
         message.error(
-          `Copied ${result.executed.length} of ${result.plan.statements.length} statement(s)`,
+          tn('copyTableModal.copied-statements', result.plan.statements.length, {
+            done: result.executed.length,
+            total: result.plan.statements.length,
+          }),
         )
       } else {
         message.success(
           withData
-            ? `Table ${source.object} copied to ${name}, rows included`
-            : `Table ${source.object} copied to ${name}`,
+            ? t('copyTableModal.table-copied-to-rows-included', { object: source.object, name })
+            : t('copyTableModal.table-copied-to', { object: source.object, name }),
         )
         onClose()
       }
@@ -154,8 +158,8 @@ export function CopyTableModal({ source, onClose, onFinished }: CopyTableModalPr
   return (
     <Modal
       open={source !== null}
-      title={source ? `Duplicate table ${source.object}` : 'Duplicate table'}
-      okText="Create copy"
+      title={source ? t('copyTableModal.duplicate-table', { object: source.object }) : t('copyTableModal.duplicate-table-2')}
+      okText={t('copyTableModal.create-copy')}
       confirmLoading={busy}
       okButtonProps={{ disabled: !target.trim() || error !== null }}
       onOk={() => void submit()}
@@ -163,13 +167,13 @@ export function CopyTableModal({ source, onClose, onFinished }: CopyTableModalPr
       destroyOnHidden
     >
       <label className="dm-field-label" htmlFor="dm-copy-table-name">
-        Name of the copy
+        {t('copyTableModal.name-of-the-copy')}
       </label>
       <Input
         id="dm-copy-table-name"
         autoFocus
         value={target}
-        placeholder={object ? defaultCopyName(object) : 'orders_copy'}
+        placeholder={object ? defaultCopyName(object) : t('copyTableModal.orders-copy')}
         onChange={(event) => setTarget(event.target.value)}
         onPressEnter={() => void submit()}
       />
@@ -180,15 +184,15 @@ export function CopyTableModal({ source, onClose, onFinished }: CopyTableModalPr
         onChange={(event) => setWithData(event.target.value === 'data')}
       >
         <Radio value="structure">
-          Structure only
+          {t('copyTableModal.structure-only')}
           <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>
-            the fields, the key and the indexes
+            {t('copyTableModal.the-fields-the-key-and-the-indexes')}
           </Typography.Text>
         </Radio>
         <Radio value="data">
-          Structure and data
+          {t('copyTableModal.structure-and-data')}
           <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>
-            the same, and the rows with it
+            {t('copyTableModal.the-same-and-the-rows-with-it')}
           </Typography.Text>
         </Radio>
       </Radio.Group>
@@ -204,7 +208,7 @@ export function CopyTableModal({ source, onClose, onFinished }: CopyTableModalPr
           type="info"
           showIcon
           style={{ marginTop: 12 }}
-          title="This engine cannot copy everything as it stands"
+          title={t('copyTableModal.this-engine-cannot-copy-everything-as-it-stands')}
           description={
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {plan.warnings.map((warning, index) => (
@@ -225,13 +229,13 @@ export function CopyTableModal({ source, onClose, onFinished }: CopyTableModalPr
           />
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
             {withData
-              ? 'The rows are moved by the server, one statement for all of them.'
-              : 'The statements run one at a time, in this order.'}
+              ? t('copyTableModal.the-rows-are-moved-by-the-server-one-statement')
+              : t('copyTableModal.the-statements-run-one-at-a-time-in-this-order')}
           </Typography.Text>
         </>
       ) : !error ? (
         <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-          Name it and the statement appears here.
+          {t('copyTableModal.name-it-and-the-statement-appears-here')}
         </Typography.Paragraph>
       ) : null}
     </Modal>

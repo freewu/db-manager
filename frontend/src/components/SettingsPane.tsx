@@ -22,18 +22,24 @@ import { MockPlaceholderSettings } from './MockPlaceholderSettings'
 import { useAppStore } from '../store/appStore'
 import { CODE_LANGUAGES } from '../lib/codegen'
 import { useSectionScroll } from '../lib/sectionScroll'
-import { THEME_MODES, type ThemeMode } from '../lib/theme'
+import { t, tn, useLanguage, LANGUAGE_CHOICES } from '../lib/i18n'
+import type { Language, MessageKey } from '../lib/i18n'
+import { THEME_MODES, themeHint, themeLabel, type ThemeMode } from '../lib/theme'
 
 /** The pages of the settings, in the order they are shown. */
-type SettingsTab = 'appearance' | 'code' | 'mock' | 'generation' | 'data' | 'about'
+type SettingsTab = 'appearance' | 'language' | 'code' | 'mock' | 'generation' | 'data' | 'about'
 
-const TABS: { key: SettingsTab; label: string }[] = [
-  { key: 'appearance', label: 'Appearance' },
-  { key: 'code', label: 'Code generation' },
-  { key: 'mock', label: 'Mock placeholders' },
-  { key: 'generation', label: 'Data generation' },
-  { key: 'data', label: 'Data folder' },
-  { key: 'about', label: 'About' },
+// The names are held as keys rather than as words: this list is built once, when
+// the module is loaded, and a word read here would freeze the page in whichever
+// language happened to be in force at that moment.
+const TABS: { key: SettingsTab; labelKey: MessageKey }[] = [
+  { key: 'appearance', labelKey: 'settingsPane.appearance' },
+  { key: 'language', labelKey: 'settingsPane.language' },
+  { key: 'code', labelKey: 'settingsPane.code-generation' },
+  { key: 'mock', labelKey: 'settingsPane.mock-placeholders' },
+  { key: 'generation', labelKey: 'settingsPane.data-generation' },
+  { key: 'data', labelKey: 'settingsPane.data-folder' },
+  { key: 'about', labelKey: 'settingsPane.about' },
 ]
 
 /** The id a section carries, so the nav can point at it and the scroll can find it. */
@@ -52,7 +58,7 @@ const LANGUAGE_OPTIONS = [...CODE_LANGUAGES]
  * mock placeholders exist, how much one data generation run may write, where the
  * data is kept, and what this build is.
  *
- * This is a page rather than a dialog, like the other three the rail names: it is
+ * This is a page rather than a dialog, like the other pages the rail names: it is
  * somewhere the user goes and comes back from, not something that opens over
  * what they were doing. Everything on it is applied as it is changed — the theme
  * and the code language go to the state file through the store and the data
@@ -71,6 +77,10 @@ export function SettingsPane() {
   const active = useAppStore((s) => s.page === 'settings')
   const theme = useAppStore((s) => s.theme)
   const setTheme = useAppStore((s) => s.setTheme)
+  // The interface language is not kept in the store — every string is read
+  // through `t`, and this is how a component follows a switch.
+  const language = useLanguage()
+  const setUiLanguage = useAppStore((s) => s.setUiLanguage)
   const codegenLanguage = useAppStore((s) => s.codegenLanguage)
   const setCodegenLanguage = useAppStore((s) => s.setCodegenLanguage)
   const dataDir = useAppStore((s) => s.dataDir)
@@ -107,7 +117,9 @@ export function SettingsPane() {
         let target = ''
         if (!reset) {
           setBusy('pick')
-          target = await api.pickDataDirectory('Choose where DB Manager keeps its data')
+          target = await api.pickDataDirectory(
+            t('settingsPane.choose-where-db-manager-keeps-its-data'),
+          )
           // Cancelling the chooser is not an error, and must not move anything.
           if (!target) return
         }
@@ -115,7 +127,7 @@ export function SettingsPane() {
         const result = await moveDataDir(target)
         setOutcome(result)
         message.success(
-          reset ? 'The data is back in the default folder' : `Data moved to ${result.info.path}`,
+          reset ? t('settingsPane.the-data-is-back-in-the-default-folder') : t('settingsPane.data-moved-to', { path: result.info.path }),
         )
       } catch (err) {
         // The data may well have moved even when this fires: the backend says so
@@ -134,14 +146,14 @@ export function SettingsPane() {
     <div className="dm-pane">
       <div className="dm-editor-toolbar">
         <SettingOutlined style={{ opacity: 0.7 }} />
-        <Typography.Text strong>Settings</Typography.Text>
+        <Typography.Text strong>{t('settingsPane.settings')}</Typography.Text>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          Theme, code generation, mock placeholders, the data folder and this build
+          {t('settingsPane.settings-hint')}
         </Typography.Text>
       </div>
 
       <div className="dm-settings-page">
-        <nav className="dm-settings-nav" role="tablist" aria-label="Settings">
+        <nav className="dm-settings-nav" role="tablist" aria-label={t('settingsPane.settings')}>
           {TABS.map((entry) => (
             <button
               key={entry.key}
@@ -152,7 +164,7 @@ export function SettingsPane() {
               className={`dm-settings-nav-item${tab === entry.key ? ' is-active' : ''}`}
               onClick={() => goTo(entry.key)}
             >
-              {entry.label}
+              {t(entry.labelKey)}
             </button>
           ))}
         </nav>
@@ -164,20 +176,20 @@ export function SettingsPane() {
             className="dm-settings-section"
             id={sectionId('appearance')}
             role="tabpanel"
-            aria-label="Appearance"
+            aria-label={t('settingsPane.appearance')}
           >
-            <h2 className="dm-settings-section-title">Appearance</h2>
+            <h2 className="dm-settings-section-title">{t('settingsPane.appearance')}</h2>
             <SettingRow
-              title="Display theme"
-              hint="On System the window follows the operating system and switches the moment it does."
+              title={t('settingsPane.display-theme')}
+              hint={t('settingsPane.display-theme-hint')}
             >
               <Segmented
                 value={theme}
                 options={THEME_MODES.map((mode) => ({
                   value: mode.value,
                   label: (
-                    <Tooltip title={mode.hint}>
-                      <span>{mode.label}</span>
+                    <Tooltip title={themeHint(mode.value)}>
+                      <span>{themeLabel(mode.value)}</span>
                     </Tooltip>
                   ),
                 }))}
@@ -188,14 +200,40 @@ export function SettingsPane() {
 
           <section
             className="dm-settings-section"
+            id={sectionId('language')}
+            role="tabpanel"
+            aria-label={t('settingsPane.language')}
+          >
+            <h2 className="dm-settings-section-title">{t('settingsPane.language')}</h2>
+            <SettingRow
+              title={t('settingsPane.interface-language')}
+              hint={t('settingsPane.interface-language-hint')}
+            >
+              <Segmented
+                value={language}
+                options={LANGUAGE_CHOICES.map((choice) => ({
+                  value: choice.value,
+                  label: (
+                    <Tooltip title={choice.hint}>
+                      <span>{choice.label}</span>
+                    </Tooltip>
+                  ),
+                }))}
+                onChange={(value) => setUiLanguage(value as Language)}
+              />
+            </SettingRow>
+          </section>
+
+          <section
+            className="dm-settings-section"
             id={sectionId('code')}
             role="tabpanel"
-            aria-label="Code generation"
+            aria-label={t('settingsPane.code-generation')}
           >
-            <h2 className="dm-settings-section-title">Code generation</h2>
+            <h2 className="dm-settings-section-title">{t('settingsPane.code-generation')}</h2>
             <SettingRow
-              title="Default code language"
-              hint="What a new code window opens in. Each window can be switched to another language on the spot; this is the one it starts from."
+              title={t('settingsPane.default-code-language')}
+              hint={t('settingsPane.default-code-language-hint')}
             >
               <Select
                 showSearch
@@ -212,9 +250,9 @@ export function SettingsPane() {
             className="dm-settings-section"
             id={sectionId('mock')}
             role="tabpanel"
-            aria-label="Mock placeholders"
+            aria-label={t('settingsPane.mock-placeholders')}
           >
-            <h2 className="dm-settings-section-title">Mock placeholders</h2>
+            <h2 className="dm-settings-section-title">{t('settingsPane.mock-placeholders')}</h2>
             <MockPlaceholderSettings />
           </section>
 
@@ -222,9 +260,9 @@ export function SettingsPane() {
             className="dm-settings-section"
             id={sectionId('generation')}
             role="tabpanel"
-            aria-label="Data generation"
+            aria-label={t('settingsPane.data-generation')}
           >
-            <h2 className="dm-settings-section-title">Data generation</h2>
+            <h2 className="dm-settings-section-title">{t('settingsPane.data-generation')}</h2>
             <DataGenRows />
           </section>
 
@@ -232,12 +270,12 @@ export function SettingsPane() {
             className="dm-settings-section"
             id={sectionId('data')}
             role="tabpanel"
-            aria-label="Data folder"
+            aria-label={t('settingsPane.data-folder')}
           >
-            <h2 className="dm-settings-section-title">Data folder</h2>
+            <h2 className="dm-settings-section-title">{t('settingsPane.data-folder')}</h2>
             <SettingRow
-              title="Where the data lives"
-              hint="Connections, query favourites, window state and the password key live here; moving the folder takes them all along."
+              title={t('settingsPane.where-the-data-lives')}
+              hint={t('settingsPane.where-the-data-lives-hint')}
             >
               <DataDirPath info={dataDir} />
               <Space wrap>
@@ -245,14 +283,14 @@ export function SettingsPane() {
                   icon={<FolderOpenOutlined />}
                   onClick={() => void api.revealInExplorer(dataDir?.path ?? '')}
                 >
-                  Open folder
+                  {t('settingsPane.open-folder')}
                 </Button>
                 <Button
                   icon={<SwapOutlined />}
                   loading={busy === 'pick' || busy === 'move'}
                   onClick={() => void pickAndMove(false)}
                 >
-                  Change…
+                  {t('settingsPane.change')}
                 </Button>
                 <Button
                   icon={<ReloadOutlined />}
@@ -260,13 +298,13 @@ export function SettingsPane() {
                   loading={busy === 'reset'}
                   onClick={() => void pickAndMove(true)}
                 >
-                  Use the default
+                  {t('settingsPane.use-the-default')}
                 </Button>
               </Space>
             </SettingRow>
 
             {error ? (
-              <Alert type="error" showIcon title="The move did not finish cleanly" description={error} />
+              <Alert type="error" showIcon title={t('settingsPane.the-move-did-not-finish-cleanly')} description={error} />
             ) : null}
 
             {outcome ? <MoveReport result={outcome} /> : null}
@@ -280,9 +318,9 @@ export function SettingsPane() {
             className="dm-settings-section"
             id={sectionId('about')}
             role="tabpanel"
-            aria-label="About"
+            aria-label={t('settingsPane.about')}
           >
-            <h2 className="dm-settings-section-title">About</h2>
+            <h2 className="dm-settings-section-title">{t('settingsPane.about')}</h2>
             <AboutProject />
           </section>
         </div>
@@ -318,7 +356,11 @@ function DataDirPath({ info }: { info?: DataDirInfo }) {
         {info?.path ?? '…'}
       </span>
       {info ? (
-        info.isDefault ? <Tag color="default">default</Tag> : <Tag color="green">custom</Tag>
+        info.isDefault ? (
+          <Tag color="default">{t('settingsPane.default')}</Tag>
+        ) : (
+          <Tag color="green">{t('settingsPane.custom')}</Tag>
+        )
       ) : null}
     </div>
   )
@@ -358,7 +400,9 @@ function ChangeLogSize() {
       setSettings(saved)
       setValue(saved.maxEntries)
       message.success(
-        `A log file now holds ${saved.maxEntries.toLocaleString()} statements before it is archived`,
+        t('settingsPane.rotation-size-saved', {
+          n: saved.maxEntries.toLocaleString(),
+        }),
       )
     } catch (err) {
       setError(toMessage(err))
@@ -371,14 +415,18 @@ function ChangeLogSize() {
 
   return (
     <SettingRow
-      title="Change log"
-      hint="Statements are written to changelog.jsonl until it holds this many, then the file is moved aside whole as <date>-<n>.log and a new one is started. Nothing is ever dropped: the archives keep every statement, and the Change log window lists them."
+      title={t('settingsPane.change-log')}
+      hint={t('settingsPane.change-log-hint')}
     >
       {error ? (
         <Alert
           type="error"
           showIcon
-          title={settings ? 'The rotation size could not be saved' : 'The rotation size could not be read'}
+          title={
+            settings
+              ? t('settingsPane.the-rotation-size-could-not-be-saved')
+              : t('settingsPane.the-rotation-size-could-not-be-read')
+          }
           description={error}
         />
       ) : null}
@@ -390,7 +438,7 @@ function ChangeLogSize() {
           disabled={settings === undefined}
           value={value}
           onChange={setValue}
-          addonAfter="statements"
+          addonAfter={t('settingsPane.statements')}
           style={{ width: 220 }}
         />
         <Button
@@ -399,14 +447,19 @@ function ChangeLogSize() {
           disabled={!changed || value === null}
           onClick={() => value !== null && void save(value)}
         >
-          Save
+          {t('settingsPane.save')}
         </Button>
         {settings ? (
-          <Tooltip title={`${settings.min.toLocaleString()} – ${settings.max.toLocaleString()}`}>
+          <Tooltip
+            title={t('settingsPane.range', {
+              min: settings.min.toLocaleString(),
+              max: settings.max.toLocaleString(),
+            })}
+          >
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {settings.maxEntries === settings.default
-                ? `${settings.default.toLocaleString()} by default`
-                : `changed from ${settings.default.toLocaleString()}`}
+                ? t('settingsPane.by-default', { n: settings.default.toLocaleString() })
+                : t('settingsPane.changed-from', { n: settings.default.toLocaleString() })}
             </Typography.Text>
           </Tooltip>
         ) : null}
@@ -448,7 +501,9 @@ function DataGenRows() {
       // not something this page gets to assume.
       const saved = await store({ ...settings, maxRows })
       setValue(saved.maxRows)
-      message.success(`A run may now write ${saved.maxRows.toLocaleString()} rows`)
+      message.success(
+        t('settingsPane.a-run-may-now-write-rows', { n: saved.maxRows.toLocaleString() }),
+      )
     } catch (err) {
       setError(toMessage(err))
     } finally {
@@ -460,14 +515,18 @@ function DataGenRows() {
 
   return (
     <SettingRow
-      title="Rows per run"
-      hint="The ceiling of the Rows box in the data generation window, kept in datagen.json in the data directory. It is not a batch size: rows still go in, in small batches, and the run reports what landed as it goes."
+      title={t('settingsPane.rows-per-run')}
+      hint={t('settingsPane.rows-per-run-hint')}
     >
       {error ? (
         <Alert
           type="error"
           showIcon
-          title={settings ? 'The row limit could not be saved' : 'The row limit could not be read'}
+          title={
+            settings
+              ? t('settingsPane.the-row-limit-could-not-be-saved')
+              : t('settingsPane.the-row-limit-could-not-be-read')
+          }
           description={error}
         />
       ) : null}
@@ -479,7 +538,7 @@ function DataGenRows() {
           disabled={settings === undefined}
           value={value}
           onChange={setValue}
-          addonAfter="rows"
+          addonAfter={t('settingsPane.rows')}
           style={{ width: 220 }}
         />
         <Button
@@ -488,14 +547,19 @@ function DataGenRows() {
           disabled={!changed || value === null}
           onClick={() => value !== null && void apply(value)}
         >
-          Save
+          {t('settingsPane.save')}
         </Button>
         {settings ? (
-          <Tooltip title={`${settings.min.toLocaleString()} – ${settings.max.toLocaleString()}`}>
+          <Tooltip
+            title={t('settingsPane.range', {
+              min: settings.min.toLocaleString(),
+              max: settings.max.toLocaleString(),
+            })}
+          >
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
               {settings.maxRows === settings.default
-                ? `${settings.default.toLocaleString()} by default`
-                : `changed from ${settings.default.toLocaleString()}`}
+                ? t('settingsPane.by-default', { n: settings.default.toLocaleString() })
+                : t('settingsPane.changed-from', { n: settings.default.toLocaleString() })}
             </Typography.Text>
           </Tooltip>
         ) : null}
@@ -510,28 +574,29 @@ function MoveReport({ result }: { result: DataDirMoveResult }) {
     <Alert
       type={result.remaining.length > 0 ? 'warning' : 'success'}
       showIcon
-      title={`Moved ${result.moved.length} file${result.moved.length === 1 ? '' : 's'} to ${result.info.path}`}
+      title={tn('settingsPane.moved-file-to', result.moved.length, { path: result.info.path })}
       description={
         <div className="dm-settings-report">
           {result.moved.length > 0 ? (
             <div>
-              <strong>Moved:</strong> <span className="mono">{result.moved.join(', ')}</span>
+              <strong>{t('settingsPane.moved')}</strong> <span className="mono">{result.moved.join(', ')}</span>
             </div>
           ) : null}
           {result.leftBehind.length > 0 ? (
             <div>
-              <strong>Left where they were</strong> (not files this program writes):{' '}
+              <strong>{t('settingsPane.left-where-they-were')}</strong> {t('settingsPane.not-files-this-program-writes')}{' '}
               <span className="mono">{result.leftBehind.join(', ')}</span>
             </div>
           ) : null}
           {result.remaining.length > 0 ? (
             <div>
-              <strong>Copied but not deleted from the old folder</strong> (a lock, a read-only
-              folder): <span className="mono">{result.remaining.join(', ')}</span>
+              <strong>{t('settingsPane.copied-but-not-deleted-from-the-old-folder')}</strong>{' '}
+              {t('settingsPane.a-lock-a-read-only-folder')}{' '}
+              <span className="mono">{result.remaining.join(', ')}</span>
             </div>
           ) : null}
           <div className="dm-settings-report-note">
-            The new folder is in use from now on, and a restart keeps using it.
+            {t('settingsPane.move-note')}
           </div>
         </div>
       }
@@ -546,7 +611,7 @@ function DataDirFiles({ info }: { info?: DataDirInfo }) {
     return (
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description="Nothing written yet: this folder gets its first file once you save a connection or change a setting."
+        description={t('settingsPane.empty-folder')}
       />
     )
   }
@@ -556,31 +621,37 @@ function DataDirFiles({ info }: { info?: DataDirInfo }) {
       column={1}
       bordered
       className="dm-settings-files"
-      title={`What is in it (${formatBytes(info.totalBytes)})`}
+      title={t('settingsPane.what-is-in-it', { totalBytes: formatBytes(info.totalBytes) })}
     >
       {info.files.map((file) => (
         <Descriptions.Item key={file.name} label={<span className="mono">{file.name}</span>}>
           {purposeOf(file.name)} · {formatBytes(file.bytes)}
           {/* A folder says how much is in it as well: its size counts the files
               but not how many there are, which is what a reader wants to know. */}
-          {file.dir && file.count ? ` · ${file.count} file${file.count === 1 ? '' : 's'}` : ''}
+          {file.dir && file.count ? <> {tn('settingsPane.file-count', file.count)}</> : ''}
         </Descriptions.Item>
       ))}
     </Descriptions>
   )
 }
 
-/** What each file holds, so the listing reads as an answer rather than a dump. */
-const FILE_PURPOSE: Record<string, string> = {
-  'connections.json': 'Connection profiles, passwords sealed',
-  'queries.json': 'Query favourites',
-  'layout.json': 'Groups and order of the connection tree',
-  'state.json': 'Window state and preferences',
-  'secret.key': 'Key that opens the saved passwords — unreadable on another machine',
-  'changelog.jsonl': 'What this program has run, one statement per line',
-  'changelog.json': 'How big a log file may get before it is archived',
-  '.mock': 'Custom mock placeholders, one file each',
-  '.query': 'Saved scripts, one file each',
+/**
+ * What each file holds, so the listing reads as an answer rather than a dump.
+ *
+ * The names are message keys, not words: this map is built once, when the module
+ * is loaded, and a word read here would freeze the listing in whichever language
+ * was in force at that moment.
+ */
+const FILE_PURPOSE: Record<string, MessageKey> = {
+  'connections.json': 'settingsPane.file-connections-json',
+  'queries.json': 'settingsPane.file-queries-json',
+  'layout.json': 'settingsPane.file-layout-json',
+  'state.json': 'settingsPane.file-state-json',
+  'secret.key': 'settingsPane.file-secret-key',
+  'changelog.jsonl': 'settingsPane.file-changelog-jsonl',
+  'changelog.json': 'settingsPane.file-changelog-json',
+  '.mock': 'settingsPane.file-mock',
+  '.query': 'settingsPane.file-query',
 }
 
 /**
@@ -592,7 +663,13 @@ const ARCHIVED_LOG = /^\d{8}-[1-9]\d*\.log$/
 
 /** What one file holds, so the listing reads as an answer rather than a dump. */
 function purposeOf(name: string): string {
-  return FILE_PURPOSE[name] ?? (ARCHIVED_LOG.test(name) ? 'Archived change log' : 'Written by this program')
+  const key = FILE_PURPOSE[name]
+  if (key) return t(key)
+  return t(
+    ARCHIVED_LOG.test(name)
+      ? 'settingsPane.archived-change-log'
+      : 'settingsPane.written-by-this-program',
+  )
 }
 
 function formatBytes(bytes: number): string {

@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n'
 import {
   CredentialsFields,
   DatabaseFields,
@@ -23,7 +24,9 @@ function Basic({ driver, draft }: DriverFormProps) {
       <DatabaseFields
         label="Database"
         placeholder={driver.defaultDatabase || 'postgres'}
-        extra={`PostgreSQL cannot query across databases, so this is the one new tabs open on. Empty connects to “${driver.defaultDatabase || 'postgres'}”.`}
+        extra={t('connectionPostgres.the-one-new-tabs-open-on', {
+          database: driver.defaultDatabase || 'postgres',
+        })}
       />
     </>
   )

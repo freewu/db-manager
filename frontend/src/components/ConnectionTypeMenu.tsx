@@ -6,6 +6,7 @@ import type { DriverInfo, DriverType } from '../api/types'
 import { driverSummary } from '../connection'
 import { driverIconOrLogo } from '../lib/assets'
 import { useAppStore } from '../store/appStore'
+import { t } from '../lib/i18n'
 
 /**
  * "New connection" is a menu, not a dialog.
@@ -42,13 +43,13 @@ export function connectionTypeItems(drivers: DriverInfo[], prefix = ''): MenuPro
       key: `${prefix}${PLANNED}${driver.type}`,
       disabled: true,
       icon: driverIcon(driver.type),
-      label: driverLabel(driver, driver.notes ?? 'No driver yet.', true),
+      label: driverLabel(driver, driver.notes ?? t('connectionTypeMenu.no-driver-yet'), true),
     })
   }
 
   // Bootstrap has not answered yet: say so rather than opening an empty menu.
   if (items.length === 0) {
-    items.push({ key: `${prefix}${NONE}`, label: 'Still loading drivers…', disabled: true })
+    items.push({ key: `${prefix}${NONE}`, label: t('connectionTypeMenu.still-loading-drivers'), disabled: true })
   }
   return items
 }
@@ -114,7 +115,7 @@ function driverLabel(driver: DriverInfo, summary: string, planned = false) {
     <span className="dm-type-item">
       <span className="dm-type-name">
         {driver.displayName}
-        {planned ? <Tag className="dm-type-tag">planned</Tag> : null}
+        {planned ? <Tag className="dm-type-tag">{t('connectionTypeMenu.planned')}</Tag> : null}
       </span>
       <span className="dm-type-summary">{summary}</span>
     </span>

@@ -50,6 +50,7 @@ import { useAppStore, type TableView, type WorkspaceTab } from '../store/appStor
 import { DataGrid } from './DataGrid'
 import { RowDetail } from './RowDetail'
 import { StructureView } from './StructurePane'
+import { t, tn, useLanguage } from '../lib/i18n'
 
 const PAGE_SIZES = [50, 100, 200, 500, 1000]
 
@@ -61,16 +62,16 @@ const PAGE_SIZES = [50, 100, 200, 500, 1000]
  */
 function subviewsFor(relational: boolean): { value: TableView; label: string; icon: ReactNode }[] {
   const views = [
-    { value: 'data' as TableView, label: 'Data', icon: <TableOutlined /> },
-    { value: 'structure' as TableView, label: 'Structure', icon: <AppstoreOutlined /> },
-    { value: 'indexes' as TableView, label: 'Indexes', icon: <KeyOutlined /> },
+    { value: 'data' as TableView, label: t('tablePane.data'), icon: <TableOutlined /> },
+    { value: 'structure' as TableView, label: t('tablePane.structure'), icon: <AppstoreOutlined /> },
+    { value: 'indexes' as TableView, label: t('tablePane.indexes'), icon: <KeyOutlined /> },
   ]
   if (relational) {
-    views.push({ value: 'foreignKeys' as TableView, label: 'Foreign keys', icon: <LinkOutlined /> })
+    views.push({ value: 'foreignKeys' as TableView, label: t('tablePane.foreign-keys'), icon: <LinkOutlined /> })
   }
   views.push({
     value: 'ddl' as TableView,
-    label: relational ? 'DDL' : 'Definition',
+    label: relational ? 'DDL' : t('tablePane.definition'),
     icon: <FileTextOutlined />,
   })
   return views
@@ -83,15 +84,15 @@ const OPERATORS: { value: FilterOperator; label: string; needsValue: boolean; ne
   { value: 'gte', label: '≥', needsValue: true },
   { value: 'lt', label: '<', needsValue: true },
   { value: 'lte', label: '≤', needsValue: true },
-  { value: 'contains', label: 'contains', needsValue: true },
-  { value: 'notContains', label: 'does not contain', needsValue: true },
-  { value: 'startsWith', label: 'starts with', needsValue: true },
-  { value: 'endsWith', label: 'ends with', needsValue: true },
-  { value: 'in', label: 'in list', needsValue: true },
-  { value: 'notIn', label: 'not in list', needsValue: true },
-  { value: 'between', label: 'between', needsValue: true, needsSecond: true },
-  { value: 'isNull', label: 'is null', needsValue: false },
-  { value: 'isNotNull', label: 'is not null', needsValue: false },
+  { value: 'contains', label: t('tablePane.contains'), needsValue: true },
+  { value: 'notContains', label: t('tablePane.does-not-contain'), needsValue: true },
+  { value: 'startsWith', label: t('tablePane.starts-with'), needsValue: true },
+  { value: 'endsWith', label: t('tablePane.ends-with'), needsValue: true },
+  { value: 'in', label: t('tablePane.in-list'), needsValue: true },
+  { value: 'notIn', label: t('tablePane.not-in-list'), needsValue: true },
+  { value: 'between', label: t('tablePane.between'), needsValue: true, needsSecond: true },
+  { value: 'isNull', label: t('tablePane.is-null'), needsValue: false },
+  { value: 'isNotNull', label: t('tablePane.is-not-null'), needsValue: false },
 ]
 
 function operatorLabel(operator: FilterOperator): string {
@@ -117,6 +118,7 @@ interface TablePaneProps {
 
 /** Data browser + structure viewer for a single table or view. */
 export function TablePane({ tab }: TablePaneProps) {
+  const language = useLanguage()
   const session = useAppStore((s) => s.sessionOf(tab.sessionId))
   const { message, modal } = AntApp.useApp()
 
@@ -208,18 +210,18 @@ export function TablePane({ tab }: TablePaneProps) {
     () =>
       session?.driver === 'mongodb'
         ? {
-            menuLabel: 'Export insertMany script',
-            copyLabel: 'Copy as insertMany script',
-            label: 'JavaScript',
+            menuLabel: t('tablePane.export-insertmany-script'),
+            copyLabel: t('tablePane.copy-as-insertmany-script'),
+            label: t('tablePane.javascript'),
             extension: 'js',
           }
         : {
-            menuLabel: 'Export INSERT statements',
-            copyLabel: 'Copy as INSERT',
+            menuLabel: t('tablePane.export-insert-statements'),
+            copyLabel: t('tablePane.copy-as-insert'),
             label: 'SQL',
             extension: 'sql',
           },
-    [session?.driver],
+    [language, session?.driver],
   )
 
   const primaryKey = useMemo(
@@ -261,9 +263,9 @@ export function TablePane({ tab }: TablePaneProps) {
           value: next,
         })
         if (affected === 0) {
-          message.warning('No row matched: it may have been changed or deleted by someone else')
+          message.warning(t('tablePane.no-row-matched-it-may-have-been-changed-or'))
         } else {
-          message.success(`Updated ${column}`)
+          message.success(t('tablePane.updated', { column }))
         }
         refresh()
       } catch (err) {
@@ -278,9 +280,9 @@ export function TablePane({ tab }: TablePaneProps) {
     (indexes: number[]) => {
       if (indexes.length === 0) return
       modal.confirm({
-        title: indexes.length === 1 ? 'Delete this row?' : `Delete ${indexes.length} rows?`,
-        content: 'This cannot be undone.',
-        okText: 'Delete',
+        title: tn('tablePane.delete-rows', indexes.length),
+        content: t('tablePane.this-cannot-be-undone'),
+        okText: t('tablePane.delete'),
         okButtonProps: { danger: true },
         onOk: async () => {
           let deleted = 0
@@ -299,7 +301,7 @@ export function TablePane({ tab }: TablePaneProps) {
               return
             }
           }
-          message.success(`Deleted ${deleted} row(s)`)
+          message.success(tn('tablePane.deleted-rows', deleted))
           setSelected([])
           refresh()
         },
@@ -311,7 +313,7 @@ export function TablePane({ tab }: TablePaneProps) {
   const exportData = useCallback(
     async (format: 'csv' | 'json' | 'sql') => {
       if (!data || data.rows.length === 0) {
-        message.info('There is nothing to export on this page')
+        message.info(t('tablePane.there-is-nothing-to-export-on-this-page'))
         return
       }
       const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
@@ -348,13 +350,13 @@ export function TablePane({ tab }: TablePaneProps) {
   )
 
   if (!object) {
-    return <Empty description="No object selected" style={{ marginTop: 80 }} />
+    return <Empty description={t('tablePane.no-object-selected')} style={{ marginTop: 80 }} />
   }
 
   const exportMenu: MenuProps = {
     items: [
-      { key: 'csv', label: 'Export CSV', onClick: () => void exportData('csv') },
-      { key: 'json', label: 'Export JSON', onClick: () => void exportData('json') },
+      { key: 'csv', label: t('tablePane.export-csv'), onClick: () => void exportData('csv') },
+      { key: 'json', label: t('tablePane.export-json'), onClick: () => void exportData('json') },
       { key: 'sql', label: scriptExport.menuLabel, onClick: () => void exportData('sql') },
     ],
   }
@@ -368,16 +370,16 @@ export function TablePane({ tab }: TablePaneProps) {
 
         {view === 'data' ? (
           <>
-            <Tooltip title="Reload">
+            <Tooltip title={t('tablePane.reload')}>
               <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={refresh} />
             </Tooltip>
             <Badge count={filters.length} size="small" offset={[-2, 2]}>
               <FilterButton filters={filters} columns={(data?.columns ?? []).map((c) => c.name)} onChange={(next) => { setFilters(next); setPage(1) }} />
             </Badge>
-            <Tooltip title="Count the total number of rows (adds a COUNT(*) per page)">
+            <Tooltip title={t('tablePane.count-the-total-number-of-rows-adds-a-count-per')}>
               <Space size={4}>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  count
+                  {t('tablePane.count')}
                 </Typography.Text>
                 <Switch size="small" checked={countTotal} onChange={setCountTotal} />
               </Space>
@@ -386,7 +388,7 @@ export function TablePane({ tab }: TablePaneProps) {
               size="small"
               value={pageSize}
               style={{ width: 96 }}
-              options={PAGE_SIZES.map((size) => ({ value: size, label: `${size} rows` }))}
+              options={PAGE_SIZES.map((size) => ({ value: size, label: tn('tablePane.page-size-rows', size) }))}
               onChange={(value) => {
                 setPageSize(value)
                 setPage(1)
@@ -396,10 +398,10 @@ export function TablePane({ tab }: TablePaneProps) {
             <div className="dm-toolbar-right">
               {readOnly ? (
                 <Typography.Text type="warning" style={{ fontSize: 12 }}>
-                  <LockOutlined /> read-only
+                  <LockOutlined /> {t('tablePane.read-only')}
                 </Typography.Text>
               ) : null}
-              <Tooltip title="Show the selected row">
+              <Tooltip title={t('tablePane.show-the-selected-row')}>
                 <Button
                   size="small"
                   icon={<InfoCircleOutlined />}
@@ -408,8 +410,8 @@ export function TablePane({ tab }: TablePaneProps) {
                 />
               </Tooltip>
               <Popconfirm
-                title={`Delete ${selected.length} row(s)?`}
-                okText="Delete"
+                title={tn('tablePane.delete-rows', selected.length)}
+                okText={t('tablePane.delete')}
                 okButtonProps={{ danger: true }}
                 disabled={selected.length === 0 || readOnly}
                 onConfirm={() => deleteRows(selected)}
@@ -420,7 +422,7 @@ export function TablePane({ tab }: TablePaneProps) {
                   icon={<DeleteOutlined />}
                   disabled={selected.length === 0 || readOnly}
                 >
-                  Delete
+                  {t('tablePane.delete')}
                 </Button>
               </Popconfirm>
               <Dropdown
@@ -429,7 +431,7 @@ export function TablePane({ tab }: TablePaneProps) {
                 disabled={!data || data.rows.length === 0}
               >
                 <Button size="small" icon={<DownloadOutlined />}>
-                  Export
+                  {t('tablePane.export')}
                 </Button>
               </Dropdown>
             </div>
@@ -437,7 +439,7 @@ export function TablePane({ tab }: TablePaneProps) {
         ) : (
           <div className="dm-toolbar-right">
             <Button size="small" icon={<ReloadOutlined />} onClick={() => setStructureToken((n) => n + 1)}>
-              Reload
+              {t('tablePane.reload')}
             </Button>
           </div>
         )}
@@ -467,7 +469,7 @@ export function TablePane({ tab }: TablePaneProps) {
                 </Tag>
               ))}
               <Button size="small" type="link" onClick={() => setFilters([])}>
-                clear all
+                {t('tablePane.clear-all')}
               </Button>
             </div>
           ) : null}
@@ -477,11 +479,11 @@ export function TablePane({ tab }: TablePaneProps) {
               <Alert
                 type="error"
                 showIcon
-                title="Could not load rows"
+                title={t('tablePane.could-not-load-rows')}
                 description={<span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>{error}</span>}
                 action={
                   <Button size="small" icon={<ReloadOutlined />} onClick={refresh}>
-                    Retry
+                    {t('tablePane.retry')}
                   </Button>
                 }
               />
@@ -524,11 +526,11 @@ export function TablePane({ tab }: TablePaneProps) {
                     schema={schema}
                     object={object}
                     readOnly={readOnly}
-                    title={`Row ${(page - 1) * pageSize + index + 1}`}
+                    title={t('tablePane.row', { index: (page - 1) * pageSize + index + 1 })}
                     onChanged={refresh}
                     actions={
                       <>
-                        <Tooltip title="Copy as JSON">
+                        <Tooltip title={t('tablePane.copy-as-json')}>
                           <Button
                             size="small"
                             icon={<CopyOutlined />}
@@ -539,7 +541,7 @@ export function TablePane({ tab }: TablePaneProps) {
                               })
                               void navigator.clipboard
                                 .writeText(JSON.stringify(record, null, 2))
-                                .then(() => message.success('Row copied'))
+                                .then(() => message.success(t('tablePane.row-copied')))
                                 .catch((err: unknown) => message.error(toMessage(err)))
                             }}
                           />
@@ -556,7 +558,7 @@ export function TablePane({ tab }: TablePaneProps) {
                               )
                               void navigator.clipboard
                                 .writeText(script)
-                                .then(() => message.success('INSERT copied'))
+                                .then(() => message.success(t('tablePane.insert-copied')))
                                 .catch((err: unknown) => message.error(toMessage(err)))
                             }}
                           />
@@ -568,17 +570,21 @@ export function TablePane({ tab }: TablePaneProps) {
               />
               <div className="dm-statusbar" style={{ borderTop: '1px solid var(--dm-border)', background: 'transparent' }}>
                 <span className="dm-statusbar-item">
-                  {data.rowCount} row(s) on this page
-                  {data.hasTotal ? ` of ${data.total.toLocaleString()}` : ' (total not counted)'}
+                  {tn('tablePane.rows-on-this-page', data.rowCount)}
+                  {data.hasTotal
+                    ? t('tablePane.of-total', { total: data.total.toLocaleString() })
+                    : t('tablePane.total-not-counted')}
                 </span>
                 <span className="dm-statusbar-item">{formatDuration(data.durationMs)}</span>
                 {selected.length > 0 ? (
-                  <span className="dm-statusbar-item">{selected.length} selected</span>
+                  <span className="dm-statusbar-item">
+                    {tn('tablePane.selected', selected.length)}
+                  </span>
                 ) : null}
                 <span className="dm-spacer" />
                 {!readOnly && primaryKey.length === 0 ? (
                   <span className="dm-statusbar-item">
-                    no primary key detected — rows are read-only
+                    {t('tablePane.no-primary-key-detected-rows-are-read-only')}
                   </span>
                 ) : null}
               </div>
@@ -588,12 +594,12 @@ export function TablePane({ tab }: TablePaneProps) {
               <Spin />
             </div>
           ) : !error ? (
-            <Empty description="No rows" style={{ marginTop: 60 }} />
+            <Empty description={t('tablePane.no-rows')} style={{ marginTop: 60 }} />
           ) : null}
         </>
       )}
 
-      <nav className="dm-subtabs" role="tablist" aria-label="Table views">
+      <nav className="dm-subtabs" role="tablist" aria-label={t('tablePane.table-views')}>
         {subviews.map((entry) => (
           <button
             key={entry.value}
@@ -637,14 +643,14 @@ function FilterButton({
   return (
     <>
       <Button size="small" icon={<FilterOutlined />} onClick={start}>
-        Filter
+        {t('tablePane.filter')}
       </Button>
       <Modal
-        title="Filter rows"
+        title={t('tablePane.filter-rows')}
         open={open}
         width={720}
         onCancel={() => setOpen(false)}
-        okText="Apply"
+        okText={t('tablePane.apply')}
         onOk={() => {
           onChange(
             draft
@@ -676,7 +682,7 @@ function FilterButton({
                 ])
               }
             >
-              Add condition
+              {t('tablePane.add-condition')}
             </Button>
             <CancelBtn />
             <OkBtn />
@@ -685,7 +691,7 @@ function FilterButton({
       >
         <Space direction="vertical" style={{ width: '100%' }} size={8}>
           {draft.length === 0 ? (
-            <Typography.Text type="secondary">No conditions</Typography.Text>
+            <Typography.Text type="secondary">{t('tablePane.no-conditions')}</Typography.Text>
           ) : null}
           {draft.map((entry, index) => {
             const spec = OPERATORS.find((candidate) => candidate.value === entry.operator)
@@ -695,7 +701,7 @@ function FilterButton({
                   showSearch
                   style={{ width: 200 }}
                   value={entry.column || undefined}
-                  placeholder="column"
+                  placeholder={t('tablePane.column')}
                   options={columns.map((column) => ({ value: column, label: column }))}
                   onChange={(value) => update(index, { column: value })}
                 />
@@ -711,7 +717,7 @@ function FilterButton({
                 {spec?.needsValue ? (
                   <Input
                     style={{ width: 220 }}
-                    placeholder={entry.operator === 'in' || entry.operator === 'notIn' ? 'a, b, c' : 'value'}
+                    placeholder={entry.operator === 'in' || entry.operator === 'notIn' ? t('tablePane.a-b-c') : t('tablePane.value')}
                     value={entry.value ?? ''}
                     onChange={(event) => update(index, { value: event.target.value })}
                   />
@@ -721,7 +727,7 @@ function FilterButton({
                 {spec?.needsSecond ? (
                   <Input
                     style={{ width: 220 }}
-                    placeholder="upper bound"
+                    placeholder={t('tablePane.upper-bound')}
                     value={entry.value2 ?? ''}
                     onChange={(event) => update(index, { value2: event.target.value })}
                   />

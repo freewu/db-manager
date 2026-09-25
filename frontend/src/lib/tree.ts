@@ -6,6 +6,7 @@
  * spaces, unicode) unambiguous.
  */
 import type { ObjectInfo, ObjectKind } from '../api/types'
+import type { MessageKey } from './i18n'
 
 export type NodeRef =
   | { t: 'connection'; connectionId: string }
@@ -97,23 +98,31 @@ export const FOLDER_ORDER: ObjectKind[] = [
   'procedure',
 ]
 
-export const FOLDER_LABEL: Record<ObjectKind, string> = {
-  table: 'Tables',
-  view: 'Views',
-  materialized_view: 'Materialized views',
-  collection: 'Collections',
-  sequence: 'Sequences',
-  procedure: 'Procedures',
+/**
+ * What the explorer calls each kind of folder, and one object of that kind.
+ *
+ * The words themselves live in the message tables and these name the message:
+ * written here they would be read once, when the module is first loaded, and
+ * would then stay in whichever language that happened to be. Callers wrap them
+ * in `t(…)` where they are drawn.
+ */
+export const FOLDER_LABEL: Record<ObjectKind, MessageKey> = {
+  table: 'libTree.tables',
+  view: 'libTree.views',
+  materialized_view: 'libTree.materialized-views',
+  collection: 'libTree.collections',
+  sequence: 'libTree.sequences',
+  procedure: 'libTree.procedures',
 }
 
 /** Singular noun used when a single object is referenced in the UI. */
-export const KIND_SINGULAR: Record<ObjectKind, string> = {
-  table: 'Table',
-  view: 'View',
-  materialized_view: 'Materialized view',
-  collection: 'Collection',
-  sequence: 'Sequence',
-  procedure: 'Procedure',
+export const KIND_SINGULAR: Record<ObjectKind, MessageKey> = {
+  table: 'libTree.table',
+  view: 'libTree.view',
+  materialized_view: 'libTree.materialized-view',
+  collection: 'libTree.collection',
+  sequence: 'libTree.sequence',
+  procedure: 'libTree.procedure',
 }
 
 /**

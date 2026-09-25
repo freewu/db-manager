@@ -6,6 +6,7 @@ import { api, toMessage } from '../api/client'
 import type { ServerOverview } from '../api/types'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { overviewView } from './overview'
+import { t } from '../lib/i18n'
 
 interface RuntimePaneProps {
   tab: WorkspaceTab
@@ -176,24 +177,24 @@ export function RuntimePane({ tab }: RuntimePaneProps) {
           </Typography.Text>
         ) : null}
         {overview?.readOnly ? (
-          <Tooltip title="This session refuses statements that write">
+          <Tooltip title={t('runtimePane.this-session-refuses-statements-that-write')}>
             <Tag color="gold" style={{ marginInlineEnd: 0 }}>
-              read-only
+              {t('runtimePane.read-only')}
             </Tag>
           </Tooltip>
         ) : null}
         {profile ? (
           <Button size="small" type="link" onClick={() => openConnectionEditor(profile)}>
-            Edit connection…
+            {t('runtimePane.edit-connection')}
           </Button>
         ) : null}
       </Space>
 
       <div className="dm-toolbar-right">
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {overview ? `collected ${ageLabel(age)} ago in ${overview.elapsedMs} ms` : 'collecting…'}
+          {overview ? t('runtimePane.collected-ago-in-ms', { age: ageLabel(age), elapsedMs: overview.elapsedMs }) : t('runtimePane.collecting')}
         </Typography.Text>
-        <Tooltip title="Collect a fresh snapshot">
+        <Tooltip title={t('runtimePane.collect-a-fresh-snapshot')}>
           <Button
             size="small"
             icon={<ReloadOutlined />}
@@ -224,7 +225,7 @@ export function RuntimePane({ tab }: RuntimePaneProps) {
           <Alert
             type="error"
             showIcon
-            title="Could not read the server state"
+            title={t('runtimePane.could-not-read-the-server-state')}
             description={
               <span className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
                 {error}
@@ -232,7 +233,7 @@ export function RuntimePane({ tab }: RuntimePaneProps) {
             }
             action={
               <Button size="small" icon={<ReloadOutlined />} onClick={() => setAttempt((n) => n + 1)}>
-                Retry
+                {t('runtimePane.retry')}
               </Button>
             }
           />
@@ -251,8 +252,8 @@ export function RuntimePane({ tab }: RuntimePaneProps) {
             showIcon
             title={
               overview.warnings.length === 1
-                ? 'Part of this page could not be read'
-                : `${overview.warnings.length} parts of this page could not be read`
+                ? t('runtimePane.part-of-this-page-could-not-be-read')
+                : t('runtimePane.parts-of-this-page-could-not-be-read', { n: overview.warnings.length })
             }
             description={
               <ul style={{ paddingInlineStart: 18, margin: 0 }}>
@@ -270,7 +271,7 @@ export function RuntimePane({ tab }: RuntimePaneProps) {
 
         <div className="dm-runtime">
           {rail ? (
-            <nav className="dm-runtime-rail" aria-label="Blocks of this page">
+            <nav className="dm-runtime-rail" aria-label={t('runtimePane.blocks-of-this-page')}>
               {sections.map((section, index) => (
                 <button
                   key={`${index}-${section.label}`}
@@ -305,13 +306,13 @@ export function RuntimePane({ tab }: RuntimePaneProps) {
 
       <div className="dm-statusbar">
         <span className="dm-statusbar-item">
-          {overview.database ? `session · ${overview.database}` : 'session'}
+          {overview.database ? t('runtimePane.session', { database: overview.database }) : t('runtimePane.session-2')}
         </span>
         <span className="dm-statusbar-item">
-          connected {connectedLabel(overview.connectedAt)}
+          {t('runtimePane.connected')} {connectedLabel(overview.connectedAt)}
         </span>
         <span className="dm-spacer" />
-        <span className="dm-statusbar-item">snapshot · press refresh for current numbers</span>
+        <span className="dm-statusbar-item">{t('runtimePane.snapshot-press-refresh-for-current-numbers')}</span>
       </div>
     </div>
   )

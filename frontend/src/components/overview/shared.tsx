@@ -4,6 +4,7 @@ import { InfoCircleOutlined } from '@ant-design/icons'
 import type { ReactNode } from 'react'
 
 import type { OverviewGroup, OverviewTable } from '../../api/types'
+import { t } from '../../lib/i18n'
 
 /**
  * The pieces every engine view is built from.
@@ -58,7 +59,7 @@ export function MetricGroup({ group }: { group: OverviewGroup }) {
       </header>
       {group.metrics.length === 0 ? (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          Nothing to report.
+          {t('overviewShared.nothing-to-report')}
         </Typography.Text>
       ) : (
         <div className="dm-metric-grid">
@@ -97,7 +98,7 @@ export function DataTable({ table }: { table: OverviewTable }) {
         <span>{table.title}</span>
       </header>
       {table.rows.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Nothing running" />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('overviewShared.nothing-running')} />
       ) : (
         <>
           <Table<string[]>

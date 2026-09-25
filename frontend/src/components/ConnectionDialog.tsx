@@ -22,6 +22,7 @@ import {
 } from '../connection/shared'
 import { driverIcon } from '../lib/assets'
 import { useAppStore } from '../store/appStore'
+import { t } from '../lib/i18n'
 
 /**
  * Which tab owns a field, so a failed validation can jump to the one it is on.
@@ -214,7 +215,7 @@ export function ConnectionDialog() {
     setSaving(true)
     try {
       const saved = await saveConnection(collect(values), draft?.groupId)
-      message.success(`Saved “${saved.name}”`)
+      message.success(t('connectionDialog.saved', { name: saved.name }))
       closeEditor()
     } catch (error) {
       message.error(toMessage(error))
@@ -225,10 +226,10 @@ export function ConnectionDialog() {
 
   const icon = driverIcon(driverInfo?.type)
   const title = draft?.id
-    ? `Edit ${draft.name}`
+    ? t('connectionDialog.edit-connection', { name: draft.name })
     : driverInfo
-      ? `New ${driverInfo.displayName} connection`
-      : 'New connection'
+      ? t('connectionDialog.new-connection-for', { driver: driverInfo.displayName })
+      : t('connectionDialog.new-connection')
 
   return (
     <Modal
@@ -246,7 +247,7 @@ export function ConnectionDialog() {
       destroyOnHidden
       footer={
         <Space>
-          <Button onClick={closeEditor}>Cancel</Button>
+          <Button onClick={closeEditor}>{t('connectionDialog.cancel')}</Button>
           {/* The answer to a test belongs over the button that asked for it:
               the values it judges are the ones in this dialog. */}
           <div className="dm-test-slot">
@@ -258,11 +259,11 @@ export function ConnectionDialog() {
               />
             ) : null}
             <Button icon={<ThunderboltOutlined />} loading={testing} onClick={() => void handleTest()}>
-              Test connection
+              {t('connectionDialog.test-connection')}
             </Button>
           </div>
           <Button type="primary" loading={saving} onClick={() => void handleSave()}>
-            Save
+            {t('connectionDialog.save')}
           </Button>
         </Space>
       }
@@ -277,15 +278,15 @@ export function ConnectionDialog() {
             type="info"
             showIcon
             style={{ marginBottom: 16 }}
-            title={`No ${driverInfo.displayName} form yet`}
-            description="The driver is registered, but its connection page has not been written."
+            title={t('connectionDialog.no-form-yet', { displayName: driverInfo.displayName })}
+            description={t('connectionDialog.the-driver-is-registered-but-its-connection-page')}
           />
         ) : null}
 
         {/* Which engine this is was decided by the menu, so the dialog only
             states it: tabs, not a driver picker. */}
         {tabs.length > 1 ? (
-          <nav className="dm-form-tabs" role="tablist" aria-label="Connection settings">
+          <nav className="dm-form-tabs" role="tablist" aria-label={t('connectionDialog.connection-settings')}>
             {tabs.map((entry) => (
               <button
                 key={entry.key}
@@ -295,7 +296,7 @@ export function ConnectionDialog() {
                 className={`dm-form-tab${tab === entry.key ? ' is-active' : ''}`}
                 onClick={() => setTab(entry.key)}
               >
-                {entry.label}
+                {t(entry.label)}
               </button>
             ))}
           </nav>
@@ -376,7 +377,7 @@ function TestNotice({
         showIcon
         closable
         onClose={onClose}
-        title={result.ok ? 'Connection succeeded' : 'Connection failed'}
+        title={result.ok ? t('connectionDialog.connection-succeeded') : t('connectionDialog.connection-failed')}
         description={
           <div className="mono" style={{ fontSize: 12, whiteSpace: 'pre-wrap' }}>
             {[result.message, result.ok ? detail : ''].filter(Boolean).join('\n')}
@@ -409,7 +410,7 @@ function driverType(driver: DriverInfo | undefined): DriverType {
 function OptionsFields() {
   return (
     <div className="dm-form-row">
-      <Form.Item name="readOnly" label="Read only" valuePropName="checked">
+      <Form.Item name="readOnly" label={t('connectionDialog.read-only')} valuePropName="checked">
         <Switch />
       </Form.Item>
       <LabelColourField />

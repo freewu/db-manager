@@ -28,6 +28,7 @@
  * custom placeholder keeps that value's own type just as a built-in would.
  */
 import type { ColumnKind } from '../codegen'
+import { t, tn } from '../i18n'
 import { PLACEHOLDER_NOTES } from './catalog'
 import {
   BANK_PREFIXES,
@@ -297,7 +298,7 @@ function parseArgs(raw: string): Arg[] | string {
     const quote = raw[i]
     if (quote === "'" || quote === '"') {
       const end = raw.indexOf(quote, i + 1)
-      if (end < 0) return `an argument is missing its closing ${quote}`
+      if (end < 0) return t('libMockEngine.argument-unclosed', { quote })
       args.push(raw.slice(i + 1, end))
       i = end + 1
     } else {
@@ -309,7 +310,7 @@ function parseArgs(raw: string): Arg[] | string {
 
     while (i < raw.length && /\s/.test(raw[i])) i += 1
     if (i >= raw.length) break
-    if (raw[i] !== ',') return 'arguments are separated by commas'
+    if (raw[i] !== ',') return t('libMockEngine.comma-separated')
     i += 1
   }
   return args
@@ -781,13 +782,13 @@ function parseInto(text: string, ctx: ParseContext, nodes: Node[]): Parsed {
     }
 
     const name = NAME_PATTERN.exec(text.slice(i + 1))?.[0]
-    if (!name) return { error: "'@' must start a placeholder name — write @@ for a literal @", notes }
+    if (!name) return { error: t('libMockEngine.stray-at'), notes }
     i += 1 + name.length
 
     let args: Arg[] = []
     if (text[i] === '(') {
       const close = matchingParen(text, i)
-      if (close < 0) return { error: `the arguments of @${name} have no closing ')'`, notes }
+      if (close < 0) return { error: t('libMockEngine.unclosed-arguments', { name }), notes }
       const parsed = parseArgs(text.slice(i + 1, close))
       if (typeof parsed === 'string') return { error: parsed, notes }
       args = parsed
@@ -797,20 +798,20 @@ function parseInto(text: string, ctx: ParseContext, nodes: Node[]): Parsed {
     const generator = GENERATORS.get(name)
     if (!generator) {
       const custom = ctx.custom.get(name)
-      if (!custom) return { error: `@${name} is not a placeholder this app knows`, notes }
+      if (!custom) return { error: t('libMockEngine.unknown-placeholder', { name }), notes }
       if (ctx.chain.includes(name)) {
         const path = [...ctx.chain, name].map((part) => `@${part}`).join(' → ')
-        return { error: `@${name} expands into itself (${path})`, notes }
+        return { error: t('libMockEngine.expands-into-itself', { name, path }), notes }
       }
       if (args.length > 0) {
-        return { error: `@${name} takes no arguments — a custom placeholder is a whole template`, notes }
+        return { error: t('libMockEngine.custom-takes-no-arguments', { name }), notes }
       }
       const body = custom.template.trim()
-      if (body === '') return { error: `@${name} has no template to render`, notes }
+      if (body === '') return { error: t('libMockEngine.empty-template', { name }), notes }
 
       flush()
       const nested = parseInto(body, { ...ctx, chain: [...ctx.chain, name] }, nodes)
-      if (nested.error) return { error: `in @${name}: ${nested.error}`, notes }
+      if (nested.error) return { error: t('libMockEngine.inside-custom', { name, error: nested.error }), notes }
       // The description says more than the parts it is made of; with no
       // description, the parts are the next best answer.
       if (!seen.has(name)) {
@@ -822,14 +823,18 @@ function parseInto(text: string, ctx: ParseContext, nodes: Node[]): Parsed {
 
     const [least, most] = generator.arity
     if (args.length < least || args.length > most) {
-      return { error: `@${name} ${arityText(generator.arity)}`, notes }
+      return { error: t('libMockEngine.wrong-argument-count', { name, arguments: arityText(least, most) }), notes }
     }
     const badIndex = (generator.numeric ?? []).find(
       (index) => args[index] !== undefined && !readsAsNumber(args[index]),
     )
     if (badIndex !== undefined) {
       return {
-        error: `@${name} expects a number as argument ${badIndex + 1}, not “${String(args[badIndex])}”`,
+        error: t('libMockEngine.number-argument', {
+          name,
+          index: badIndex + 1,
+          value: String(args[badIndex]),
+        }),
         notes,
       }
     }
@@ -913,9 +918,13 @@ export function sampleOf(
   return { value: String(value), note: compiled.note }
 }
 
-function arityText([least, most]: [number, number]): string {
-  if (least === most) return least === 0 ? 'takes no arguments' : `takes ${least} argument(s)`
-  return `takes between ${least} and ${most} arguments`
+function arityText(least: number, most: number): string {
+  if (least === most) {
+    return least === 0
+      ? t('libMockEngine.takes-no-arguments')
+      : tn('libMockEngine.takes-arguments', least)
+  }
+  return t('libMockEngine.takes-arguments-between', { least, most })
 }
 
 /* --- coercion ------------------------------------------------------------- */

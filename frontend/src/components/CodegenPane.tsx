@@ -7,6 +7,7 @@ import type { TableStructure } from '../api/types'
 import { qualifiedName } from '../lib/format'
 import { CODE_LANGUAGES, codeFileName, codeLanguageById, fieldsOf, generateCode, tokenizeCode } from '../lib/codegen'
 import { useAppStore, type WorkspaceTab } from '../store/appStore'
+import { t, tn } from '../lib/i18n'
 
 /** The picker's entries, in the order the settings page lists them too. */
 const LANGUAGE_OPTIONS = [...CODE_LANGUAGES]
@@ -53,7 +54,7 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
   const load = useCallback(async () => {
     if (!object) {
       setLoading(false)
-      setError('This window is not pointed at an object.')
+      setError(t('codegenPane.window-not-pointed-at-an-object'))
       return
     }
     setLoading(true)
@@ -87,7 +88,7 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
   const copy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(code)
-      message.success('Code copied')
+      message.success(t('codegenPane.code-copied'))
     } catch (err) {
       message.error(toMessage(err))
     }
@@ -95,7 +96,7 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
 
   const save = useCallback(async () => {
     if (!code) {
-      message.info('Nothing to save')
+      message.info(t('codegenPane.nothing-to-save'))
       return
     }
     try {
@@ -104,7 +105,7 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
         content: code,
         filters: [{ displayName: current.label, pattern: `*${current.ext}` }],
       })
-      message.success('Code saved')
+      message.success(t('codegenPane.code-saved'))
     } catch (err) {
       message.error(toMessage(err))
     }
@@ -124,9 +125,9 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
           value={language}
           options={LANGUAGE_OPTIONS}
           onChange={setLanguage}
-          aria-label="Language"
+          aria-label={t('codegenPane.language')}
         />
-        <Tooltip title="Copy the generated code">
+        <Tooltip title={t('codegenPane.copy-the-generated-code')}>
           <Button
             size="small"
             icon={<CopyOutlined />}
@@ -134,7 +135,7 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
             onClick={() => void copy()}
           />
         </Tooltip>
-        <Tooltip title="Save the generated code to a file">
+        <Tooltip title={t('codegenPane.save-the-generated-code-to-a-file')}>
           <Button
             size="small"
             icon={<SaveOutlined />}
@@ -142,7 +143,7 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
             onClick={() => void save()}
           />
         </Tooltip>
-        <Tooltip title="Read the object's fields again">
+        <Tooltip title={t('codegenPane.read-the-object-s-fields-again')}>
           <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => void load()} />
         </Tooltip>
 
@@ -154,7 +155,7 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
 
         <div className="dm-toolbar-right">
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {fieldCount} field{fieldCount === 1 ? '' : 's'}
+            {tn('codegenPane.fields', fieldCount)}
           </Typography.Text>
         </div>
       </div>
@@ -164,7 +165,7 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
           <Alert
             type="error"
             showIcon
-            title="Could not read the object's fields"
+            title={t('codegenPane.could-not-read-the-object-s-fields')}
             description={
               <span className="mono" style={{ fontSize: 12 }}>
                 {error}
@@ -172,7 +173,7 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
             }
             action={
               <Button size="small" onClick={() => void load()}>
-                Retry
+                {t('codegenPane.retry')}
               </Button>
             }
           />
@@ -184,8 +185,8 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
           <Alert
             type="info"
             showIcon
-            title="This object has no fields"
-            description="There is nothing to map yet, so the generated file is the empty shell."
+            title={t('codegenPane.this-object-has-no-fields')}
+            description={t('codegenPane.there-is-nothing-to-map-yet-so-the-generated')}
           />
         </div>
       ) : null}
@@ -193,7 +194,7 @@ export function CodegenPane({ tab }: CodegenPaneProps) {
       {loading && !structure ? (
         <div className="dm-codegen-loading">
           <Spin />
-          <Typography.Text type="secondary">Reading the object's fields…</Typography.Text>
+          <Typography.Text type="secondary">{t('codegenPane.reading-the-object-s-fields')}</Typography.Text>
         </div>
       ) : (
         // A failed reload keeps the text it already had on screen: the alert

@@ -37,6 +37,7 @@ import { useAppStore, type WorkspaceTab } from '../store/appStore'
 import { FieldGrid } from './DesignGrid'
 import { useColumnResize } from './ResizableHeader'
 import { SqlCode } from './SqlCode'
+import { t, tn } from '../lib/i18n'
 
 /** Which slice of the structure a table window is showing. */
 export type StructureSection = 'structure' | 'indexes' | 'foreignKeys' | 'ddl'
@@ -219,7 +220,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
     (text: string, what: string) => {
       void navigator.clipboard
         .writeText(text)
-        .then(() => message.success(`${what} copied`))
+        .then(() => message.success(t('structurePane.copied', { what })))
         .catch((err: unknown) => message.error(toMessage(err)))
     },
     [message],
@@ -230,9 +231,9 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
       if (!draft) return
       const name = draft.object.trim()
       modal.confirm({
-        title: creating ? `Create table ${name}?` : 'Apply changes to this table?',
+        title: creating ? t('structurePane.create-table', { name }) : t('structurePane.apply-changes-to-this-table'),
         width: 760,
-        okText: creating ? 'Create' : 'Apply',
+        okText: creating ? t('structurePane.create') : t('structurePane.apply'),
         content: (
           <div>
             {plan && plan.warnings.length > 0 ? (
@@ -240,7 +241,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
                 type="info"
                 showIcon
                 style={{ marginBottom: 8 }}
-                title="This engine cannot do everything the design asks for"
+                title={t('structurePane.this-engine-cannot-do-everything-the-design-asks')}
                 description={
                   <ul style={{ margin: 0, paddingLeft: 18 }}>
                     {plan.warnings.map((warning, index) => (
@@ -257,7 +258,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
               driver={session?.driver}
             />
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              The statements run one at a time, in this order.
+              {t('structurePane.the-statements-run-one-at-a-time-in-this-order')}
             </Typography.Text>
           </div>
         ),
@@ -270,16 +271,22 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
               : await api.applyTableDesign(draft)
             if (result.error) {
               setApplyError(
-                `statement ${result.failedIndex + 1} of ${result.plan.statements.length} failed: ${result.error}`,
+                t('structurePane.statement-n-of-m-failed', {
+                  index: result.failedIndex + 1,
+                  total: result.plan.statements.length,
+                  error: result.error,
+                }),
               )
               message.error(
-                `Applied ${result.executed.length} of ${result.plan.statements.length} statement(s)`,
+                tn('structurePane.applied-of', result.plan.statements.length, {
+                  executed: result.executed.length,
+                }),
               )
             } else if (creating) {
-              message.success(`Table ${name} created`)
+              message.success(t('structurePane.table-created', { name }))
             } else {
               message.success(
-                `Table ${object} updated (${result.executed.length} statement(s))`,
+                tn('structurePane.table-updated', result.executed.length, { object }),
               )
             }
 
@@ -339,11 +346,11 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
         <Alert
           type="error"
           showIcon
-          title="Could not read the structure"
+          title={t('structurePane.could-not-read-the-structure')}
           description={<span className="mono">{error}</span>}
           action={
             <Button size="small" icon={<ReloadOutlined />} onClick={reload}>
-              Retry
+              {t('structurePane.retry')}
             </Button>
           }
         />
@@ -352,14 +359,14 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
   }
 
   if (!structure) {
-    return <Empty description="No structure available" style={{ marginTop: 60 }} />
+    return <Empty description={t('structurePane.no-structure-available')} style={{ marginTop: 60 }} />
   }
 
   if (section === 'indexes') {
     return (
       <div className="dm-pane-body" style={{ padding: 12 }}>
         {structure.indexes.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No indexes" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('structurePane.no-indexes')} />
         ) : (
           <Table
             className={indexGrid.resized ? 'dm-grid dm-grid-resized' : 'dm-grid'}
@@ -384,7 +391,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
     return (
       <div className="dm-pane-body" style={{ padding: 12 }}>
         {structure.foreignKeys.length === 0 ? (
-          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No foreign keys" />
+          <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t('structurePane.no-foreign-keys')} />
         ) : (
           <Table
             className={fkGrid.resized ? 'dm-grid dm-grid-resized' : 'dm-grid'}
@@ -406,29 +413,29 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
       <div className="dm-pane-body" style={{ padding: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <Typography.Title level={5} style={{ margin: 0 }}>
-            {relational ? 'DDL' : 'Definition'}
+            {relational ? 'DDL' : t('structurePane.definition')}
           </Typography.Title>
           <span style={{ flex: 1 }} />
-          <Tooltip title={relational ? 'Copy DDL' : 'Copy the definition script'}>
+          <Tooltip title={relational ? t('structurePane.copy-ddl') : t('structurePane.copy-the-definition-script')}>
             <Button
               size="small"
               icon={<CopyOutlined />}
-              onClick={() => copy(structure.ddl, relational ? 'DDL' : 'Definition')}
+              onClick={() => copy(structure.ddl, relational ? 'DDL' : t('structurePane.definition'))}
             >
-              Copy
+              {t('structurePane.copy')}
             </Button>
           </Tooltip>
-          <Tooltip title="Open this definition in the DDL editor, where it can be changed and run">
+          <Tooltip title={t('structurePane.open-this-definition-in-the-ddl-editor-where-it')}>
             <Button
               size="small"
               icon={<EditOutlined />}
               onClick={() => openDdlTab(tab.sessionId, database, schema, object)}
             >
-              Edit in DDL editor
+              {t('structurePane.edit-in-ddl-editor')}
             </Button>
           </Tooltip>
           <Button size="small" icon={<DownloadOutlined />} onClick={() => void saveDDL()}>
-            Save
+            {t('structurePane.save')}
           </Button>
         </div>
         <SqlCode className="dm-ddl" sql={structure.ddl} driver={session?.driver} />
@@ -436,8 +443,8 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
           {appInfo ? `${appInfo.name} ${appInfo.version} · ` : ''}
           {/^(--|\/\/)/.test(structure.ddl)
             ? relational
-              ? 'DDL reconstructed from catalog metadata.'
-              : 'Definition script reconstructed from the sampled documents and the index list.'
+              ? t('structurePane.ddl-reconstructed-from-catalog-metadata')
+              : t('structurePane.definition-script-reconstructed-from-the-sampled')
             : ''}
         </Typography.Paragraph>
       </div>
@@ -458,7 +465,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
             size="small"
             className="mono"
             style={{ width: 200 }}
-            placeholder="Table name"
+            placeholder={t('structurePane.table-name')}
             value={draft?.object ?? ''}
             disabled={readOnly}
             onChange={(event) => {
@@ -467,7 +474,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
             }}
           />
         ) : null}
-        <Tooltip title="Add a field at the end of the list">
+        <Tooltip title={t('structurePane.add-a-field-at-the-end-of-the-list')}>
           <Button
             size="small"
             icon={<PlusOutlined />}
@@ -479,10 +486,10 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
               setSelectedField(next.length - 1)
             }}
           >
-            Add field
+            {t('structurePane.add-field')}
           </Button>
         </Tooltip>
-        <Tooltip title="Drop the selected field and its data">
+        <Tooltip title={t('structurePane.drop-the-selected-field-and-its-data')}>
           <Button
             size="small"
             danger
@@ -493,11 +500,11 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
               const field = draft.columns[selectedField]
               const applied = Boolean(field.originalName)
               modal.confirm({
-                title: `Drop field ${field.name}?`,
+                title: t('structurePane.drop-field', { name: field.name }),
                 content: applied
-                  ? 'The column and everything stored in it is dropped when you save.'
-                  : 'The field has not been created yet, so it is simply removed from the design.',
-                okText: 'Drop',
+                  ? t('structurePane.the-column-and-everything-stored-in-it-is')
+                  : t('structurePane.the-field-has-not-been-created-yet-so-it-is'),
+                okText: t('structurePane.drop'),
                 okButtonProps: { danger: true },
                 onOk: () => {
                   const columns = draft.columns.filter((_, i) => i !== selectedField)
@@ -514,16 +521,16 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
               })
             }}
           >
-            Delete field
+            {t('structurePane.delete-field')}
           </Button>
         </Tooltip>
 
         <div className="dm-toolbar-right">
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            {rowCount} field{rowCount === 1 ? '' : 's'}
+            {tn('structurePane.field-count', rowCount)}
           </Typography.Text>
           {readOnly ? (
-            <Tag color="warning">read-only</Tag>
+            <Tag color="warning">{t('structurePane.read-only')}</Tag>
           ) : (
             <>
               {/* Reverting a new table would only throw the name away; closing
@@ -538,7 +545,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
                     setSelectedField(null)
                   }}
                 >
-                  Revert
+                  {t('structurePane.revert')}
                 </Button>
               )}
               <Button
@@ -548,7 +555,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
                 disabled={!hasChanges}
                 onClick={() => apply(statements)}
               >
-                {creating ? 'Create' : 'Save'}
+                {creating ? t('structurePane.create') : t('structurePane.save')}
               </Button>
             </>
           )}
@@ -561,7 +568,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
           showIcon
           closable
           style={{ margin: '8px 12px 0' }}
-          title="The script stopped in the middle"
+          title={t('structurePane.the-script-stopped-in-the-middle')}
           description={<span className="mono">{applyError}</span>}
           onClose={() => setApplyError(null)}
         />
@@ -578,7 +585,7 @@ export function StructureView({ tab, section, reloadToken = 0, creating = false 
 
       <div className="dm-designer-body">
         <div className="dm-designer-panel">
-          <div className="dm-designer-heading">Fields</div>
+          <div className="dm-designer-heading">{t('structurePane.fields')}</div>
           <FieldGrid
             design={draft ?? { sessionId: tab.sessionId, object, columns: [], indexes: [] }}
             driver={session?.driver}
@@ -616,17 +623,17 @@ function FieldList({
         type="info"
         showIcon
         style={{ marginBottom: 12 }}
-        title={mongo ? 'Collections have no schema' : 'This engine has no table designer'}
+        title={mongo ? t('structurePane.collections-have-no-schema') : t('structurePane.this-engine-has-no-table-designer')}
         description={
           mongo
-            ? 'The fields below were inferred from a sample of the documents in this collection. Any document may carry other fields, or the same field with another type, so there is nothing to design here.'
-            : 'The fields below come from the catalog and are read-only. Doris DDL needs a data model and a distribution clause, so changes go through the DDL editor, where the engine\u2019s own statement is edited and run.'
+            ? t('structurePane.the-fields-below-were-inferred-from-a-sample-of')
+            : t('structurePane.the-fields-below-come-from-the-catalog-and-are')
         }
       />
       {structure.columns.length === 0 ? (
         <Empty
           image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={mongo ? 'No documents to sample' : 'No fields'}
+          description={mongo ? t('structurePane.no-documents-to-sample') : t('structurePane.no-fields')}
         />
       ) : (
         <Table
@@ -648,17 +655,17 @@ function FieldList({
 
 const fieldColumns: TableColumnsType<ColumnInfo> = [
   {
-    title: 'Field',
+    title: t('structurePane.field-2'),
     dataIndex: 'name',
     render: (name: string, row) => (
       <Space size={6}>
         <span className="mono">{name}</span>
-        {row.primaryKey ? <Tag color="gold">key</Tag> : null}
+        {row.primaryKey ? <Tag color="gold">{t('structurePane.key')}</Tag> : null}
       </Space>
     ),
   },
   {
-    title: 'Type',
+    title: t('structurePane.type'),
     dataIndex: 'dataType',
     // `columnType` is the engine's own spelling (including length and
     // precision) and is what a SQL engine reports; the sampled document fields
@@ -666,7 +673,7 @@ const fieldColumns: TableColumnsType<ColumnInfo> = [
     render: (value: string, row) => <Tag className="mono">{row.columnType || value}</Tag>,
   },
   {
-    title: 'May be missing',
+    title: t('structurePane.may-be-missing'),
     dataIndex: 'nullable',
     width: 140,
     render: (value: boolean) => (value ? 'yes' : 'no'),
@@ -675,12 +682,12 @@ const fieldColumns: TableColumnsType<ColumnInfo> = [
 
 const indexColumns: TableColumnsType<IndexInfo> = [
   {
-    title: 'Name',
+    title: t('structurePane.name'),
     dataIndex: 'name',
     render: (name: string) => <span className="mono">{name}</span>,
   },
   {
-    title: 'Columns',
+    title: t('structurePane.columns'),
     dataIndex: 'columns',
     render: (columns: string[]) => (
       <Space size={4} wrap>
@@ -693,14 +700,14 @@ const indexColumns: TableColumnsType<IndexInfo> = [
     ),
   },
   {
-    title: 'Unique',
+    title: t('structurePane.unique'),
     dataIndex: 'unique',
     width: 90,
     render: (unique: boolean, row) =>
-      row.primary ? <Tag color="gold">PRIMARY</Tag> : unique ? <Tag color="green">unique</Tag> : '—',
+      row.primary ? <Tag color="gold">PRIMARY</Tag> : unique ? <Tag color="green">{t('structurePane.unique-2')}</Tag> : '—',
   },
   {
-    title: 'Method',
+    title: t('structurePane.method'),
     dataIndex: 'method',
     width: 110,
     render: (value: string) => value || <span className="dm-null">—</span>,
@@ -709,17 +716,17 @@ const indexColumns: TableColumnsType<IndexInfo> = [
 
 const fkColumns: TableColumnsType<ForeignKeyInfo> = [
   {
-    title: 'Name',
+    title: t('structurePane.name'),
     dataIndex: 'name',
     render: (name: string) => <span className="mono">{name}</span>,
   },
   {
-    title: 'Columns',
+    title: t('structurePane.columns'),
     dataIndex: 'columns',
     render: (columns: string[]) => <span className="mono">{columns.join(', ')}</span>,
   },
   {
-    title: 'References',
+    title: t('structurePane.references'),
     key: 'references',
     render: (_value, row) => (
       <span className="mono">
@@ -729,13 +736,13 @@ const fkColumns: TableColumnsType<ForeignKeyInfo> = [
     ),
   },
   {
-    title: 'On delete',
+    title: t('structurePane.on-delete'),
     dataIndex: 'onDelete',
     width: 110,
     render: (value: string) => value || <span className="dm-null">—</span>,
   },
   {
-    title: 'On update',
+    title: t('structurePane.on-update'),
     dataIndex: 'onUpdate',
     width: 110,
     render: (value: string) => value || <span className="dm-null">—</span>,

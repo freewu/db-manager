@@ -17,6 +17,7 @@ import { EditorView, keymap } from '@codemirror/view'
 import type { DriverType, ObjectInfo } from '../api/types'
 import { isMySQLFamily } from '../lib/sqlFlavor'
 import { KIND_SINGULAR } from '../lib/tree'
+import { t } from '../lib/i18n'
 
 interface SqlEditorProps {
   value: string
@@ -68,7 +69,7 @@ function namespaceOf(catalog: readonly ObjectInfo[] | undefined): SQLNamespace |
       self: {
         label: object.name,
         type: 'type',
-        detail: KIND_SINGULAR[object.kind].toLowerCase(),
+        detail: t(KIND_SINGULAR[object.kind]).toLowerCase(),
       },
       children: [],
     }

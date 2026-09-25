@@ -4,6 +4,7 @@
  * Every backend method is reachable through `api.*`, which keeps all the
  * `window.go` plumbing in one file and gives the rest of the app real types.
  */
+import { t } from '../lib/i18n'
 import type {
   AppInfo,
   BackendBridge,
@@ -82,7 +83,7 @@ export class BackendError extends Error {
 export function toMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   if (typeof error === 'string') return error
-  if (error == null) return 'Unknown error'
+  if (error == null) return t('apiClient.unknown-error')
   try {
     return JSON.stringify(error)
   } catch {
@@ -94,12 +95,12 @@ async function invoke<T>(method: string, ...args: unknown[]): Promise<T> {
   const b = bridge()
   if (!b) {
     throw new BackendError(
-      'Backend bridge is unavailable. Start the app with `wails dev` or `wails build` instead of opening the page directly.',
+      t('apiClient.bridge-unavailable'),
     )
   }
   const fn = b[method]
   if (typeof fn !== 'function') {
-    throw new BackendError(`Unknown backend method: ${method}`)
+    throw new BackendError(t('apiClient.unknown-method', { method }))
   }
   try {
     return (await fn(...args)) as T

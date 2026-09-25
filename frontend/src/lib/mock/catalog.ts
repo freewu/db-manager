@@ -11,8 +11,12 @@
  *
  * The descriptions stay in Chinese: they are the catalogue's own labels, and
  * they are shown next to the value in the picker and in the window's
- * "Description" column.
+ * "Description" column. The group names are the interface's, though, so they are
+ * keys looked up when the picker is drawn rather than words read here — this
+ * table is built once, when the module is imported, and a word read at that
+ * moment would stay in whatever language the program started in.
  */
+import type { MessageKey } from '../i18n'
 
 /** One placeholder the picker offers. */
 export interface Placeholder {
@@ -25,14 +29,15 @@ export interface Placeholder {
 /** A group of placeholders, drawn as one tab of the picker. */
 export interface PlaceholderGroup {
   key: string
-  label: string
+  /** A message key, not the words themselves: see the note above. */
+  label: MessageKey
   items: Placeholder[]
 }
 
 export const PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
   {
     key: 'person',
-    label: 'Person',
+    label: 'libMockCatalog.person',
     items: [
       { value: '@cname', desc: '中文姓名' },
       { value: '@cfirst', desc: '中文姓' },
@@ -54,7 +59,7 @@ export const PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
   },
   {
     key: 'web',
-    label: 'Web',
+    label: 'libMockCatalog.web',
     items: [
       { value: '@email', desc: '邮箱地址' },
       { value: '@url', desc: 'URL（含随机协议）' },
@@ -67,7 +72,7 @@ export const PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
   },
   {
     key: 'basic',
-    label: 'Basic',
+    label: 'libMockCatalog.basic',
     items: [
       { value: '@boolean', desc: '布尔值 true / false' },
       { value: '@guid', desc: 'UUID（v4 形状）' },
@@ -79,7 +84,7 @@ export const PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
   },
   {
     key: 'time',
-    label: 'Time',
+    label: 'libMockCatalog.time',
     items: [
       { value: '@date(yyyy-MM-dd)', desc: '随机日期，可给格式' },
       { value: '@time(HH:mm:ss)', desc: '随机时间，可给格式' },
@@ -89,7 +94,7 @@ export const PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
   },
   {
     key: 'character',
-    label: 'Character',
+    label: 'libMockCatalog.character',
     items: [
       { value: '@word', desc: '随机英文单词' },
       { value: '@sentence(3, 8)', desc: '英文句子（最少、最多词数）' },
@@ -99,7 +104,7 @@ export const PLACEHOLDER_GROUPS: PlaceholderGroup[] = [
   },
   {
     key: 'number',
-    label: 'Number',
+    label: 'libMockCatalog.number',
     items: [
       { value: '@integer(1, 100)', desc: '整数，闭区间（默认 0 ~ 1000000）' },
       { value: '@natural(1, 100)', desc: '自然数，即非负整数（默认 0 ~ 1000000）' },

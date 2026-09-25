@@ -3,6 +3,7 @@ import { Splitter } from 'antd'
 
 import { ConnectProvider } from '../hooks/useConnect'
 import { capabilitiesOf, findDriver } from '../lib/capabilities'
+import { t } from '../lib/i18n'
 import { datagenTarget, useAppStore, type AppPage } from '../store/appStore'
 import { ActivityBar } from './ActivityBar'
 import { ChangeLogPane } from './ChangeLogPane'
@@ -57,9 +58,11 @@ export function AppShell() {
   const dataGenReason = hasDataGenWindow
     ? undefined
     : !target
-      ? 'Pick an open connection in the tree first'
+      ? t('appShell.pick-an-open-connection-in-the-tree-first')
       : !capabilitiesOf(dataGenDriver).insertable
-        ? `${dataGenDriver?.displayName ?? 'This engine'} cannot insert rows`
+        ? t('appShell.n-cannot-insert-rows', {
+            driver: dataGenDriver?.displayName ?? t('appShell.this-engine'),
+          })
         : undefined
 
   /**
@@ -106,7 +109,7 @@ export function AppShell() {
             onSelect={selectPage}
             hints={
               page === 'connections' && treeOpen
-                ? { connections: 'Hide the connection tree' }
+                ? { connections: t('appShell.hide-the-connection-tree') }
                 : undefined
             }
             disabledReason={dataGenReason ? { datagen: dataGenReason } : undefined}

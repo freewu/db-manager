@@ -44,6 +44,7 @@ import { useConnect } from '../hooks/useConnect'
 import { driverIconOrLogo } from '../lib/assets'
 import { capabilitiesOf, findDriver, objectKindsOf } from '../lib/capabilities'
 import { generatable } from '../lib/codegen'
+import { t, tn, useLanguage } from '../lib/i18n'
 import {
   arrangementOf,
   dropTargetFor,
@@ -103,6 +104,7 @@ interface RootEntry {
  * `lib/explorer.ts` for the UI's half of that.
  */
 export function ConnectionSidebar() {
+  const language = useLanguage()
   const sessions = useAppStore((s) => s.sessions)
   const drivers = useAppStore((s) => s.drivers)
   const connections = useAppStore((s) => s.connections)
@@ -375,9 +377,12 @@ export function ConnectionSidebar() {
       }
 
       modal.confirm({
-        title: op === 'drop' ? `Drop table ${table}?` : `Empty table ${table}?`,
+        title:
+          op === 'drop'
+            ? t('connectionSidebar.drop-table', { table })
+            : t('connectionSidebar.empty-table', { table }),
         width: 720,
-        okText: op === 'drop' ? 'Drop' : 'Truncate',
+        okText: op === 'drop' ? t('connectionSidebar.drop') : t('connectionSidebar.truncate'),
         okButtonProps: { danger: true },
         content: (
           <div>
@@ -386,7 +391,7 @@ export function ConnectionSidebar() {
                 type="warning"
                 showIcon
                 style={{ marginBottom: 12 }}
-                title="Before this runs"
+                title={t('connectionSidebar.before-this-runs')}
                 description={
                   <ul style={{ margin: 0, paddingInlineStart: 18 }}>
                     {plan.warnings.map((warning) => (
@@ -403,8 +408,8 @@ export function ConnectionSidebar() {
             />
             <Typography.Paragraph type="secondary" style={{ fontSize: 12, marginTop: 8, marginBottom: 0 }}>
               {op === 'drop'
-                ? 'The table and every row in it go, and this cannot be undone.'
-                : 'Every row goes; the table, its fields and its indexes stay.'}
+                ? t('connectionSidebar.the-table-and-every-row-in-it-go-and-this-cannot')
+                : t('connectionSidebar.every-row-goes-the-table-its-fields-and-its')}
             </Typography.Paragraph>
           </div>
         ),
@@ -416,15 +421,19 @@ export function ConnectionSidebar() {
                 : await api.truncateTable(request)
             if (result.error) {
               message.error(
-                `${op === 'drop' ? 'Dropping' : 'Emptying'} ${table} failed: ${result.error}`,
+                t('connectionSidebar.failed', {
+                  action: t(op === 'drop' ? 'connectionSidebar.dropping' : 'connectionSidebar.emptying'),
+                  table,
+                  error: result.error,
+                }),
               )
               return
             }
             if (op === 'drop') {
               closeTableTab(place.sessionId, place.database, place.schema, table)
-              message.success(`Table ${table} dropped`)
+              message.success(t('connectionSidebar.table-dropped', { table }))
             } else {
-              message.success(`Table ${table} is empty`)
+              message.success(t('connectionSidebar.table-is-empty', { table }))
             }
             // The tree carries the object list and the index list of this
             // namespace, and one statement can change either.
@@ -483,7 +492,7 @@ export function ConnectionSidebar() {
       const error = tree.errors[key]
 
       let children: TreeDataNode[] | undefined
-      if (loading) children = [placeholderNode(key, 'Loading indexes…')]
+      if (loading) children = [placeholderNode(key, t('connectionSidebar.loading-indexes'))]
       else if (error) {
         children = [
           errorNode(key, error, () => void loadIndexes(sessionId, database, schema)),
@@ -523,19 +532,19 @@ export function ConnectionSidebar() {
               {
                 key: 'list',
                 icon: <UnorderedListOutlined />,
-                label: 'Open object list',
+                label: t('connectionSidebar.open-object-list'),
                 onClick: () => openList(sessionId, database, schema, 'index'),
               },
               {
                 key: 'refresh',
                 icon: <ReloadOutlined />,
-                label: 'Reload index list',
+                label: t('connectionSidebar.reload-index-list'),
                 onClick: () => void loadIndexes(sessionId, database, schema),
               },
             ]}
           >
             <span data-tree-key={encodeNode({ t: 'indexFolder', sessionId, database, schema })}>
-              {indexes ? `Indexes (${indexes.length})` : 'Indexes'}
+              {indexes ? t('connectionSidebar.indexes', { n: indexes.length }) : t('connectionSidebar.indexes-2')}
             </span>
           </NodeMenu>
         ),
@@ -592,7 +601,7 @@ export function ConnectionSidebar() {
                 {
                   key: 'list',
                   icon: <UnorderedListOutlined />,
-                  label: 'Open object list',
+                  label: t('connectionSidebar.open-object-list'),
                   onClick: () => openList(sessionId, database, schema, kind),
                 },
                 ...(kind === 'table'
@@ -600,7 +609,7 @@ export function ConnectionSidebar() {
                       {
                         key: 'create',
                         icon: <PlusOutlined />,
-                        label: 'New table…',
+                        label: t('connectionSidebar.new-table'),
                         disabled: !canCreate,
                         onClick: () => openNewTableTab(sessionId, database, schema),
                       },
@@ -611,7 +620,7 @@ export function ConnectionSidebar() {
                       {
                         key: 'ddl',
                         icon: <CodeOutlined />,
-                        label: 'New DDL script…',
+                        label: t('connectionSidebar.new-ddl-script'),
                         onClick: () => openDdlTab(sessionId, database, schema),
                       },
                     ]
@@ -620,13 +629,15 @@ export function ConnectionSidebar() {
                 {
                   key: 'refresh',
                   icon: <ReloadOutlined />,
-                  label: 'Reload objects',
+                  label: t('connectionSidebar.reload-objects'),
                   onClick: () => void loadNamespace(sessionId, database, schema),
                 },
               ]}
             >
               {/* `data-tree-key` is how a reveal finds the row to scroll to. */}
-              <span data-tree-key={key}>{`${FOLDER_LABEL[kind]} (${items.length})`}</span>
+              <span data-tree-key={key}>
+                {t('connectionSidebar.folder-count', { folder: t(FOLDER_LABEL[kind]), n: items.length })}
+              </span>
             </NodeMenu>
           ),
           icon: <FolderOutlined />,
@@ -647,15 +658,15 @@ export function ConnectionSidebar() {
                   {
                     key: 'data',
                     icon: <UnorderedListOutlined />,
-                    label: 'Open data',
+                    label: t('connectionSidebar.open-data'),
                     onClick: () => openObject(sessionId, database, schema, object, 'data'),
                   },
                   {
                     key: 'structure',
                     icon: <AppstoreOutlined />,
                     label: designable
-                      ? `Design ${KIND_SINGULAR[object.kind]}`
-                      : 'Open fields',
+                      ? t('connectionSidebar.design', { kind: t(KIND_SINGULAR[object.kind]) })
+                      : t('connectionSidebar.open-fields'),
                     onClick: () => openObject(sessionId, database, schema, object, 'structure'),
                   },
                   ...(relational
@@ -663,7 +674,7 @@ export function ConnectionSidebar() {
                         {
                           key: 'ddl',
                           icon: <CodeOutlined />,
-                          label: 'Edit DDL…',
+                          label: t('connectionSidebar.edit-ddl'),
                           onClick: () => openDdlTab(sessionId, database, schema, object.name),
                         },
                       ]
@@ -675,7 +686,7 @@ export function ConnectionSidebar() {
                         {
                           key: 'codegen',
                           icon: <FunctionOutlined />,
-                          label: 'Generate code…',
+                          label: t('connectionSidebar.generate-code'),
                           onClick: () => openCodegenTab(sessionId, database, schema, object),
                         },
                       ]
@@ -688,7 +699,7 @@ export function ConnectionSidebar() {
                         {
                           key: 'datagen',
                           icon: <ExperimentOutlined />,
-                          label: 'Data generation…',
+                          label: t('connectionSidebar.data-generation'),
                           onClick: () => openDataGenTab(sessionId, database, schema, object.name),
                         },
                       ]
@@ -701,11 +712,11 @@ export function ConnectionSidebar() {
                         {
                           key: 'duplicate',
                           icon: <CopyOutlined />,
-                          label: 'Duplicate table',
+                          label: t('connectionSidebar.duplicate-table'),
                           children: [
                             {
                               key: 'duplicate-structure',
-                              label: 'Structure only',
+                              label: t('connectionSidebar.structure-only'),
                               onClick: () =>
                                 setCopyTable({
                                   sessionId,
@@ -717,7 +728,7 @@ export function ConnectionSidebar() {
                             },
                             {
                               key: 'duplicate-data',
-                              label: 'Structure and data',
+                              label: t('connectionSidebar.structure-and-data'),
                               onClick: () =>
                                 setCopyTable({
                                   sessionId,
@@ -742,7 +753,7 @@ export function ConnectionSidebar() {
                         {
                           key: 'truncate',
                           icon: <ClearOutlined />,
-                          label: 'Truncate table',
+                          label: t('connectionSidebar.truncate-table'),
                           onClick: () =>
                             void runTableOp('truncate', {
                               sessionId,
@@ -754,7 +765,7 @@ export function ConnectionSidebar() {
                         {
                           key: 'drop',
                           icon: <DeleteOutlined />,
-                          label: 'Drop table',
+                          label: t('connectionSidebar.drop-table-2'),
                           danger: true,
                           onClick: () =>
                             void runTableOp('drop', {
@@ -770,7 +781,7 @@ export function ConnectionSidebar() {
                   {
                     key: 'copy',
                     icon: <NumberOutlined />,
-                    label: 'Copy name',
+                    label: t('connectionSidebar.copy-name'),
                     onClick: () => void copyText(object.name),
                   },
                 ]}
@@ -811,7 +822,7 @@ export function ConnectionSidebar() {
   const buildNamespace = useCallback(
     (sessionId: string, database: string, schema: string): TreeDataNode[] => {
       const ns = namespaceKey(sessionId, database, schema)
-      if (tree.loading[ns]) return [placeholderNode(ns, 'Loading objects…')]
+      if (tree.loading[ns]) return [placeholderNode(ns, t('connectionSidebar.loading-objects'))]
       const error = tree.errors[ns]
       if (error) {
         return [errorNode(ns, error, () => void loadNamespace(sessionId, database, schema))]
@@ -855,7 +866,7 @@ export function ConnectionSidebar() {
       const key = queriesKey(session.id, database)
       const files = tree.queries[key]
       let children: TreeDataNode[] | undefined
-      if (tree.loading[key]) children = [placeholderNode(key, 'Loading queries…')]
+      if (tree.loading[key]) children = [placeholderNode(key, t('connectionSidebar.loading-queries'))]
       else if (tree.errors[key]) {
         children = [
           errorNode(key, tree.errors[key], () => void loadQueryFiles(session.id, database)),
@@ -889,19 +900,19 @@ export function ConnectionSidebar() {
               {
                 key: 'new',
                 icon: <PlusOutlined />,
-                label: 'New query…',
+                label: t('connectionSidebar.new-query'),
                 onClick: () => setQueryName({ sessionId: session.id, database }),
               },
               { type: 'divider' as const },
               {
                 key: 'refresh',
                 icon: <ReloadOutlined />,
-                label: 'Reload queries',
+                label: t('connectionSidebar.reload-queries'),
                 onClick: () => void loadQueryFiles(session.id, database),
               },
             ]}
           >
-            <span data-tree-key={key}>{files ? `Queries (${files.length})` : 'Queries'}</span>
+            <span data-tree-key={key}>{files ? t('connectionSidebar.queries', { n: files.length }) : t('connectionSidebar.queries-2')}</span>
           </NodeMenu>
         ),
         icon: <FolderOutlined />,
@@ -949,7 +960,7 @@ export function ConnectionSidebar() {
         const key = databaseKey(session.id, database)
         const schemas = tree.schemas[key]
         let children: TreeDataNode[] | undefined
-        if (tree.loading[key]) children = [placeholderNode(key, 'Loading schemas…')]
+        if (tree.loading[key]) children = [placeholderNode(key, t('connectionSidebar.loading-schemas'))]
         else if (tree.errors[key]) {
           children = [
             errorNode(key, tree.errors[key], () => void loadSchemas(session.id, database)),
@@ -965,13 +976,13 @@ export function ConnectionSidebar() {
                         {
                           key: 'er',
                           icon: <PartitionOutlined />,
-                          label: 'ER diagram',
+                          label: t('connectionSidebar.er-diagram'),
                           onClick: () => openErTab(session.id, database, schema),
                         },
                         {
                           key: 'ddl',
                           icon: <CodeOutlined />,
-                          label: 'New DDL script…',
+                          label: t('connectionSidebar.new-ddl-script'),
                           onClick: () => openDdlTab(session.id, database, schema),
                         },
                       ]
@@ -980,7 +991,7 @@ export function ConnectionSidebar() {
                   {
                     key: 'refresh',
                     icon: <ReloadOutlined />,
-                    label: 'Reload objects',
+                    label: t('connectionSidebar.reload-objects'),
                     onClick: () => void loadNamespace(session.id, database, schema),
                   },
                 ]}
@@ -1018,13 +1029,13 @@ export function ConnectionSidebar() {
                     {
                       key: 'er',
                       icon: <PartitionOutlined />,
-                      label: 'ER diagram',
+                      label: t('connectionSidebar.er-diagram'),
                       onClick: () => openErTab(session.id, database, database),
                     },
                     {
                       key: 'ddl',
                       icon: <CodeOutlined />,
-                      label: 'New DDL script…',
+                      label: t('connectionSidebar.new-ddl-script'),
                       onClick: () => openDdlTab(session.id, database, database),
                     },
                   ]
@@ -1035,7 +1046,7 @@ export function ConnectionSidebar() {
                     {
                       key: 'new-query',
                       icon: <PlusOutlined />,
-                      label: 'New query…',
+                      label: t('connectionSidebar.new-query'),
                       onClick: () => setQueryName({ sessionId: session.id, database }),
                     },
                   ]
@@ -1043,7 +1054,7 @@ export function ConnectionSidebar() {
               {
                 key: 'refresh',
                 icon: <ReloadOutlined />,
-                label: 'Reload objects',
+                label: t('connectionSidebar.reload-objects'),
                 onClick: () => void loadNamespace(session.id, database, database),
               },
             ]}
@@ -1088,18 +1099,18 @@ export function ConnectionSidebar() {
         // the hint below may only appear once the key is known to be loaded —
         // otherwise the connection could never be opened from here.
         if (pending === root.id) {
-          children = [placeholderNode(root.id, 'Connecting…')]
+          children = [placeholderNode(root.id, t('connectionSidebar.connecting'))]
         } else if (loadedKeys.some((key) => String(key) === connectionKey)) {
           children = [
             emptyNode(
               root.id,
-              'Not connected — expand this node again to retry',
-              'Use “Open connection” in the context menu, or collapse and expand this node, to try again.',
+              t('connectionSidebar.not-connected-expand-this-node-again-to-retry'),
+              t('connectionSidebar.use-open-connection-in-the-context-menu-or'),
             ),
           ]
         }
       } else if (tree.loading[session.id]) {
-        children = [placeholderNode(session.id, 'Loading databases…')]
+        children = [placeholderNode(session.id, t('connectionSidebar.loading-databases'))]
       } else if (tree.errors[session.id]) {
         children = [
           errorNode(session.id, tree.errors[session.id], () => void loadDatabases(session.id)),
@@ -1115,10 +1126,10 @@ export function ConnectionSidebar() {
               : [
                   emptyNode(
                     session.id,
-                    'No databases on this server yet',
+                    t('connectionSidebar.no-databases-on-this-server-yet'),
                     capabilitiesOf(root.driver).relational
-                      ? 'Pick “New database…” in this connection’s menu: the window renders the CREATE DATABASE statement before running it, and the database shows up here afterwards.'
-                      : 'A database appears here once something is written into it — “New database…” selects one with `use`, and it exists after the first document.',
+                      ? t('connectionSidebar.pick-new-database-in-this-connection-s-menu-the')
+                      : t('connectionSidebar.a-database-appears-here-once-something-is'),
                   ),
                 ]
         }
@@ -1140,7 +1151,7 @@ export function ConnectionSidebar() {
               />
               <span className="dm-truncate">{root.name}</span>
               {connected ? null : (
-                <span className="dm-connection-state" title="Not connected">
+                <span className="dm-connection-state" title={t('connectionSidebar.not-connected')}>
                   <DisconnectOutlined />
                 </span>
               )}
@@ -1248,7 +1259,7 @@ export function ConnectionSidebar() {
     return nodes
     // Menu builders close over the current tree/session state on purpose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buildConnectionNode, rootById, toggleGroup, visibleArrangement, visibleSessions])
+  }, [language, buildConnectionNode, rootById, toggleGroup, visibleArrangement, visibleSessions])
 
   /* ------------------------------------------------------------ callbacks */
 
@@ -1872,7 +1883,7 @@ export function ConnectionSidebar() {
   const newMenuItems: MenuProps['items'] = [
     ...(connectionTypeItems(drivers) ?? []),
     { type: 'divider' as const },
-    { key: NEW_GROUP_KEY, icon: <FolderAddOutlined />, label: 'New group…' },
+    { key: NEW_GROUP_KEY, icon: <FolderAddOutlined />, label: t('connectionSidebar.new-group') },
   ]
 
   /** Both anchors dispatch through here, so a key means one thing in each. */
@@ -1891,7 +1902,7 @@ export function ConnectionSidebar() {
   return (
     <div className="dm-sidebar" onContextMenu={openBlankMenu}>
       <div className="dm-sidebar-header">
-        <span className="dm-sidebar-title">Connections</span>
+        <span className="dm-sidebar-title">{t('connectionSidebar.connections')}</span>
         <Dropdown
           trigger={['click']}
           placement="bottomLeft"
@@ -1899,15 +1910,15 @@ export function ConnectionSidebar() {
           menu={{ items: newMenuItems, onClick: ({ key }) => handleNewMenuKey(key) }}
         >
           <span className="dm-dropdown-anchor">
-            <Tooltip title="New connection or group">
+            <Tooltip title={t('connectionSidebar.new-connection-or-group')}>
               <Button size="small" type="text" icon={<PlusOutlined />} />
             </Tooltip>
           </span>
         </Dropdown>
-        <Tooltip title="Collapse all">
+        <Tooltip title={t('connectionSidebar.collapse-all')}>
           <Button size="small" type="text" icon={<MinusSquareOutlined />} onClick={collapseAll} />
         </Tooltip>
-        <Tooltip title="Manage connections">
+        <Tooltip title={t('connectionSidebar.manage-connections')}>
           <Button
             size="small"
             type="text"
@@ -1923,7 +1934,7 @@ export function ConnectionSidebar() {
           allowClear
           value={filter}
           prefix={<SearchOutlined style={{ opacity: 0.5 }} />}
-          placeholder="Filter connections"
+          placeholder={t('connectionSidebar.filter-connections')}
           onChange={(event) => setFilter(event.target.value)}
         />
       </div>
@@ -1939,19 +1950,21 @@ export function ConnectionSidebar() {
         {arrangement.length === 0 && looseSessions.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={<span style={{ fontSize: 12 }}>No connections yet</span>}
+            description={<span style={{ fontSize: 12 }}>{t('connectionSidebar.no-connections-yet')}</span>}
             style={{ marginTop: 40 }}
           >
             <ConnectionTypeDropdown>
               <Button type="primary" size="small" icon={<PlusOutlined />}>
-                New connection
+                {t('connectionSidebar.new-connection')}
               </Button>
             </ConnectionTypeDropdown>
           </Empty>
         ) : treeData.length === 0 ? (
           <Empty
             image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={<span style={{ fontSize: 12 }}>No match for “{filter}”</span>}
+            description={
+              <span style={{ fontSize: 12 }}>{t('connectionSidebar.no-match-for', { filter })}</span>
+            }
             style={{ marginTop: 40 }}
           />
         ) : (
@@ -2020,7 +2033,7 @@ export function ConnectionSidebar() {
           if (!queryName) return
           const { sessionId, database, rename } = queryName
           const connectionId = sessions.find((s) => s.id === sessionId)?.connectionId
-          if (!connectionId) throw new Error('This connection is no longer open.')
+          if (!connectionId) throw new Error(t('connectionSidebar.this-connection-is-no-longer-open'))
           if (rename) {
             await renameQueryFile({ connectionId, database, from: rename, to: name })
           } else {
@@ -2069,38 +2082,38 @@ export function ConnectionSidebar() {
       {
         key: 'open',
         icon: <EditOutlined />,
-        label: 'Open',
+        label: t('connectionSidebar.open'),
         onClick: () => openQueryFileTab(session.id, database, file.name),
       },
       {
         key: 'rename',
         icon: <FileTextOutlined />,
-        label: 'Rename…',
+        label: t('connectionSidebar.rename'),
         onClick: () => setQueryName({ sessionId: session.id, database, rename: file.name }),
       },
       {
         key: 'copy',
         icon: <NumberOutlined />,
-        label: 'Copy name',
+        label: t('connectionSidebar.copy-name'),
         onClick: () => void copyText(file.name),
       },
       { type: 'divider' as const },
       {
         key: 'reveal',
         icon: <FolderOutlined />,
-        label: 'Show in folder',
+        label: t('connectionSidebar.show-in-folder'),
         onClick: () => void api.revealInExplorer(file.path).catch(() => undefined),
       },
       {
         key: 'delete',
         icon: <DeleteOutlined />,
         danger: true,
-        label: 'Delete',
+        label: t('connectionSidebar.delete'),
         onClick: () => {
           modal.confirm({
-            title: `Delete “${file.name}”?`,
-            content: `The script is removed from ${database}. A window that has it open keeps the text that is in it, but there is no longer a file behind it — saving from there would write it again.`,
-            okText: 'Delete',
+            title: t('connectionSidebar.delete-2', { name: file.name }),
+            content: t('connectionSidebar.the-script-is-removed-from-a-window-that-has-it', { database }),
+            okText: t('connectionSidebar.delete'),
             okButtonProps: { danger: true },
             onOk: () => deleteQueryFile(session.id, database, file.name),
           })
@@ -2119,7 +2132,7 @@ export function ConnectionSidebar() {
       {
         key: 'open',
         icon: <TableOutlined />,
-        label: `Open ${index.table}`,
+        label: t('connectionSidebar.open-2', { table: index.table }),
         onClick: () => {
           const objects = tree.objects[objectsKey(sessionId, database, schema)] ?? []
           const object = objects.find((o) => o.name === index.table)
@@ -2129,7 +2142,7 @@ export function ConnectionSidebar() {
       {
         key: 'copy',
         icon: <NumberOutlined />,
-        label: 'Copy name',
+        label: t('connectionSidebar.copy-name'),
         onClick: () => void copyText(index.name),
       },
     ]
@@ -2149,7 +2162,7 @@ export function ConnectionSidebar() {
       return
     }
     if (!root.profile) {
-      message.info(`${root.name} has no saved connection to open.`)
+      message.info(t('connectionSidebar.has-no-saved-connection-to-open', { name: root.name }))
       return
     }
     pendingRuntime.current = root.id
@@ -2179,20 +2192,20 @@ export function ConnectionSidebar() {
       {
         key: 'new',
         icon: <PlusOutlined />,
-        label: 'New connection…',
+        label: t('connectionSidebar.new-connection-2'),
         children: connectionTypeItems(drivers, 'group.'),
       },
       { type: 'divider' as const },
       {
         key: 'rename',
         icon: <EditOutlined />,
-        label: 'Rename group…',
+        label: t('connectionSidebar.rename-group'),
         onClick: () => setGroupDialog({ group: { id: entry.id, name: entry.name } }),
       },
       {
         key: 'delete',
         icon: <DeleteOutlined />,
-        label: 'Delete group',
+        label: t('connectionSidebar.delete-group'),
         danger: true,
         onClick: () => confirmDeleteGroup(entry),
       },
@@ -2207,12 +2220,12 @@ export function ConnectionSidebar() {
   function confirmDeleteGroup(entry: ExplorerEntry & { t: 'group' }) {
     const count = entry.members.length
     modal.confirm({
-      title: `Delete “${entry.name}”?`,
+      title: t('connectionSidebar.delete-2', { name: entry.name }),
       content:
         count > 0
-          ? `Its ${count} connection${count === 1 ? '' : 's'} move back to the top level. No stored connection is deleted.`
-          : 'The group is empty, so nothing else changes.',
-      okText: 'Delete',
+          ? tn('connectionSidebar.its-connections-move-back-to-the-top-level', count)
+          : t('connectionSidebar.the-group-is-empty-so-nothing-else-changes'),
+      okText: t('connectionSidebar.delete'),
       okButtonProps: { danger: true },
       onOk: async () => {
         try {
@@ -2232,27 +2245,27 @@ export function ConnectionSidebar() {
         {
           key: 'query',
           icon: <EditOutlined />,
-          label: 'New query',
+          label: t('connectionSidebar.new-query-2'),
           onClick: () => openQueryTab(session.id, session.database),
         },
         {
           key: 'refresh',
           icon: <ReloadOutlined />,
-          label: 'Refresh',
+          label: t('connectionSidebar.refresh'),
           onClick: () => refreshSession(session.id),
         },
         { type: 'divider' as const },
         {
           key: 'newDatabase',
           icon: <DatabaseOutlined />,
-          label: 'New database…',
+          label: t('connectionSidebar.new-database'),
           disabled: !capabilitiesOf(root.driver).createDatabase || session.readOnly,
           onClick: () => setNewDatabase(session),
         },
         {
           key: 'edit',
           icon: <EditOutlined />,
-          label: 'Edit connection…',
+          label: t('connectionSidebar.edit-connection'),
           disabled: !profile,
           onClick: () => profile && openEditor(profile),
         },
@@ -2260,7 +2273,7 @@ export function ConnectionSidebar() {
         {
           key: 'disconnect',
           icon: <DisconnectOutlined />,
-          label: 'Disconnect',
+          label: t('connectionSidebar.disconnect'),
           danger: true,
           // No confirmation: the profile is stored, so connecting again is one
           // click away, and only the tabs of this connection are closed.
@@ -2272,13 +2285,13 @@ export function ConnectionSidebar() {
         {
           key: 'connect',
           icon: <ThunderboltOutlined />,
-          label: 'Open connection',
+          label: t('connectionSidebar.open-connection'),
           onClick: () => void connect(profile),
         },
         {
           key: 'edit',
           icon: <EditOutlined />,
-          label: 'Edit connection…',
+          label: t('connectionSidebar.edit-connection'),
           onClick: () => openEditor(profile),
         },
       )
@@ -2347,7 +2360,7 @@ function emptyNode(scope: string, text: string, tip?: string): TreeDataNode {
     title: (
       <Tooltip
         title={
-          tip ?? 'Create one with CREATE DATABASE … in a query tab, then reload the catalog.'
+          tip ?? t('connectionSidebar.create-one-with-create-database-in-a-query-tab')
         }
       >
         <span style={{ opacity: 0.6, fontSize: 12 }}>{text}</span>
@@ -2373,7 +2386,7 @@ function errorNode(scope: string, text: string, onRetry?: () => void): TreeDataN
             style={{ padding: 0, height: 'auto', fontSize: 12 }}
             onClick={onRetry}
           >
-            Retry
+            {t('connectionSidebar.retry')}
           </Button>
         ) : null}
       </span>
@@ -2564,7 +2577,7 @@ function NewDatabaseModal({
       if (rendered.warnings?.length) {
         message.info(rendered.warnings.join(' '), 8)
       } else {
-        message.success(`Database ${database} created`)
+        message.success(t('connectionSidebar.database-created', { database }))
       }
       // A new namespace invalidates nothing but the database list itself.
       void loadDatabases(session.id)
@@ -2578,8 +2591,8 @@ function NewDatabaseModal({
   return (
     <Modal
       open={session !== null}
-      title={session ? `New database on ${session.name}` : 'New database'}
-      okText="Create"
+      title={session ? t('connectionSidebar.new-database-on', { name: session.name }) : t('connectionSidebar.new-database-2')}
+      okText={t('connectionSidebar.create')}
       confirmLoading={busy}
       okButtonProps={{ disabled: !name.trim() || error !== null }}
       onOk={() => void submit()}
@@ -2587,13 +2600,13 @@ function NewDatabaseModal({
       destroyOnHidden
     >
       <label className="dm-field-label" htmlFor="dm-new-database-name">
-        Database name
+        {t('connectionSidebar.database-name')}
       </label>
       <Input
         id="dm-new-database-name"
         autoFocus
         value={name}
-        placeholder="analytics"
+        placeholder={t('connectionSidebar.analytics')}
         onChange={(event) => setName(event.target.value)}
         onPressEnter={() => void submit()}
       />
@@ -2601,14 +2614,14 @@ function NewDatabaseModal({
       {reading || options?.charsets.length ? (
         <>
           <label className="dm-field-label" htmlFor="dm-new-database-charset" style={{ marginTop: 12 }}>
-            {options?.charsetLabel || 'Character set'}
+            {options?.charsetLabel || t('connectionSidebar.character-set')}
           </label>
           <Select
             id="dm-new-database-charset"
             style={{ width: '100%' }}
             value={charset}
             loading={reading}
-            placeholder="Server default"
+            placeholder={t('connectionSidebar.server-default')}
             allowClear
             onChange={(value: string | undefined) => {
               setCharset(value)
@@ -2619,7 +2632,7 @@ function NewDatabaseModal({
             }}
             options={(options?.charsets ?? []).map((entry) => ({
               value: entry.name,
-              label: entry.default ? `${entry.name} (server default)` : entry.name,
+              label: entry.default ? t('connectionSidebar.server-default-2', { name: entry.name }) : entry.name,
             }))}
           />
         </>
@@ -2628,7 +2641,7 @@ function NewDatabaseModal({
       {showCollation ? (
         <>
           <label className="dm-field-label" htmlFor="dm-new-database-collation" style={{ marginTop: 12 }}>
-            {options?.collationLabel || 'Collation'}
+            {options?.collationLabel || t('connectionSidebar.collation')}
           </label>
           {options?.collationEditable ? (
             // PostgreSQL locale names come from the server's operating system,
@@ -2638,7 +2651,7 @@ function NewDatabaseModal({
               style={{ width: '100%' }}
               value={collation}
               options={collations.map((entry) => ({ value: entry }))}
-              placeholder="en_US.UTF-8"
+              placeholder={t('connectionSidebar.en-us-utf-8')}
               allowClear
               onChange={(value: string) => setCollation(value || undefined)}
             />
@@ -2647,7 +2660,7 @@ function NewDatabaseModal({
               id="dm-new-database-collation"
               style={{ width: '100%' }}
               value={collation}
-              placeholder="Server default"
+              placeholder={t('connectionSidebar.server-default')}
               allowClear
               onChange={(value: string | undefined) => setCollation(value)}
               options={collations.map((entry) => ({ value: entry, label: entry }))}
@@ -2658,7 +2671,7 @@ function NewDatabaseModal({
 
       {optionsError ? (
         <Typography.Paragraph type="secondary" style={{ marginTop: 12, marginBottom: 0 }}>
-          {optionsError} The name alone still works.
+          {optionsError} {t('connectionSidebar.the-name-alone-still-works')}
         </Typography.Paragraph>
       ) : null}
 
@@ -2671,7 +2684,7 @@ function NewDatabaseModal({
           {plan ? (
             <SqlCode inline sql={plan.statement} driver={session?.driver} />
           ) : (
-            'Name it and the statement appears here.'
+            t('connectionSidebar.name-it-and-the-statement-appears-here')
           )}
         </Typography.Paragraph>
       )}
@@ -2709,14 +2722,14 @@ function ManageConnectionsModal({
   return (
     <Modal
       open={open}
-      title="Saved connections"
+      title={t('connectionSidebar.saved-connections')}
       footer={null}
       width={620}
       onCancel={onClose}
       destroyOnHidden
     >
       {connections.length === 0 ? (
-        <Empty description="No saved connections yet" />
+        <Empty description={t('connectionSidebar.no-saved-connections-yet')} />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {connections.map((profile) => {
@@ -2747,7 +2760,7 @@ function ManageConnectionsModal({
                 </div>
                 {session ? (
                   <Button size="small" onClick={() => void closeSession(session.id)}>
-                    Disconnect
+                    {t('connectionSidebar.disconnect')}
                   </Button>
                 ) : (
                   <Button
@@ -2756,10 +2769,10 @@ function ManageConnectionsModal({
                     loading={pending === profile.id}
                     onClick={() => void connect(profile)}
                   >
-                    Connect
+                    {t('connectionSidebar.connect')}
                   </Button>
                 )}
-                <Tooltip title="Edit">
+                <Tooltip title={t('connectionSidebar.edit')}>
                   <Button
                     size="small"
                     type="text"
@@ -2767,7 +2780,7 @@ function ManageConnectionsModal({
                     onClick={() => onEdit(profile)}
                   />
                 </Tooltip>
-                <Tooltip title="Delete">
+                <Tooltip title={t('connectionSidebar.delete')}>
                   <Button
                     size="small"
                     type="text"
@@ -2775,16 +2788,16 @@ function ManageConnectionsModal({
                     icon={<DeleteOutlined />}
                     onClick={() =>
                       modal.confirm({
-                        title: `Delete “${profile.name}”?`,
+                        title: t('connectionSidebar.delete-2', { name: profile.name }),
                         content:
-                          'The stored profile and its saved password are removed. The database itself is not touched.',
-                        okText: 'Delete',
+                          t('connectionSidebar.the-stored-profile-and-its-saved-password-are'),
+                        okText: t('connectionSidebar.delete'),
                         okButtonProps: { danger: true },
                         onOk: async () => {
                           try {
                             if (session) await closeSession(session.id)
                             await deleteConnection(profile.id)
-                            message.success('Connection deleted')
+                            message.success(t('connectionSidebar.connection-deleted'))
                           } catch (error) {
                             message.error(error instanceof Error ? error.message : String(error))
                           }
@@ -2834,9 +2847,9 @@ function GroupNameModal({
   return (
     <NamePromptModal
       open={Boolean(request)}
-      title={renaming ? 'Rename group' : 'New group'}
-      okText={renaming ? 'Rename' : 'Create'}
-      placeholder="Group name"
+      title={renaming ? t('connectionSidebar.rename-group-2') : t('connectionSidebar.new-group-2')}
+      okText={renaming ? t('connectionSidebar.rename-2') : t('connectionSidebar.create')}
+      placeholder={t('connectionSidebar.group-name')}
       initial={renaming?.name ?? ''}
       onClose={onClose}
       onSubmit={async (name) => {
@@ -2868,11 +2881,11 @@ function QueryNameModal({
   return (
     <NamePromptModal
       open={Boolean(request)}
-      title={renaming ? 'Rename query' : `New query in ${request?.database ?? ''}`}
-      okText={renaming ? 'Rename' : 'Create'}
-      placeholder="Query name"
+      title={renaming ? t('connectionSidebar.rename-query') : t('connectionSidebar.new-query-in', { database: request?.database ?? '' })}
+      okText={renaming ? t('connectionSidebar.rename-2') : t('connectionSidebar.create')}
+      placeholder={t('connectionSidebar.query-name')}
       initial={renaming ?? ''}
-      hint="The script is saved as a .sql file inside the data folder, so a later rename keeps it in one piece."
+      hint={t('connectionSidebar.the-script-is-saved-as-a-sql-file-inside-the')}
       onClose={onClose}
       onSubmit={onSubmit}
     />

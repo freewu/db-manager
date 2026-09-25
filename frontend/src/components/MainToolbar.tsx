@@ -19,6 +19,8 @@ import { useAppStore } from '../store/appStore'
 import { useConnect } from '../hooks/useConnect'
 import { findDriver, objectKindsOf } from '../lib/capabilities'
 import { FOLDER_LABEL } from '../lib/tree'
+import { t } from '../lib/i18n'
+import type { MessageKey } from '../lib/i18n'
 
 /**
  * Tooltip for the buttons that are temporarily parked.
@@ -30,7 +32,7 @@ import { FOLDER_LABEL } from '../lib/tree'
  * database, and listing the objects of the picked namespace. The handlers are
  * left wired so putting a group back in service is a one-line change.
  */
-const PARKED = 'Temporarily unavailable'
+const PARKED: MessageKey = 'mainToolbar.temporarily-unavailable'
 
 /**
  * Navicat-style ribbon: flat, grouped, icon-over-label buttons.
@@ -79,7 +81,7 @@ export function MainToolbar() {
   // Which object kinds the engine has is the backend's answer, not ours.
   const namespaceDriver = findDriver(drivers, namespaceSession?.driver)
   const namespaceKinds = objectKindsOf(namespaceDriver)
-  const driverLabel = namespaceDriver?.displayName ?? 'This engine'
+  const driverLabel = namespaceDriver?.displayName ?? t('mainToolbar.this-engine')
 
   const refresh = async () => {
     if (!focusedSession) return
@@ -105,27 +107,34 @@ export function MainToolbar() {
     kind: 'table' | 'view',
   ): { disabled: boolean; hint: string; onClick?: () => void } => {
     if (!focusedNamespace) {
-      return { disabled: true, hint: 'Pick a database in the tree first' }
+      return { disabled: true, hint: t('mainToolbar.pick-a-database-in-the-tree-first') }
     }
     const { sessionId, database, schema } = focusedNamespace
     if (!schema) {
       return {
         disabled: true,
-        hint: `${driverLabel} keeps its objects in schemas — pick one of ${database}'s`,
+        hint: t('mainToolbar.keeps-its-objects-in-schemas-pick-one-of-s', { driverLabel, database }),
       }
     }
     if (!namespaceKinds.includes(kind)) {
       // Point at the folder this engine does have, so the tooltip leads
       // somewhere instead of just refusing.
-      const instead = namespaceKinds[0] ? FOLDER_LABEL[namespaceKinds[0]] : 'the explorer'
+      const instead = namespaceKinds[0] ? t(FOLDER_LABEL[namespaceKinds[0]]) : t('mainToolbar.the-explorer')
+      // `table` and `view` are two words, not one with an `s` on the end: a
+      // message that glued the plural on would be untranslatable.
       return {
         disabled: true,
-        hint: `${driverLabel} has no ${kind}s — its objects are in ${instead}`,
+        hint: t(kind === 'table' ? 'mainToolbar.has-no-tables' : 'mainToolbar.has-no-views', {
+          driverLabel,
+          instead,
+        }),
       }
     }
     return {
       disabled: false,
-      hint: `List every ${kind} in ${database}`,
+      hint: t(kind === 'table' ? 'mainToolbar.list-every-table-in' : 'mainToolbar.list-every-view-in', {
+        database,
+      }),
       onClick: () => openObjectsTab(sessionId, database, schema, kind),
     }
   }
@@ -139,14 +148,14 @@ export function MainToolbar() {
         <span className="dm-ribbon-dropdown">
           <RibbonButton
             icon={<ApiOutlined />}
-            label="Connection"
-            hint="Create a new connection profile"
+            label={t('mainToolbar.connection')}
+            hint={t('mainToolbar.create-a-new-connection-profile')}
           />
         </span>
       </ConnectionTypeDropdown>
       <RibbonButton
         icon={<ThunderboltOutlined />}
-        label="Open"
+        label={t('mainToolbar.open')}
         // Lights up when the tree has a profile picked that is not open yet —
         // the mirror image of Close below, and the same one-click connection the
         // explorer's right-click "Open connection" does (password prompt and
@@ -154,9 +163,9 @@ export function MainToolbar() {
         hint={
           focusedProfile
             ? focusedSession
-              ? `${focusedProfile.name} is already open`
-              : `Open ${focusedProfile.name}`
-            : 'Pick a connection in the tree first'
+              ? t('mainToolbar.is-already-open', { name: focusedProfile.name })
+              : t('mainToolbar.open-with-name', { name: focusedProfile.name })
+            : t('mainToolbar.pick-a-connection-in-the-tree-first')
         }
         disabled={!focusedProfile || Boolean(focusedSession)}
         loading={pending !== null}
@@ -164,11 +173,11 @@ export function MainToolbar() {
       />
       <RibbonButton
         icon={<DisconnectOutlined />}
-        label="Close"
+        label={t('mainToolbar.close')}
         hint={
           focusedSession
-            ? `Close ${focusedSession.name}`
-            : 'Pick an open connection in the tree first'
+            ? t('mainToolbar.close-with-name', { name: focusedSession.name })
+            : t('mainToolbar.pick-an-open-connection-in-the-tree-first')
         }
         disabled={!focusedSession}
         onClick={() => focusedSession && void closeSession(focusedSession.id)}
@@ -178,15 +187,15 @@ export function MainToolbar() {
 
       <RibbonButton
         icon={<CodeOutlined />}
-        label="New Query"
+        label={t('mainToolbar.new-query')}
         // Lights up while the explorer is inside a database, the same way
         // *Table* and *View* do, and opens a window on that very database —
         // carrying the schema it was picked in, which is what the window
         // completes table names from.
         hint={
           focusedNamespace
-            ? `New query in ${focusedNamespace.database}`
-            : 'Pick a database in the tree first'
+            ? t('mainToolbar.new-query-in', { database: focusedNamespace.database })
+            : t('mainToolbar.pick-a-database-in-the-tree-first')
         }
         disabled={!focusedNamespace}
         onClick={() =>
@@ -200,11 +209,11 @@ export function MainToolbar() {
       />
       <RibbonButton
         icon={<ReloadOutlined />}
-        label="Refresh"
+        label={t('mainToolbar.refresh')}
         hint={
           focusedSession
-            ? `Reload the catalog of ${focusedSession.name}`
-            : 'Pick an open connection in the tree first'
+            ? t('mainToolbar.reload-the-catalog-of', { name: focusedSession.name })
+            : t('mainToolbar.pick-an-open-connection-in-the-tree-first')
         }
         disabled={!focusedSession}
         loading={refreshing}
@@ -215,7 +224,7 @@ export function MainToolbar() {
 
       <RibbonButton
         icon={<TableOutlined />}
-        label="Table"
+        label={t('mainToolbar.table')}
         // Lights up while the explorer is inside a namespace, and opens the
         // very list its Tables folder holds — the same window the folder
         // itself opens, so the tree and the ribbon never disagree.
@@ -225,7 +234,7 @@ export function MainToolbar() {
       />
       <RibbonButton
         icon={<EyeOutlined />}
-        label="View"
+        label={t('mainToolbar.view')}
         disabled={viewButton.disabled}
         hint={viewButton.hint}
         onClick={viewButton.onClick}
@@ -233,10 +242,10 @@ export function MainToolbar() {
 
       <span className="dm-ribbon-sep" />
 
-      <RibbonButton icon={<CloudUploadOutlined />} label="Backup" hint={PARKED} disabled />
-      <RibbonButton icon={<ClockCircleOutlined />} label="Auto Run" hint={PARKED} disabled />
-      <RibbonButton icon={<SwapOutlined />} label="Transfer" hint={PARKED} disabled />
-      <RibbonButton icon={<SyncOutlined />} label="Data Sync" hint={PARKED} disabled />
+      <RibbonButton icon={<CloudUploadOutlined />} label={t('mainToolbar.backup')} hint={t(PARKED)} disabled />
+      <RibbonButton icon={<ClockCircleOutlined />} label={t('mainToolbar.auto-run')} hint={t(PARKED)} disabled />
+      <RibbonButton icon={<SwapOutlined />} label={t('mainToolbar.transfer')} hint={t(PARKED)} disabled />
+      <RibbonButton icon={<SyncOutlined />} label={t('mainToolbar.data-sync')} hint={t(PARKED)} disabled />
     </div>
   )
 }

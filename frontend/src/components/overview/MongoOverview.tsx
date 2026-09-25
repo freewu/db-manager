@@ -2,6 +2,7 @@ import { Typography } from 'antd'
 
 import type { ServerOverview } from '../../api/types'
 import { metricSection, tableSection, type OverviewView } from './shared'
+import { tr } from '../../lib/i18n'
 
 /**
  * MongoDB's runtime page.
@@ -27,9 +28,10 @@ export function mongoView(overview: ServerOverview): OverviewView {
     ],
     footnote: (
       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-        Counters come from <span className="mono">serverStatus</span> and reset when mongod
-        restarts; the table above reads <span className="mono">dbStats</span> per database and
-        costs one round trip per database.
+        {tr('overviewMongo.counters-come-from', {
+          serverStatus: <span className="mono">serverStatus</span>,
+          dbStats: <span className="mono">dbStats</span>,
+        })}
       </Typography.Text>
     ),
   }
