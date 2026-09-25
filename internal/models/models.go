@@ -400,6 +400,115 @@ type TableOpRequest struct {
 	Object string `json:"object"`
 }
 
+// --- database comparison ---------------------------------------------------
+
+// CompareSide names one namespace to compare: the session it is read through,
+// and the database (with the schema inside it, where the engine has them).
+//
+// A side is read every time the comparison runs, never carried across the
+// bridge as data: what a table looks like is the one fact that must not be a
+// snapshot taken when the window was opened.
+type CompareSide struct {
+	SessionID string `json:"sessionId"`
+	Database  string `json:"database,omitempty"`
+	Schema    string `json:"schema,omitempty"`
+}
+
+// CompareRequest asks for two namespaces to be compared.
+//
+// Left is the reference and Right is the one the generated script would bring
+// in line with it; which is which only matters to the sync, never to the
+// comparison itself. Both sides travel by session rather than by connection,
+// because a session already says which profile, which server and which login
+// the namespace is reached through.
+type CompareRequest struct {
+	Left  CompareSide `json:"left"`
+	Right CompareSide `json:"right"`
+}
+
+// SyncDatabaseRequest asks for the script that turns Right into Left.
+//
+// DropExtra is the one thing the user has to decide: a table that exists only on
+// the right is left alone unless it is asked for, because "make B look like A"
+// and "delete everything B has that A does not" are different promises.
+type SyncDatabaseRequest struct {
+	Left      CompareSide `json:"left"`
+	Right     CompareSide `json:"right"`
+	DropExtra bool        `json:"dropExtra"`
+}
+
+// DiffStatus is how one compared thing stands across the two sides.
+type DiffStatus string
+
+const (
+	// DiffSame is a table that is on both sides with the same shape, or a
+	// field / index that matches.
+	DiffSame DiffStatus = "same"
+	// DiffAdded is something the left has and the right does not: a table to
+	// create, a field or index to add.
+	DiffAdded DiffStatus = "added"
+	// DiffRemoved is something the right has and the left does not: a table,
+	// field or index that the left side does not know about.
+	DiffRemoved DiffStatus = "removed"
+	// DiffChanged is something both sides have, spelled differently.
+	DiffChanged DiffStatus = "changed"
+)
+
+// DiffField is one attribute that differs, already spelled for reading: a type,
+// a nullability, a default. Both sides are text because the two engines may
+// phrase the same fact differently and comparing the texts is what found the
+// difference in the first place.
+type DiffField struct {
+	Field string `json:"field"`
+	Left  string `json:"left"`
+	Right string `json:"right"`
+}
+
+// DiffItem is one compared thing inside a table: a field or an index.
+//
+// Fields is empty for an item that is only on one side (nothing to compare it
+// with) and for one that matches; Summary carries the same fact as one short
+// sentence, which is what a list row shows without expanding.
+type DiffItem struct {
+	Name    string      `json:"name"`
+	Kind    string      `json:"kind"`
+	Status  DiffStatus  `json:"status"`
+	Fields  []DiffField `json:"fields,omitempty"`
+	Summary string      `json:"summary"`
+}
+
+// TableDiff is one table's comparison.
+//
+// Kind is the object kind (a table, for now): the comparison is about tables
+// because those are the objects a script can be generated for.
+type TableDiff struct {
+	Name    string     `json:"name"`
+	Kind    ObjectKind `json:"kind"`
+	Status  DiffStatus `json:"status"`
+	Columns []DiffItem `json:"columns"`
+	Indexes []DiffItem `json:"indexes"`
+	Summary string     `json:"summary"`
+}
+
+// SchemaCompare is the comparison of two namespaces, table by table.
+//
+// Everything the window shows is here, and only here: the two sides it was
+// asked about, the names to call them, and one entry per table. Counts are left
+// out on purpose — the window can count what it was given, and a number that
+// travels separately from the list it counts is a number that can disagree with
+// it.
+type SchemaCompare struct {
+	Left       CompareSide `json:"left"`
+	Right      CompareSide `json:"right"`
+	LeftLabel  string      `json:"leftLabel"`
+	RightLabel string      `json:"rightLabel"`
+	Driver     DriverType  `json:"driver"`
+	Tables     []TableDiff `json:"tables"`
+	// Warnings say what the comparison itself could not look at, so a table
+	// that matches is not read as a promise that the two are identical.
+	Warnings []string `json:"warnings"`
+}
+
 // --- databases -------------------------------------------------------------
 
 // DatabaseCharset is one character set (MySQL family) or encoding (PostgreSQL)
@@ -993,6 +1102,10 @@ const (
 	// a table: a change asked for from the tree, without a window showing the
 	// table being opened at all.
 	ChangeSourceExplorer = "explorer"
+	// ChangeSourceCompare is the comparison page applying a script it generated
+	// from the difference between two databases: several tables in one run,
+	// which is why the entry points at no single object.
+	ChangeSourceCompare = "compare"
 )
 
 // ChangeLogEntry is one statement this application ran that changed schema or

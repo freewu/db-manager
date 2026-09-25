@@ -52,6 +52,7 @@ const SOURCE_LABEL: Record<string, string> = {
   grid: 'The data grid',
   copy: 'The duplicate-table window',
   explorer: 'The object explorer',
+  compare: 'The database comparison',
 }
 
 /**

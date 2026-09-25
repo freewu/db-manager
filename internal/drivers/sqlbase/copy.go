@@ -81,28 +81,10 @@ func designOfCopy(
 		Database: current.Object.Database,
 		Schema:   current.Object.Schema,
 		Object:   target,
-		Columns:  make([]models.DesignColumn, 0, len(current.Columns)),
 		Indexes:  make([]models.DesignIndex, 0, len(current.Indexes)),
 	}
-	warnings := []string{}
-
-	for _, c := range current.Columns {
-		column := models.DesignColumn{
-			Name: c.Name,
-			// The engine's own spelling wins, exactly as the designer prefills
-			// it: varchar(255) is a different field from varchar.
-			DataType:      columnTypeOf(c),
-			Nullable:      c.Nullable && !c.PrimaryKey,
-			DefaultValue:  c.DefaultValue,
-			PrimaryKey:    c.PrimaryKey,
-			AutoIncrement: c.AutoIncrement,
-			Comment:       c.Comment,
-		}
-		if warning := postgresSerialIsCopiedAsIdentity(d, &column); warning != "" {
-			warnings = append(warnings, warning)
-		}
-		want.Columns = append(want.Columns, column)
-	}
+	columns, warnings := designColumns(d, current)
+	want.Columns = columns
 
 	for _, ix := range current.Indexes {
 		if ix.Primary {
@@ -122,14 +104,45 @@ func designOfCopy(
 	return want, warnings
 }
 
+// designColumns reads the fields of a live table as design fields, the way the
+// designer's window prefills a draft from the catalog. The copy and the sync
+// both build their definition this way, so a copied table and a synced one
+// describe the same source table identically.
+//
+// OriginalName stays empty throughout — the draft is not an edit of an existing
+// table, so no field of it came from anywhere.
+func designColumns(d drivers.Dialect, current *models.TableStructure) ([]models.DesignColumn, []string) {
+	columns := make([]models.DesignColumn, 0, len(current.Columns))
+	warnings := []string{}
+	for _, c := range current.Columns {
+		column := models.DesignColumn{
+			Name: c.Name,
+			// The engine's own spelling wins, exactly as the designer prefills
+			// it: varchar(255) is a different field from varchar.
+			DataType:      columnTypeOf(c),
+			Nullable:      c.Nullable && !c.PrimaryKey,
+			DefaultValue:  c.DefaultValue,
+			PrimaryKey:    c.PrimaryKey,
+			AutoIncrement: c.AutoIncrement,
+			Comment:       c.Comment,
+		}
+		if warning := postgresSerialIsCopiedAsIdentity(d, &column); warning != "" {
+			warnings = append(warnings, warning)
+		}
+		columns = append(columns, column)
+	}
+	return columns, warnings
+}
+
 // postgresSerialIsCopiedAsIdentity turns a serial column into an identity one,
 // and returns the sentence that says so.
 //
 // A serial column is spelled `integer DEFAULT nextval('orders_id_seq')`: the
-// default belongs to the *original's* sequence, so copying it verbatim would
-// make the two tables hand out the same numbers from one counter. An identity
-// column belongs to the table it is on, which is what a copy wants — and it is
-// the same statement the designer writes for an AutoIncrement field.
+// default belongs to the sequence of the table it was read from, so writing it
+// verbatim into a table somewhere else would point the new table at a counter it
+// does not own. An identity column belongs to the table it is on, which is what
+// a table being created wants — and it is the same statement the designer writes
+// for an AutoIncrement field.
 //
 // Only an integer can be an identity column. A sequence-backed default on any
 // other type is left exactly as it is and reported instead of being replaced
@@ -142,11 +155,11 @@ func postgresSerialIsCopiedAsIdentity(d drivers.Dialect, c *models.DesignColumn)
 		return "" // an identity column already: it carries no default of its own
 	}
 	if !isIntegerColumn(c.DataType) {
-		return fmt.Sprintf("field %s keeps its default of %s, which draws from a sequence of the table being copied; the two tables would share one counter",
+		return fmt.Sprintf("field %s keeps its default of %s, which draws from a sequence of the table it was read from; two tables would share one counter",
 			c.Name, strings.TrimSpace(*c.DefaultValue))
 	}
 	c.DefaultValue = nil
-	return fmt.Sprintf("field %s is created as an identity column: its serial default draws from a sequence of its own, which a copy cannot have",
+	return fmt.Sprintf("field %s is created as an identity column: its serial default draws from a sequence of the table it was read from, which the new table cannot have",
 		c.Name)
 }
 

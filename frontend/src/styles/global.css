@@ -2609,3 +2609,150 @@ body.dm-col-resizing * {
 .dm-changelog-code {
   max-height: none;
 }
+
+/* ---- database comparison -------------------------------------------------- */
+
+/* The two sides, side by side. Each is a label and its three pickers, so the
+   pair reads as one row and the swap button sits between them. */
+.dm-compare-bar {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--dm-border);
+}
+
+.dm-compare-side {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 320px;
+  min-width: 240px;
+}
+
+/* Level with the pickers rather than with the labels they sit under, which is
+   what "between the two sides" means to the eye. */
+.dm-compare-swap {
+  align-self: flex-start;
+  margin-top: 22px;
+  flex: 0 0 auto;
+}
+
+/* The comparison's toolbar carries more than a row of buttons — the two sides'
+   names and four counts — so it wraps rather than clipping them. */
+.dm-compare-toolbar {
+  flex-wrap: wrap;
+  overflow: visible;
+  row-gap: 4px;
+}
+
+.dm-compare-list {
+  height: 100%;
+  overflow: auto;
+  border-right: 1px solid var(--dm-border);
+}
+
+/* One table is one button, like a row of the change log: the whole line is the
+   target and the keyboard can walk the list. */
+.dm-compare-row {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--dm-border);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dm-compare-row:hover {
+  background: var(--dm-tree-hover);
+}
+
+.dm-compare-row.is-active {
+  background: var(--dm-accent-soft);
+}
+
+.dm-compare-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.dm-compare-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.dm-compare-row-summary {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--dm-null);
+}
+
+.dm-compare-detail {
+  padding: 12px;
+}
+
+.dm-compare-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+/* One thing that differs, with the attributes that differ inside it. */
+.dm-diff-item {
+  margin: 6px 0 10px;
+  padding: 6px 8px;
+  border: 1px solid var(--dm-border);
+  border-radius: 4px;
+}
+
+.dm-diff-item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* Three columns — which attribute, and each side — and the sides get the room,
+   because the text that differs between them is the long one. */
+.dm-diff-fields {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.dm-diff-fields th,
+.dm-diff-fields td {
+  padding: 2px 6px;
+  border-top: 1px solid var(--dm-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.dm-diff-fields th {
+  color: var(--dm-null);
+  font-weight: 500;
+}
+
+.dm-diff-field-name {
+  width: 140px;
+  color: var(--dm-null);
+  white-space: nowrap;
+}

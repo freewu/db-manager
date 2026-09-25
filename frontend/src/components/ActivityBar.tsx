@@ -4,36 +4,40 @@ import {
   ExperimentOutlined,
   HistoryOutlined,
   SettingOutlined,
+  SwapOutlined,
 } from '@ant-design/icons'
 import type { ReactNode } from 'react'
 
 import type { AppPage } from '../store/appStore'
 
 /**
- * The four pages this application has, in the order they are listed.
+ * The five pages this application has, in the order they are listed.
  *
  * The name is what the item is called in two places at once: the accessible name,
  * and the tip the pointer shows. A tip that has to explain the icon in a sentence
- * is a tip the icon did not need — the rail is four pictures, and the four things
- * this program can show are four short names. A page that is locked, or whose
+ * is a tip the icon did not need — the rail is five pictures, and the five things
+ * this program can show are five short names. A page that is locked, or whose
  * click does something else right now, still says so through the overrides below.
  */
 const RAIL_ITEMS: { page: AppPage; icon: ReactNode; name: string }[] = [
   { page: 'connections', icon: <DatabaseOutlined />, name: 'Connections' },
+  // Between the things somebody looks at and the things they change: comparing
+  // two databases reads them both, and what it produces is a script.
   { page: 'datagen', icon: <ExperimentOutlined />, name: 'Data generation' },
+  { page: 'compare', icon: <SwapOutlined />, name: 'Compare' },
   { page: 'changelog', icon: <HistoryOutlined />, name: 'Change log' },
   { page: 'settings', icon: <SettingOutlined />, name: 'Settings' },
 ]
 
 /**
- * The rail along the far left: the four pages this application has.
+ * The rail along the far left: the five pages this application has.
  *
  * It is the answer to a window that could be folded away and then not be found
  * again. The explorer is a pane that can be hidden, and a program whose explorer
  * has been hidden has to keep a door to it somewhere that cannot itself be
- * hidden — so the four things the main area can show are named here, always, and
+ * hidden — so the five things the main area can show are named here, always, and
  * each one is one click away. *Connections* is the working area, where the
- * explorer and the windows the connections open live; the other three are pages
+ * explorer and the windows the connections open live; the other four are pages
  * of their own.
  *
  * The rail only says *which* page was asked for. What a page does about being

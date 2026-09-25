@@ -10,6 +10,7 @@ import type {
   CellUpdate,
   ChangeLog,
   ChangeLogSettings,
+  CompareRequest,
   ConnectionConfig,
   ConnectionGroup,
   ConnectionLayout,
@@ -42,10 +43,12 @@ import type {
   QueryFile,
   QueryFileSave,
   QueryFileRename,
+  SchemaCompare,
   SchemaGraph,
   ScriptAnalysis,
   ServerOverview,
   SessionInfo,
+  SyncDatabaseRequest,
   TableDesign,
   TableOpRequest,
   TableStructure,
@@ -231,6 +234,22 @@ export const api = {
   planTruncateTable: (req: TableOpRequest) =>
     invoke<DesignPlan>('PlanTruncateTable', req),
   truncateTable: (req: TableOpRequest) => invoke<DesignResult>('TruncateTable', req),
+
+  // --- database comparison ------------------------------------------------
+  /**
+   * How two databases differ, table by table. Nothing is executed.
+   *
+   * Both sides are read live at this call, so the answer is about the catalogs
+   * as they are now rather than about a snapshot taken earlier.
+   */
+  compareDatabases: (req: CompareRequest) =>
+    invoke<SchemaCompare>('CompareDatabases', req),
+  /** The script that would bring the right database in line with the left. */
+  planSyncDatabase: (req: SyncDatabaseRequest) =>
+    invoke<DesignPlan>('PlanSyncDatabase', req),
+  /** Generates that script again and runs it against the right database. */
+  applySyncDatabase: (req: SyncDatabaseRequest) =>
+    invoke<DesignResult>('ApplySyncDatabase', req),
 
   // --- data ---------------------------------------------------------------
   fetchRows: (req: FetchRequest) => invoke<FetchResult>('FetchRows', req),

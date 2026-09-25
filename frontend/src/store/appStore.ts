@@ -67,13 +67,13 @@ export type TabKind =
   | 'runtime'
 
 /**
- * The rail's four pages, which are also the four things the main area can show.
+ * The rail's five pages, which are also the five things the main area can show.
  *
- * Three of them are pages that stand by themselves — the change log, the
- * settings, and the data generation windows — and *Connections* is the working
- * area: the explorer beside the windows the connections open.
+ * Four of them are pages that stand by themselves — the change log, the settings,
+ * the database comparison, and the data generation windows — and *Connections* is
+ * the working area: the explorer beside the windows the connections open.
  */
-export type AppPage = 'connections' | 'datagen' | 'changelog' | 'settings'
+export type AppPage = 'connections' | 'datagen' | 'changelog' | 'compare' | 'settings'
 
 /**
  * The page a window belongs to. Every window has exactly one, and a window is

@@ -6,6 +6,7 @@ import { capabilitiesOf, findDriver } from '../lib/capabilities'
 import { datagenTarget, useAppStore, type AppPage } from '../store/appStore'
 import { ActivityBar } from './ActivityBar'
 import { ChangeLogPane } from './ChangeLogPane'
+import { ComparePane } from './ComparePane'
 import { ConnectionDialog } from './ConnectionDialog'
 import { ConnectionSidebar } from './ConnectionSidebar'
 import { DataGenWorkspace } from './DataGenWorkspace'
@@ -19,7 +20,7 @@ const SIDEBAR_WIDTH = 310
 
 /**
  * Application chrome, Navicat style: command ribbon, page rail, explorer and
- * status bar — with the four pages' main areas stacked in one place.
+ * status bar — with the five pages' main areas stacked in one place.
  *
  * The main area is not one pane that swaps its content: each page is a layer
  * that is mounted the first time it is shown and then kept, so leaving a page
@@ -64,7 +65,7 @@ export function AppShell() {
   /**
    * The rail was asked for a page.
    *
-   * Two of the four need more than a page switch. *Connections* is the page the
+   * Two of the five need more than a page switch. *Connections* is the page the
    * explorer belongs to, so it is also the explorer's own door — the one thing
    * that cannot be folded away — and asking for it while it is already showing
    * is how the tree is folded and unfolded. *Data generation* is a page of
@@ -135,6 +136,9 @@ export function AppShell() {
             </PageLayer>
             <PageLayer active={page === 'datagen'}>
               <DataGenWorkspace />
+            </PageLayer>
+            <PageLayer active={page === 'compare'}>
+              <ComparePane />
             </PageLayer>
             <PageLayer active={page === 'changelog'}>
               <ChangeLogPane />

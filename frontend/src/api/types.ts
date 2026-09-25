@@ -431,6 +431,87 @@ export interface TableOpRequest {
   object: string
 }
 
+/**
+ * One side of a comparison: the session it is read through, and the database
+ * (with the schema inside it, where the engine has them).
+ *
+ * A side is read every time the comparison runs, never carried around as data:
+ * what a table looks like is the one fact that must not be a snapshot taken when
+ * the window was opened.
+ */
+export interface CompareSide {
+  sessionId: string
+  database?: string
+  schema?: string
+}
+
+/** Two databases to compare. `left` is the reference. */
+export interface CompareRequest {
+  left: CompareSide
+  right: CompareSide
+}
+
+/**
+ * The script that would turn `right` into `left`.
+ *
+ * `dropExtra` is the one thing the user has to decide: a table that exists only
+ * on the right is left alone unless it is asked for, because "make B look like
+ * A" and "delete everything B has that A does not" are different promises.
+ */
+export interface SyncDatabaseRequest {
+  left: CompareSide
+  right: CompareSide
+  dropExtra: boolean
+}
+
+/** How one compared thing stands across the two sides. */
+export type DiffStatus = 'same' | 'added' | 'removed' | 'changed'
+
+/** One attribute that differs, already spelled for reading. */
+export interface DiffField {
+  field: string
+  left: string
+  right: string
+}
+
+/** One compared thing inside a table: a field or an index. */
+export interface DiffItem {
+  name: string
+  kind: string
+  status: DiffStatus
+  /** Empty when the item is only on one side, or when it matches. */
+  fields?: DiffField[]
+  summary: string
+}
+
+/** One table's comparison. */
+export interface TableDiff {
+  name: string
+  kind: ObjectKind
+  status: DiffStatus
+  columns: DiffItem[]
+  indexes: DiffItem[]
+  summary: string
+}
+
+/**
+ * The comparison of two databases, table by table.
+ *
+ * Counts are deliberately not here: the window counts what it was given, and a
+ * number that travels separately from the list it counts can disagree with it.
+ * `warnings` says what the comparison could not look at, so "no differences" is
+ * not read as "the two databases are identical".
+ */
+export interface SchemaCompare {
+  left: CompareSide
+  right: CompareSide
+  leftLabel: string
+  rightLabel: string
+  driver: DriverType
+  tables: TableDiff[]
+  warnings: string[]
+}
+
 export interface ColumnMeta {
   name: string
   databaseType?: string

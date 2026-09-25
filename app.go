@@ -417,6 +417,24 @@ func (a *App) TruncateTable(req models.TableOpRequest) (*models.DesignResult, er
 	return a.manager.TruncateTable(req)
 }
 
+// CompareDatabases reads two databases and returns how their tables differ.
+// Nothing is executed: this is what the comparison page draws.
+func (a *App) CompareDatabases(req models.CompareRequest) (*models.SchemaCompare, error) {
+	return a.manager.CompareDatabases(req)
+}
+
+// PlanSyncDatabase returns the script that would bring the right database in
+// line with the left one, without running it.
+func (a *App) PlanSyncDatabase(req models.SyncDatabaseRequest) (*models.DesignPlan, error) {
+	return a.manager.PlanSyncDatabase(req)
+}
+
+// ApplySyncDatabase generates the script again and runs it against the right
+// database, reporting how far it got.
+func (a *App) ApplySyncDatabase(req models.SyncDatabaseRequest) (*models.DesignResult, error) {
+	return a.manager.ApplySyncDatabase(req)
+}
+
 // --- data ------------------------------------------------------------------
 
 // FetchRows returns one page of rows for the data grid.
