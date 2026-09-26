@@ -111,10 +111,12 @@ wails build
 ├── Justfile                  # 开发任务（windows-shell = PowerShell）
 ├── wails.json                # 版本号权威来源（info.productVersion）
 ├── asserts/                  # 品牌素材的唯一来源：logo.png、icon/<引擎>.png
+├── docs/                     # 介绍页：index.html + site.css/site.js + i18n.js + images/ 六张截图（没有构建步骤）
 ├── scripts/
 │   ├── version.mjs           # 版本号同步与一致性校验
 │   ├── package.mjs           # 本地打包：归档到 release/ 并生成 checksums.txt
 │   ├── i18n.mjs              # 界面文案的抽取 / 索引 / 导出 / 回填 / 清理（见「界面语言」）
+│   ├── docs-check.mjs        # 介绍页：三份文案的键是否齐全、截图有没有人用、相对路径是否都在（见「介绍页」）
 │   └── release-notes.sh      # 渲染 GitHub Release message
 ├── .github/workflows/
 │   ├── ci.yml                # main / PR：go vet+test、tsc+vite build、素材一致性
@@ -963,6 +965,44 @@ Windows 上、菜单点了没反应。
 `OnShutdown` 照常关掉连接池。图标本身用 `ExtractIconEx` 从自己的可执行文件里取（就是构建时由
 `build/appicon.png` 生成、随 `.syso` 嵌进去的那枚资源），取不到就退回系统默认图标 —— `asserts/` 仍然是
 品牌素材的唯一来源，不为托盘另存一份 ICO。
+
+### 介绍页：`docs/` 里一个没有构建步骤的静态页
+
+`docs/` 是**给还没下载的人看的那一页**（也不只是给还没下载的人 —— 六张截图就是六个页面此刻的样子，
+比描述更接近事实）：`index.html` + `site.css` + `site.js`，外加 `i18n.js`（三份文案）与 `images/` 里那六张截图。
+**没有构建步骤，也不打算有** —— 它只有一页，塞进一套打包链就得多一个会忘记跑的步骤，还得让 CI 先把它编译出来
+才敢检查它。所以三个 `script` 都是经典 `<script src>`（不是 `type="module"`），**双击 `docs/index.html` 直接打开就能看**，
+放到任何静态服务器上也一样；带 `file://` 也能跑是因为所有路径都是相对的，没有 `fetch` 之外的接口
+（唯一的例外是版本徽标，见下）。
+
+**文案在 `i18n.js` 里，标记里只有键**：`window.DM_DOCS.messages` 存着 en / zh-CN / zh-TW 三份字典（每份 118 个键），
+HTML 里则是 `data-i18n="键"`（写成文本）、`data-i18n-html="键"`（只给 hero 那句带 `<em>` 的标题用）、
+`data-i18n-attr="aria-label:键"`（写给属性），`site.js` 在 `applyLang()` 里一次性刷过去。**默认英文，而且故意不去嗅浏览器语言**
+—— 一个跟着系统语言跑的介绍页，会把「怎么切语言」这件事藏起来；顺序是 `?lang=`（只管这一次访问，不落盘）
+→ `localStorage['dm-docs-lang']`（只由点击切换按钮写入）→ `en`。加第四种语言时**标记一行都不用改**，
+往 `docs/i18n.js` 里添一档就行（`scripts/docs-check.mjs` 会替你把漏掉的键数出来）。
+反过来说，HTML 里写的就是**英文原文**，所以 JS 被禁掉时页面照样读得下去，只是锁在英文 —— 这是刻意留的退路，
+不是没做完。
+
+**六张截图同时喂给两处**：上面那个轮播（每 6 秒走一张，悬停、焦点落在里面、滚出视野、标签页切走都会停，
+控制条上最左边那只按钮、左右箭头、圆点和缩略图都能自己选一张，选过之后就归你管、不再自动走；
+`prefers-reduced-motion` 下只去掉滑动动画，不改成不动）和下面「Every screen」那排缩略图
+（同时是无 JS 时的兜底：脚本没跑，六张图也照样都在）。
+点图是灯箱（`Esc` 关闭、左右键换图）。**这六张图是 `docs/images/` 里唯一的截图来源**，`scripts/docs-check.mjs`
+会盯着「有没有哪张图没人引用」——改名之后页面不会静悄悄少一张图，而是直接报错。
+
+**品牌素材不为介绍页另存一份**：`logo.png` 与引擎图标都还是 `../asserts/…`，加载不到就由 `onerror` 换成字母方块
+（`no-icon`）。这是「一份图片只有一处」这条规矩的直接后果，也意味着介绍页要**从仓库根目录提供**
+（`docs/index.html` 是相对根目录写的）；真拿 `/docs` 当 GitHub Pages 的根，图标会优雅地退化成字母而不是裂图 ——
+代价明确，所以没有为它配 Pages 工作流。版本徽标在打开时读一次 `../wails.json` 的 `info.productVersion`，
+读不到就不显示：介绍页因此**永远不用跟着发版重新生成**，也不会留着上一个版本号。
+
+```
+node scripts/docs-check.mjs   # 三份字典的键对不对齐、标记里每个 data-i18n 有没有人接、
+                              # 每张截图有没有 title/desc/chips、哪张图没人引用、相对路径是否都在
+```
+
+它只用 Node 自带的东西（在 `node:vm` 里把 `i18n.js` 当数据读进来，不跑页面），CI 的 `housekeeping` 会跑一遍。
 
 ## 测试
 

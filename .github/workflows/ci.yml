@@ -72,3 +72,9 @@ jobs:
         run: |
           cmp asserts/logo.png build/appicon.png
           cmp asserts/logo.png frontend/public/logo.png
+
+      # The introduction page in docs/ is plain HTML, so nothing compiles it.
+      # This is what notices a language that lost a key, a screenshot that was
+      # renamed, or a relative path that no longer resolves.
+      - name: Introduction site is consistent
+        run: node scripts/docs-check.mjs

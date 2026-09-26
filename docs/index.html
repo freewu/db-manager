@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>db-manager</title>
+    <meta name="description" content="" data-i18n-attr="content:meta.description" />
+    <meta name="color-scheme" content="light dark" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="" data-i18n-attr="content:meta.title" />
+    <meta property="og:description" content="" data-i18n-attr="content:meta.description" />
+    <meta property="og:image" content="images/main.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="../asserts/logo.png" />
+    <link rel="stylesheet" href="site.css" />
+  </head>
+
+  <body>
+    <!--
+      Introduction site for db-manager. Three languages live in i18n.js, the
+      copy in the page is English and every text node is addressed by a key
+      (`data-i18n` for text, `data-i18n-html` for the few strings with markup,
+      `data-i18n-attr="attr:key;attr:key"` for attributes), so switching a
+      language never touches structure. Nothing is fetched to render: open the
+      file, or serve the repository root.
+    -->
+    <header class="topbar">
+      <a class="brand" href="#top">
+        <span class="brand-mark">
+          <span class="fallback" aria-hidden="true">DB</span>
+          <img src="../asserts/logo.png" alt="" onerror="this.parentElement.classList.add('no-icon')" />
+        </span>
+        <span class="brand-text">
+          <strong>db-manager</strong>
+          <span class="brand-version" data-version>dev</span>
+        </span>
+      </a>
+
+      <nav class="topnav" aria-label="Sections" data-i18n-attr="aria-label:top.sections">
+        <a href="#screens" data-i18n="nav.screens">Screens</a>
+        <a href="#features" data-i18n="nav.features">Features</a>
+        <a href="#engines" data-i18n="nav.engines">Engines</a>
+        <a href="#download" data-i18n="nav.download">Download</a>
+        <a href="https://github.com/freewu/db-manager" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
+
+      <div class="langs" role="group" data-i18n-attr="aria-label:lang.group">
+        <button type="button" data-lang="en" title="English" aria-label="English">EN</button>
+        <button type="button" data-lang="zh-CN" title="简体中文" aria-label="简体中文">简</button>
+        <button type="button" data-lang="zh-TW" title="繁體中文" aria-label="繁體中文">繁</button>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero">
+        <p class="eyebrow" data-i18n="hero.eyebrow">
+          MySQL · MariaDB · PostgreSQL · SQLite · MongoDB · TiDB · Apache Doris
+        </p>
+        <h1 data-i18n-html="hero.title">
+          Six engines, one desktop client, and the tools that <em>actually do the work</em>
+        </h1>
+        <p class="lead" data-i18n="hero.lead">
+          Browse and edit data, design tables, export a whole database, run a .sql file statement by
+          statement, generate test data, compare two databases, turn a table into code — and keep a
+          log of every statement the app runs. Connections, favourites and logs stay on this
+          machine: no account, no telemetry, no cloud.
+        </p>
+
+        <p class="cta">
+          <a
+            class="btn primary"
+            href="https://github.com/freewu/db-manager/releases/latest"
+            target="_blank"
+            rel="noreferrer"
+            data-i18n="hero.download"
+            >Download the latest release</a
+          >
+          <a
+            class="btn"
+            href="https://github.com/freewu/db-manager"
+            target="_blank"
+            rel="noreferrer"
+            data-i18n="hero.source"
+            >Source on GitHub</a
+          >
+          <a class="btn ghost" href="#screens" data-i18n="hero.screens">See the screens</a>
+        </p>
+
+        <ul class="pills">
+          <li data-i18n="hero.pill.mit">MIT licensed</li>
+          <li data-i18n="hero.pill.platforms">Windows · macOS · Linux</li>
+          <li data-i18n="hero.pill.offline">Offline-first</li>
+          <li data-i18n="hero.pill.six">Six engines</li>
+        </ul>
+      </section>
+
+      <!-- Screens: the carousel plays by itself, the grid below is the no-JS
+           version of the same six images (and the way to look at one closely). -->
+      <section id="screens" class="section">
+        <header class="section-head">
+          <h2 data-i18n="screens.title">Screens</h2>
+          <p data-i18n="screens.lead">
+            Six pages of the app, playing by themselves — hover to pause, or jump with the thumbnails
+            below.
+          </p>
+        </header>
+
+        <div class="carousel" data-carousel>
+          <div class="stage">
+            <ul class="slides" data-slides>
+              <li class="slide" data-slide data-shot="main">
+                <figure>
+                  <button
+                    class="zoom"
+                    type="button"
+                    data-lightbox
+                    data-i18n-attr="aria-label:carousel.zoom"
+                  >
+                    <img src="images/main.png" alt="" data-i18n-attr="alt:shot.main.desc" />
+                  </button>
+                  <figcaption>
+                    <h3 data-i18n="shot.main.title">Workspace</h3>
+                    <p data-i18n="shot.main.desc">
+                      Connections on the left, objects and data on the right. Pages stay mounted when
+                      you switch away, so coming back keeps your place.
+                    </p>
+                    <p class="chips" data-i18n="shot.main.chips">
+                      connection tree · object list · data grid · tabs
+                    </p>
+                  </figcaption>
+                </figure>
+              </li>
+
+              <li class="slide" data-slide data-shot="connections">
+                <figure>
+                  <button
+                    class="zoom"
+                    type="button"
+                    data-lightbox
+                    data-i18n-attr="aria-label:carousel.zoom"
+                  >
+                    <img src="images/connections.png" alt="" data-i18n-attr="alt:shot.connections.desc" />
+                  </button>
+                  <figcaption>
+                    <h3 data-i18n="shot.connections.title">Connections</h3>
+                    <p data-i18n="shot.connections.desc">
+                      Pick a driver first, then fill in the page that belongs to it: host, port,
+                      account, TLS and DSN options for a server; a single file for SQLite. Groups,
+                      colours and read-only marks live in the same tree.
+                    </p>
+                    <p class="chips" data-i18n="shot.connections.chips">
+                      6 drivers · TLS · groups · read-only
+                    </p>
+                  </figcaption>
+                </figure>
+              </li>
+
+              <li class="slide" data-slide data-shot="data-generation">
+                <figure>
+                  <button
+                    class="zoom"
+                    type="button"
+                    data-lightbox
+                    data-i18n-attr="aria-label:carousel.zoom"
+                  >
+                    <img
+                      src="images/data-generation.png"
+                      alt=""
+                      data-i18n-attr="alt:shot.data-generation.desc"
+                    />
+                  </button>
+                  <figcaption>
+                    <h3 data-i18n="shot.data-generation.title">Data generation</h3>
+                    <p data-i18n="shot.data-generation.desc">
+                      One window per connection, one mock.js template per column, auto-increment
+                      columns left unchecked. Each run ends with a sentence: how many rows went in,
+                      how many were skipped, and how long it took.
+                    </p>
+                    <p class="chips" data-i18n="shot.data-generation.chips">
+                      mock.js templates · placeholders · batches · stop
+                    </p>
+                  </figcaption>
+                </figure>
+              </li>
+
+              <li class="slide" data-slide data-shot="database-compare">
+                <figure>
+                  <button
+                    class="zoom"
+                    type="button"
+                    data-lightbox
+                    data-i18n-attr="aria-label:carousel.zoom"
+                  >
+                    <img
+                      src="images/database-compare.png"
+                      alt=""
+                      data-i18n-attr="alt:shot.database-compare.desc"
+                    />
+                  </button>
+                  <figcaption>
+                    <h3 data-i18n="shot.database-compare.title">Database comparison</h3>
+                    <p data-i18n="shot.database-compare.desc">
+                      Two databases of the same engine, side by side: only left, only right, differs,
+                      same. Open a table to see which column or index disagrees, then generate the
+                      script that turns the right one into the left one.
+                    </p>
+                    <p class="chips" data-i18n="shot.database-compare.chips">
+                      per-table diff · sync script · skipped objects warned
+                    </p>
+                  </figcaption>
+                </figure>
+              </li>
+
+              <li class="slide" data-slide data-shot="change-log">
+                <figure>
+                  <button
+                    class="zoom"
+                    type="button"
+                    data-lightbox
+                    data-i18n-attr="aria-label:carousel.zoom"
+                  >
+                    <img src="images/change-log.png" alt="" data-i18n-attr="alt:shot.change-log.desc" />
+                  </button>
+                  <figcaption>
+                    <h3 data-i18n="shot.change-log.title">Change log</h3>
+                    <p data-i18n="shot.change-log.desc">
+                      Every write statement the app was asked to run, with the connection it ran on
+                      and the number of rows the engine reported. One plain-text file per day,
+                      rotated rather than trimmed — readable with nothing connected.
+                    </p>
+                    <p class="chips" data-i18n="shot.change-log.chips">
+                      one file per day · affected rows · works offline
+                    </p>
+                  </figcaption>
+                </figure>
+              </li>
+
+              <li class="slide" data-slide data-shot="settings">
+                <figure>
+                  <button
+                    class="zoom"
+                    type="button"
+                    data-lightbox
+                    data-i18n-attr="aria-label:carousel.zoom"
+                  >
+                    <img src="images/settings.png" alt="" data-i18n-attr="alt:shot.settings.desc" />
+                  </button>
+                  <figcaption>
+                    <h3 data-i18n="shot.settings.title">Settings</h3>
+                    <p data-i18n="shot.settings.desc">
+                      Appearance, interface language, default code language, mock placeholders, data
+                      generation limits, the data folder and About — seven sections sharing one
+                      scrolling area, each one taking effect as you change it.
+                    </p>
+                    <p class="chips" data-i18n="shot.settings.chips">
+                      theme · language · mock · data folder
+                    </p>
+                  </figcaption>
+                </figure>
+              </li>
+            </ul>
+
+            <button
+              class="arrow prev"
+              type="button"
+              data-carousel-prev
+              data-i18n-attr="aria-label:carousel.prev;title:carousel.prev"
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+            <button
+              class="arrow next"
+              type="button"
+              data-carousel-next
+              data-i18n-attr="aria-label:carousel.next;title:carousel.next"
+            >
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+
+          <div class="carousel-bar">
+            <button class="playpause" type="button" data-carousel-toggle></button>
+            <ol class="dots" data-dots></ol>
+            <span class="counter" data-counter aria-hidden="true">1 / 6</span>
+          </div>
+
+          <ul class="thumbs" data-thumbs></ul>
+        </div>
+
+        <h3 class="subhead" data-i18n="screens.all">Every screen</h3>
+        <ul class="gallery">
+          <li>
+            <button type="button" data-lightbox data-shot-link="main">
+              <img src="images/main.png" alt="" loading="lazy" decoding="async" data-i18n-attr="alt:shot.main.title" />
+              <span data-i18n="shot.main.title">Workspace</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" data-lightbox data-shot-link="connections">
+              <img
+                src="images/connections.png"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                data-i18n-attr="alt:shot.connections.title"
+              />
+              <span data-i18n="shot.connections.title">Connections</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" data-lightbox data-shot-link="data-generation">
+              <img
+                src="images/data-generation.png"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                data-i18n-attr="alt:shot.data-generation.title"
+              />
+              <span data-i18n="shot.data-generation.title">Data generation</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" data-lightbox data-shot-link="database-compare">
+              <img
+                src="images/database-compare.png"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                data-i18n-attr="alt:shot.database-compare.title"
+              />
+              <span data-i18n="shot.database-compare.title">Database comparison</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" data-lightbox data-shot-link="change-log">
+              <img
+                src="images/change-log.png"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                data-i18n-attr="alt:shot.change-log.title"
+              />
+              <span data-i18n="shot.change-log.title">Change log</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" data-lightbox data-shot-link="settings">
+              <img
+                src="images/settings.png"
+                alt=""
+                loading="lazy"
+                decoding="async"
+                data-i18n-attr="alt:shot.settings.title"
+              />
+              <span data-i18n="shot.settings.title">Settings</span>
+            </button>
+          </li>
+        </ul>
+      </section>
+
+      <section id="features" class="section">
+        <header class="section-head">
+          <h2 data-i18n="features.title">What is in the box</h2>
+          <p data-i18n="features.lead">
+            Every tool is built on the same driver contract, so it is offered when the engine can
+            serve it — an entry point that would fail is not drawn at all.
+          </p>
+        </header>
+
+        <ul class="cards">
+          <li class="card">
+            <span class="chip">explorer</span>
+            <h3 data-i18n="feat.explorer.title">Connections and object tree</h3>
+            <p data-i18n="feat.explorer.desc">
+              Six engines behind one lazy tree: sessions, databases, schemas, then tables, views and
+              indexes — every folder with its count, empty or not. Sort and group the list, tag a
+              connection with a colour, mark it read-only.
+            </p>
+          </li>
+          <li class="card">
+            <span class="chip">grid</span>
+            <h3 data-i18n="feat.grid.title">Data grid</h3>
+            <p data-i18n="feat.grid.desc">
+              Server-side paging, sorting and fourteen filter operators. Drag a column edge to resize
+              it, click a row to slide its detail panel in, edit one cell or several fields at once —
+              every write is parameter bound and shown before it runs.
+            </p>
+          </li>
+          <li class="card">
+            <span class="chip">designer</span>
+            <h3 data-i18n="feat.designer.title">Table designer</h3>
+            <p data-i18n="feat.designer.desc">
+              The structure page is the editor: rename, retype, flag or drag-reorder the columns and
+              the backend plans the DDL against the live catalogue. Preview and save go through the
+              same planner, so what you read is what runs.
+            </p>
+          </li>
+          <li class="card">
+            <span class="chip">export</span>
+            <h3 data-i18n="feat.export.title">Database export</h3>
+            <p data-i18n="feat.export.desc">
+              Structure, structure and data, or a single table's rows as CSV / JSON / JSONL / SQL.
+              The backend reads the table and writes the file at the same time, so the progress bar,
+              the byte count and Stop are all real.
+            </p>
+          </li>
+          <li class="card">
+            <span class="chip">sqlfile</span>
+            <h3 data-i18n="feat.sqlfile.title">Run SQL file</h3>
+            <p data-i18n="feat.sqlfile.desc">
+              Hand a .sql file to the backend: it reads it from disk, tells you what is inside — the
+              statements that lose data, the ones a read-only connection will refuse, the USE that
+              re-targets the rest — then runs it statement by statement with progress and Stop. No
+              transaction wraps the file, and the window says so.
+            </p>
+          </li>
+          <li class="card">
+            <span class="chip">datagen</span>
+            <h3 data-i18n="feat.datagen.title">Data generation</h3>
+            <p data-i18n="feat.datagen.desc">
+              Fill a table from mock.js templates, one per column, with a placeholder picker that
+              renders a sample value for every entry. A rejected row stops the run, or gets counted
+              and skipped — your call.
+            </p>
+          </li>
+          <li class="card">
+            <span class="chip">compare</span>
+            <h3 data-i18n="feat.compare.title">Database comparison</h3>
+            <p data-i18n="feat.compare.desc">
+              Compare two databases of the same engine table by table and generate the script that
+              turns the right one into the left one, ordered create, alter, drop. Only the right side
+              may be read-only — the left is often production.
+            </p>
+          </li>
+          <li class="card">
+            <span class="chip">codegen</span>
+            <h3 data-i18n="feat.codegen.title">Code generation</h3>
+            <p data-i18n="feat.codegen.desc">
+              Turn a table's columns into a class, struct or record in one of eighteen languages,
+              with nullability written the way each language writes it. Java comes with or without
+              Lombok.
+            </p>
+          </li>
+          <li class="card">
+            <span class="chip">explain</span>
+            <h3 data-i18n="feat.explain.title">Explain and format</h3>
+            <p data-i18n="feat.explain.desc">
+              Ask the engine how it plans to run a statement without running it, and re-indent a
+              script with the dialect's own grammar. Highlighting is done by the app, not by a lexer
+              library, because quoting rules differ per engine.
+            </p>
+          </li>
+          <li class="card">
+            <span class="chip">er</span>
+            <h3 data-i18n="feat.er.title">ER diagram</h3>
+            <p data-i18n="feat.er.desc">
+              One namespace on a canvas: tables of the same family in one row, ordered by foreign
+              keys, with the referenced column pair on hover. Search, pan, zoom and export the
+              drawing as a standalone SVG.
+            </p>
+          </li>
+          <li class="card">
+            <span class="chip">changelog</span>
+            <h3 data-i18n="feat.changelog.title">Change log</h3>
+            <p data-i18n="feat.changelog.desc">
+              Every write statement the app ran, with its affected rows and the connection it ran on.
+              The log lives in the data folder — one file per day, rotated, never trimmed — so it
+              opens with no database connected.
+            </p>
+          </li>
+          <li class="card">
+            <span class="chip">i18n</span>
+            <h3 data-i18n="feat.i18n.title">English, 简体中文, 繁體中文</h3>
+            <p data-i18n="feat.i18n.desc">
+              The whole interface is translated, antd components included. Switch it from the
+              settings page, the status bar at the bottom, or — on Windows — the tray menu, and
+              nothing restarts.
+            </p>
+          </li>
+        </ul>
+      </section>
+
+      <section id="engines" class="section">
+        <header class="section-head">
+          <h2 data-i18n="engines.title">Engines</h2>
+          <p data-i18n="engines.lead">
+            The driver layer does not assume a relational model, so a document engine goes through
+            the same contract — and an entry point the engine cannot serve is simply not drawn.
+          </p>
+        </header>
+
+        <ul class="engines">
+          <li>
+            <span class="engine-icon">
+              <span class="fallback" aria-hidden="true">My</span>
+              <img src="../asserts/icon/MYSQL.png" alt="" onerror="this.parentElement.classList.add('no-icon')" />
+            </span>
+            <h3 data-i18n="engine.mysql.name">MySQL &amp; MariaDB</h3>
+            <p data-i18n="engine.mysql.desc">
+              The home turf: TLS, charset and collation when creating a database, partitions, and
+              InnoDB buffer pool plus process list on the overview page.
+            </p>
+          </li>
+          <li>
+            <span class="engine-icon">
+              <span class="fallback" aria-hidden="true">Pg</span>
+              <img
+                src="../asserts/icon/postgresql.png"
+                alt=""
+                onerror="this.parentElement.classList.add('no-icon')"
+              />
+            </span>
+            <h3 data-i18n="engine.postgres.name">PostgreSQL</h3>
+            <p data-i18n="engine.postgres.desc">
+              Several schemas in one database, serial and identity columns, and encoding plus locale
+              when a database is created.
+            </p>
+          </li>
+          <li>
+            <span class="engine-icon">
+              <span class="fallback" aria-hidden="true">Lite</span>
+              <img src="../asserts/icon/SQLite.png" alt="" onerror="this.parentElement.classList.add('no-icon')" />
+            </span>
+            <h3 data-i18n="engine.sqlite.name">SQLite</h3>
+            <p data-i18n="engine.sqlite.desc">
+              A single file: no server, no account. Attach extra databases, read the pragma values,
+              and browse the file the way the server engines are browsed.
+            </p>
+          </li>
+          <li>
+            <span class="engine-icon">
+              <span class="fallback" aria-hidden="true">Mg</span>
+              <img
+                src="../asserts/icon/mongoDB.png"
+                alt=""
+                onerror="this.parentElement.classList.add('no-icon')"
+              />
+            </span>
+            <h3 data-i18n="engine.mongodb.name">MongoDB</h3>
+            <p data-i18n="engine.mongodb.desc">
+              Collections, documents, indexes and a mongosh-style shell for queries. Document counts,
+              sizes and dbStats on the overview page.
+            </p>
+          </li>
+          <li>
+            <span class="engine-icon">
+              <span class="fallback" aria-hidden="true">Ti</span>
+              <img src="../asserts/icon/TiDB.png" alt="" onerror="this.parentElement.classList.add('no-icon')" />
+            </span>
+            <h3 data-i18n="engine.tidb.name">TiDB</h3>
+            <p data-i18n="engine.tidb.desc">
+              The MySQL wire protocol with TLS, plus a cluster member table from
+              information_schema.CLUSTER_INFO.
+            </p>
+          </li>
+          <li>
+            <span class="engine-icon">
+              <span class="fallback" aria-hidden="true">Do</span>
+              <img src="../asserts/icon/doris.png" alt="" onerror="this.parentElement.classList.add('no-icon')" />
+            </span>
+            <h3 data-i18n="engine.doris.name">Apache Doris</h3>
+            <p data-i18n="engine.doris.desc">
+              Analytical, and read-only here on purpose: structure, indexes, the data grid, SQL and
+              export all work; there is no table designer, and the app says why instead of failing.
+            </p>
+          </li>
+        </ul>
+
+        <p class="planned">
+          <strong data-i18n="engines.planned.title">On the roadmap</strong>
+          <span data-i18n="engines.planned"
+            >Oracle and SQL Server: the dialect and the placeholder are already in the tree, the DSN
+            and the catalogue queries are not — so they stay off the menu until they are.</span
+          >
+        </p>
+      </section>
+
+      <section id="download" class="section">
+        <header class="section-head">
+          <h2 data-i18n="download.title">Download</h2>
+          <p data-i18n="download.lead">
+            Every release is built by CI on three runners and attached to the release:
+          </p>
+        </header>
+
+        <ul class="downloads">
+          <li>
+            <div class="dl-head">
+              <strong data-i18n="dl.windows.name">Windows x64</strong>
+              <code>db-manager.exe</code>
+            </div>
+            <p data-i18n="dl.windows.note">
+              Portable — no installer. WebView2 is required (Windows 10/11 already has it).
+            </p>
+          </li>
+          <li>
+            <div class="dl-head">
+              <strong data-i18n="dl.macos.name">macOS (Intel + Apple Silicon)</strong>
+              <code>db-manager-macos-universal.zip</code>
+            </div>
+            <p data-i18n="dl.macos.note">
+              Unzip and drag db-manager.app into Applications. The build is not signed or notarised:
+              right-click → Open the first time, or run xattr -cr.
+            </p>
+          </li>
+          <li>
+            <div class="dl-head">
+              <strong data-i18n="dl.linux.name">Linux x64</strong>
+              <code>db-manager</code>
+            </div>
+            <p data-i18n="dl.linux.note">
+              chmod +x db-manager &amp;&amp; ./db-manager — needs GTK3 and WebKitGTK 4.0.
+            </p>
+          </li>
+        </ul>
+
+        <div class="notes">
+          <article>
+            <h3 data-i18n="dl.checksums.title">Checksums</h3>
+            <p>
+              <span data-i18n="dl.checksums.note"
+                >Each release carries a checksums.txt next to the downloads:</span
+              >
+              <code>sha256sum -c checksums.txt</code>
+            </p>
+          </article>
+          <article>
+            <h3 data-i18n="dl.build.title">Build from source</h3>
+            <p data-i18n="dl.build.note">
+              Go 1.24+, Node 20+, the Wails CLI 2.16 and just. `just release` compiles the current
+              platform into release/ with a checksums file.
+            </p>
+            <p>
+              <a
+                href="https://github.com/freewu/db-manager"
+                target="_blank"
+                rel="noreferrer"
+                data-i18n="dl.build.link"
+                >Read the build instructions</a
+              >
+            </p>
+          </article>
+          <article>
+            <h3 data-i18n="dl.notes.title">Release notes</h3>
+            <p data-i18n="dl.notes.note">
+              Each release body is rendered from the annotated tag and the Conventional Commit
+              subjects since the previous one — the commit subjects are the release notes.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="data" class="section">
+        <header class="section-head">
+          <h2 data-i18n="data.title">Where your data lives</h2>
+          <p data-i18n="data.lead">
+            Connections, favourites, saved query files, the tree layout, the window state, the
+            encryption key and the change log all live in one data folder — %APPDATA%/db-manager on
+            Windows, the usual config folder on macOS and Linux.
+          </p>
+        </header>
+
+        <ul class="points">
+          <li data-i18n="data.point.local">
+            No account, no telemetry, nothing uploaded — the app talks to your databases and nothing
+            else.
+          </li>
+          <li data-i18n="data.point.passwords">
+            Passwords are only saved when you ask: sealed with AES-256-GCM, with the key in its own
+            file next to the store.
+          </li>
+          <li data-i18n="data.point.log-text">
+            The change log is plain text. Grep it, archive it, read it in another editor.
+          </li>
+          <li data-i18n="data.point.move">
+            Moving the folder is a copy, a byte-for-byte verification, then a pointer switch — and
+            sessions stay connected while it happens.
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        <strong>db-manager</strong>
+        <span data-i18n="footer.tagline">An offline-first database client for six engines.</span>
+      </p>
+      <nav aria-label="Project" data-i18n-attr="aria-label:footer.project">
+        <a href="https://github.com/freewu/db-manager" target="_blank" rel="noreferrer" data-i18n="footer.repo">Repository</a>
+        <a
+          href="https://github.com/freewu/db-manager/releases"
+          target="_blank"
+          rel="noreferrer"
+          data-i18n="footer.releases"
+          >Releases</a
+        >
+        <a
+          href="https://github.com/freewu/db-manager/issues"
+          target="_blank"
+          rel="noreferrer"
+          data-i18n="footer.issues"
+          >Issues</a
+        >
+        <a href="https://github.com/freewu" target="_blank" rel="noreferrer" data-i18n="footer.developer"
+          >Developer</a
+        >
+        <a href="../README.md" data-i18n="footer.readme">README</a>
+      </nav>
+      <p class="fineprint">
+        <span data-i18n="footer.license">MIT licensed</span> ·
+        <span data-i18n="footer.built">Built with Wails, Go and React.</span>
+      </p>
+    </footer>
+
+    <!-- One overlay serves the carousel and the grid: same images, same captions. -->
+    <div class="lightbox" data-lightbox-box hidden>
+      <button class="lb-close" type="button" data-lb-close data-i18n-attr="aria-label:carousel.close;title:carousel.close">
+        <span aria-hidden="true">×</span>
+      </button>
+      <button class="lb-arrow prev" type="button" data-lb-prev data-i18n-attr="aria-label:carousel.prev;title:carousel.prev">
+        <span aria-hidden="true">‹</span>
+      </button>
+      <button class="lb-arrow next" type="button" data-lb-next data-i18n-attr="aria-label:carousel.next;title:carousel.next">
+        <span aria-hidden="true">›</span>
+      </button>
+      <figure>
+        <img data-lb-image src="" alt="" />
+        <figcaption>
+          <strong data-lb-title></strong>
+          <span data-lb-desc></span>
+        </figcaption>
+      </figure>
+    </div>
+
+    <noscript>
+      <p class="noscript">
+        The carousel and the language switch need JavaScript. Every screenshot is in the grid above,
+        and the copy in the page is English.
+      </p>
+    </noscript>
+
+    <script src="i18n.js"></script>
+    <script src="site.js"></script>
+  </body>
+</html>
