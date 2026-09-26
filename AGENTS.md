@@ -90,8 +90,13 @@ just publish 0.2.0 "新增 Navicat 风格连接树；索引成为一等资源；
 push tag 会触发 [`.github/workflows/release.yml`](.github/workflows/release.yml)：
 
 - `Verify` 校验版本镜像一致、tag 与 `wails.json` 一致、品牌素材无漂移、`go vet`/`go test`/`tsc`；
-- `Build` 在 Windows / macOS / Linux 三个 runner 上各跑一次 `wails build`，产出**免安装可执行文件**；
-- `Publish` 汇总产物、生成 `checksums.txt`，调用 `scripts/release-notes.sh` 渲染 release message 并创建 GitHub Release。
+- `Build` 在 Windows / macOS / Linux 三个 runner 上各跑一次 `wails build`，把产物改名成
+  `db-manager-<版本>-windows-amd64.exe` / `-linux-amd64` / `-macos-universal.zip` 后上传（macOS 的 `.app` 是目录，打包成 zip；前端资源已 embed，三个文件都是免安装可执行文件）；
+- `Publish` 汇总产物、**先核对三个平台都到齐了**、生成 `checksums.txt`（`sha256sum db-manager-*`），
+  调用 `scripts/release-notes.sh` 渲染 release message 并创建 GitHub Release。
+
+这套命名在 `release.yml` 的改名步骤和 `scripts/release-notes.sh` 的下载表格里各写了一次，
+**改一处要改两处**（`docs/i18n.js` 的下载说明里不写具体文件名，所以不用跟着改）。
 
 ### release message 怎么来的
 
@@ -99,7 +104,8 @@ push tag 会触发 [`.github/workflows/release.yml`](.github/workflows/release.y
 
 1. **附注 tag 的 message** —— 也就是 `just publish` 的第二个参数，人写的本版总结；
 2. **两个 tag 之间的提交**，按上表分组；
-3. 下载表格 + 各平台运行说明（macOS 未签名、Linux 需要 GTK3/WebKitGTK 等）。
+3. 下载表格 + 各平台运行说明（macOS 未签名、Linux 需要 GTK3/WebKitGTK 等）。表格里的文件名由版本号拼出来，
+   跟 `release.yml` 的改名步骤是同一套命名。
 
 所以：**写清楚提交信息 = 写好 release notes**。发版前可以本地预览：
 
@@ -132,6 +138,12 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
   `page === '…'` 当依赖，见 `ChangeLogPane` / `SettingsPane`）。**开窗口必须走 store 的
   `front(kind, id)`**（把窗口和它的页面一起切过去），`activeTabId` 只属于工作区页、`datagenTabId`
   只属于数据生成页 —— 新增一种窗口时两者都要顺着这套走，否则会出现「窗口开了但看不见」。
+- **三份 README 是同一份文档的三种语言**：`README.md`（英文，主文档）、`README_CN.md`、`README_TC.md`。
+  **加功能就三份一起改**：英文是原文，另外两份是它的镜像。繁中用台湾习惯（資料庫 / 資料表 / 欄位 /
+  資料列），简中沿用本仓库既有的用词（数据库 / 表 / 字段 / 行）。README 只留「用户视角」的一句话说明，
+  深挖设计取舍的内容写进 `AGENTS.md` 或代码注释，不再往 README 里堆。
+  `node scripts/readme-check.mjs`（CI 里也跑）会比对三份的结构、相对链接与下载文件名 —— 但它只保证
+  「形状一致」，措辞是否准确还得自己看。
 - **品牌素材唯一来源是 `asserts/`**（注意目录名就是 `asserts`，不是 `assets`，不要"顺手改正"）。
   `frontend/public/logo.png` 与 `build/appicon.png` 是它的副本，由 `just icons` 生成；
   `build/windows/icon.ico` 被 gitignore —— Wails 只在它**不存在**时才由 `appicon.png` 重新生成，
@@ -230,6 +242,10 @@ main.go                 入口：embed frontend/dist、窗口参数
 scripts/version.mjs     版本号同步 / 校验（wails.json 是权威值）
 scripts/package.mjs     本地打包：把 build/bin 的产物归档到 release/ + checksums.txt
 scripts/release-notes.sh 生成 GitHub Release message
+scripts/docs-check.mjs  校验 docs/ 介绍页的词典、截图引用与相对路径
+scripts/readme-check.mjs 校验三份 README 的结构、相对链接与下载文件名
+README.md               英文主文档；README_CN.md / README_TC.md 是简繁镜像（三份同改）
+docs/                   介绍页（静态、无构建步骤）
 asserts/                品牌素材唯一来源（logo.png、icon/*.png）
 build/                  appicon.png、windows/darwin 打包资源（icon.ico 已 gitignore）
 release/                本地打包产物（just release，已 gitignore）
@@ -238,4 +254,4 @@ frontend/src/           React 前端（api 手写、store 用 zustand、样式�
 .github/workflows/      ci.yml（main/PR）、release.yml（tag → 三平台产物 + Release）
 ```
 
-更细的架构说明见 `README.md`。
+更细的架构说明见 `README.md`（三份 README 里只有英文那份带完整细节）与各处的代码注释。

@@ -173,7 +173,7 @@
     'dl.macos.note':
       'Unzip and drag db-manager.app into Applications. The build is not signed or notarised: right-click → Open the first time, or run xattr -cr.',
     'dl.linux.name': 'Linux x64',
-    'dl.linux.note': 'chmod +x db-manager && ./db-manager — needs GTK3 and WebKitGTK 4.0.',
+    'dl.linux.note': 'Download it, chmod +x it, run it. Needs GTK3 and WebKitGTK 4.0.',
     'dl.checksums.title': 'Checksums',
     'dl.checksums.note': 'Each release carries a checksums.txt next to the downloads:',
     'dl.build.title': 'Build from source',
@@ -359,7 +359,7 @@
     'dl.macos.note':
       '解压后把 db-manager.app 拖进「应用程序」。包未做签名与公证：首次打开请右键「打开」，或执行 xattr -cr。',
     'dl.linux.name': 'Linux x64',
-    'dl.linux.note': 'chmod +x db-manager && ./db-manager —— 需要 GTK3 与 WebKitGTK 4.0。',
+    'dl.linux.note': '下载后 chmod +x 再运行。需要 GTK3 与 WebKitGTK 4.0。',
     'dl.checksums.title': '校验',
     'dl.checksums.note': '每个 Release 都带一份 checksums.txt：',
     'dl.build.title': '从源码构建',
@@ -542,7 +542,7 @@
     'dl.macos.note':
       '解壓後把 db-manager.app 拖進「應用程式」。封裝未做簽章與公證：首次打開請右鍵「打開」，或執行 xattr -cr。',
     'dl.linux.name': 'Linux x64',
-    'dl.linux.note': 'chmod +x db-manager && ./db-manager —— 需要 GTK3 與 WebKitGTK 4.0。',
+    'dl.linux.note': '下載後 chmod +x 再執行。需要 GTK3 與 WebKitGTK 4.0。',
     'dl.checksums.title': '校驗',
     'dl.checksums.note': '每個 Release 都帶一份 checksums.txt：',
     'dl.build.title': '從原始碼建置',

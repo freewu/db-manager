@@ -49,7 +49,7 @@ export const JUSTFILE_URL = `${PROJECT_URL}/blob/main/Justfile`
  * Version of the `just` command runner the recipes are developed against.
  *
  * Unlike the frontend libraries below this is not in `package.json` — it mirrors
- * the "环境要求" table of the README, which is where the toolchain versions that
+ * the "Requirements" table of README.md, which is where the toolchain versions that
  * are not pinned by a lockfile are documented.
  */
 export const JUST_VERSION = '1.58.0'

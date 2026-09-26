@@ -78,3 +78,10 @@ jobs:
       # renamed, or a relative path that no longer resolves.
       - name: Introduction site is consistent
         run: node scripts/docs-check.mjs
+
+      # README.md is English, README_CN.md and README_TC.md are its mirrors, and
+      # their download tables repeat the asset names the release workflow
+      # produces. This is what notices a mirror that fell behind, a relative
+      # link that rotted, or a renamed download.
+      - name: README mirrors are consistent
+        run: node scripts/readme-check.mjs
