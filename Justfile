@@ -87,21 +87,24 @@ run:
 # ------------------------------------------------------------------ build ---
 
 # `asserts/logo.png` is the single source of truth for the brand artwork:
-# `frontend/public/logo.png` (webview favicon) and `build/appicon.png` (desktop
-# icon) are copies, and the cached `windows/icon.ico` is deleted so that Wails
-# rebuilds it from the new PNG.
+# `frontend/public/logo.png` (webview favicon), `build/appicon.png` (desktop
+# icon) and `docs/logo.png` (the introduction page's favicon and brand mark, so
+# that the page owns what it shows) are copies, and the cached
+# `windows/icon.ico` is deleted so that Wails rebuilds it from the new PNG.
 #
 # Sync brand artwork from asserts/ into the build.
 [unix]
 icons:
     cp asserts/logo.png {{web}}/public/logo.png
     cp asserts/logo.png build/appicon.png
+    cp asserts/logo.png docs/logo.png
     rm -f build/windows/icon.ico
 
 [windows]
 icons:
     Copy-Item -Force asserts/logo.png {{web}}/public/logo.png
     Copy-Item -Force asserts/logo.png build/appicon.png
+    Copy-Item -Force asserts/logo.png docs/logo.png
     Remove-Item -Force -ErrorAction SilentlyContinue build/windows/icon.ico
 
 # ---------------------------------------------------------------- utility ---

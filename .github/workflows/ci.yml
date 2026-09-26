@@ -72,12 +72,22 @@ jobs:
         run: |
           cmp asserts/logo.png build/appicon.png
           cmp asserts/logo.png frontend/public/logo.png
+          cmp asserts/logo.png docs/logo.png
 
       # The introduction page in docs/ is plain HTML, so nothing compiles it.
       # This is what notices a language that lost a key, a screenshot that was
       # renamed, or a relative path that no longer resolves.
       - name: Introduction site is consistent
         run: node scripts/docs-check.mjs
+
+      # The published copy of that page is a different directory (the Pages
+      # workflow builds it the same way), and a reference that escapes it would
+      # only 404 once it is online. Building it here is what makes a PR that
+      # breaks it go red before the merge.
+      - name: The published site would be self-contained
+        run: |
+          bash scripts/pages-build.sh _site
+          node scripts/docs-check.mjs --site _site
 
       # README.md is English, README_CN.md and README_TC.md are its mirrors, and
       # their download tables repeat the asset names the release workflow

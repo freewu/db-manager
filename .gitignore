@@ -61,6 +61,10 @@ build/windows/icon.ico
 /1.png
 /2.png
 
+# The directory `scripts/pages-build.sh` assembles for GitHub Pages. It is built
+# from docs/ by copying and rewriting, so it is never edited by hand.
+_site/
+
 # Scratch file for a long commit message (`git commit -F`), written by hand
 # during a round of work. It is not part of the project.
 .git-commit-msg.txt

@@ -3,12 +3,17 @@
 // Check the introduction site in docs/.
 //
 //   node scripts/docs-check.mjs
+//   node scripts/docs-check.mjs --site _site
 //
-// The site is three static files (index.html, site.css, i18n.js, site.js) with
+// The site is four static files (index.html, site.css, i18n.js, site.js) with
 // no build step, so nothing else would notice a language that lost a key, a
 // `data-i18n` pointing at a key that no longer exists, or a screenshot that was
 // renamed. This script is that notice: it fails, with the list of problems, in
 // CI and before a commit.
+//
+// `--site <directory>` checks the other shape of the same site: the directory
+// the Pages workflow publishes, where the page sits at the site root. See the
+// comment above that block.
 //
 // Only the Node standard library is used, so it runs anywhere `node` does.
 
@@ -31,6 +36,98 @@ function fail(message) {
   problems.push(message)
 }
 
+function report(label, summary) {
+  if (problems.length) {
+    console.error(`${label}: ${problems.length} problem(s)\n`)
+    for (const problem of problems) console.error(`  - ${problem}`)
+    process.exit(1)
+  }
+  if (notes.length) console.log(notes.map((note) => `note: ${note}`).join('\n'))
+  console.log(`${label}: ok — ${summary}`)
+}
+
+/**
+ * Every reference to a local file in a document, as written: `src`/`href`
+ * attributes, `url(…)` in a stylesheet, and single-quoted strings that name a
+ * file (`fetch('wails.json')`). Absolute URLs, fragments and data URIs are none
+ * of our business. Quoted *double* strings are left alone: they are what an
+ * attribute value already looks like, and reporting those twice would only
+ * make the list harder to read.
+ */
+function localRefs(text) {
+  return [
+    ...[...text.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1]),
+    ...[...text.matchAll(/url\(\s*['"]?([^'")]+)['"]?\s*\)/g)].map((m) => m[1]),
+    ...[...text.matchAll(/'([A-Za-z0-9_./-]+\.(?:json|png|jpe?g|svg|webp|css|js|html))'/g)].map(
+      (m) => m[1],
+    ),
+  ].filter((url) => url && !/^(https?:|\/\/|#|mailto:|data:)/.test(url))
+}
+
+/** Every file below a directory, so a published site can be counted. */
+function filesIn(dir, list = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name)
+    if (entry.isDirectory()) filesIn(full, list)
+    else list.push(full)
+  }
+  return list
+}
+
+/* ----------------------------------------------------------- published site */
+
+// The Pages workflow publishes `docs/` as the project site. The same page is
+// also served straight from the repository root, where `../asserts/icon/…` and
+// `../wails.json` land in the repository — but on a project site, which lives
+// under a sub-path, `../` climbs past the site and 404s. So the workflow copies
+// the engine artwork and the version manifest next to the page and rewrites
+// those two prefixes; this checks that it did, and that nothing else points
+// outside the published directory either.
+
+const siteFlag = process.argv.indexOf('--site')
+if (siteFlag !== -1) {
+  const given = process.argv[siteFlag + 1]
+  if (!given || !existsSync(given)) {
+    console.error('usage: node scripts/docs-check.mjs --site <directory>')
+    process.exit(1)
+  }
+  const dir = resolve(given)
+  let checked = 0
+
+  const page = join(dir, 'index.html')
+  if (!existsSync(page)) {
+    fail(`${given}/index.html is missing`)
+  } else {
+    const published = [
+      ['index.html', read(page)],
+      ...['site.css', 'site.js']
+        .filter((name) => existsSync(join(dir, name)))
+        .map((name) => [name, read(join(dir, name))]),
+    ]
+    for (const [name, text] of published) {
+      for (const url of new Set(localRefs(text))) {
+        checked += 1
+        if (url.startsWith('../')) fail(`${name} points outside the site: ${url}`)
+        else if (!existsSync(join(dir, url.split('#')[0]))) {
+          fail(`${name} points at ${url}, which was not published`)
+        }
+      }
+    }
+  }
+
+  // The two things the page reaches with `../` in the repository, and which the
+  // workflow therefore has to lift next to it: the engine artwork and the
+  // version manifest.
+  for (const needed of ['asserts', 'wails.json']) {
+    if (!existsSync(join(dir, needed))) fail(`${needed} was not copied next to the page`)
+  }
+
+  report('site', `${filesIn(dir).length} files, ${checked} references all inside the directory`)
+  // The published directory is not the repository's docs/; the checks below
+  // are about the latter, and this run is done.
+  process.exit(0)
+}
+
 /* ------------------------------------------------------------ dictionaries */
 
 const context = { window: {} }
@@ -38,6 +135,7 @@ vm.createContext(context)
 vm.runInContext(read(join(docs, 'i18n.js')), context, { filename: 'docs/i18n.js' })
 
 const site = context.window.DM_DOCS
+
 if (!site || !site.messages) {
   console.error('docs/i18n.js did not define window.DM_DOCS.messages')
   process.exit(1)
@@ -147,35 +245,26 @@ for (const name of images) {
 /* ----------------------------------------------------------------- files */
 
 const referenced = new Set()
-for (const match of html.matchAll(/(?:src|href)="([^"]+)"/g)) {
-  let url = match[1]
-  if (/^(https?:|#|mailto:)/.test(url)) continue
-  url = url.split('#')[0]
-  if (!url) continue
-  referenced.add(url)
-}
-for (const match of js.matchAll(/'(\.\.\/[^']+)'/g)) referenced.add(match[1])
-
-for (const url of referenced) {
-  const target = url.startsWith('../')
-    ? join(root, url.slice(3))
-    : join(docs, url)
-  if (!existsSync(target)) fail(`docs/index.html points at ${url}, which does not exist`)
+const documents = [
+  ['docs/index.html', html],
+  ['docs/site.js', js],
+  ['docs/site.css', read(join(docs, 'site.css'))],
+]
+for (const [name, text] of documents) {
+  for (const url of localRefs(text)) {
+    if (referenced.has(url)) continue
+    referenced.add(url)
+    // The page is served from the repository root, so `../asserts/icon/…`
+    // leaves docs/ and lands in the repository — which is where it lives.
+    const target = url.startsWith('../') ? join(root, url.slice(3)) : join(docs, url.split('#')[0])
+    if (!existsSync(target)) fail(`${name} points at ${url}, which does not exist`)
+  }
 }
 
 /* ---------------------------------------------------------------- report */
 
-if (notes.length) {
-  console.log(notes.map((note) => `note: ${note}`).join('\n'))
-}
-
-if (problems.length) {
-  console.error(`docs: ${problems.length} problem(s)\n`)
-  for (const problem of problems) console.error(`  - ${problem}`)
-  process.exit(1)
-}
-
-console.log(
-  `docs: ok — ${baseKeys.length} keys in ${languages.length} languages, ` +
+report(
+  'docs',
+  `${baseKeys.length} keys in ${languages.length} languages, ` +
     `${shotIds.length} screenshots, ${referenced.size} files referenced`,
 )

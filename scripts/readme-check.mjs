@@ -7,13 +7,13 @@
 // README.md is the English document; README_CN.md and README_TC.md are its
 // mirrors, and the download table also has to agree with the asset names the
 // release workflow produces. Nothing else would notice a mirror that fell
-// behind, a relative link that rotted, or a renamed release asset, so this
-// script is that notice: it fails, with the list of problems, in CI and before
-// a commit.
+// behind, a relative link that rotted, a screenshot the table forgot, or a
+// renamed release asset, so this script is that notice: it fails, with the list
+// of problems, in CI and before a commit.
 //
 // Only the Node standard library is used, so it runs anywhere `node` does.
 
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join, resolve } from 'node:path'
 
@@ -94,6 +94,27 @@ for (const entry of links) {
   if (!existsSync(join(root, url))) problems.push(`${name} links to ${url}, which does not exist`)
 }
 
+/* ------------------------------------------------------------ screenshots */
+
+// The introduction page shows every screenshot in `docs/images/`, and all three
+// READMEs show the same six in a table. `docs-check.mjs` owns the page side of
+// that promise; this is the other half, so a screenshot that was added or
+// renamed cannot end up on one and be missing from the other.
+const images = readdirSync(join(root, 'docs/images'))
+  .filter((file) => file.endsWith('.png'))
+  .sort()
+if (images.length === 0) problems.push('docs/images holds no screenshots')
+
+for (const name of MIRRORS) {
+  if (!shapes.has(name)) continue
+  const text = read(name)
+  for (const image of images) {
+    if (!text.includes(`docs/images/${image}`)) {
+      problems.push(`${name} does not show docs/images/${image}`)
+    }
+  }
+}
+
 /* -------------------------------------------------------- release assets */
 
 // The asset names are written down twice — `release.yml` renames the build
@@ -126,5 +147,5 @@ if (problems.length) {
 const sections = source.headings.split(',').length
 console.log(
   `readme: ok — ${MIRRORS.length} mirrors, ${sections} sections, ` +
-    `${source.tables} table lines, ${suffixes.length} downloads`,
+    `${images.length} screenshots, ${source.tables} table lines, ${suffixes.length} downloads`,
 )

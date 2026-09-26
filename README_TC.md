@@ -10,6 +10,18 @@
 
 > 要在這個專案裡動手？先讀 [`AGENTS.md`](AGENTS.md)：每一輪任務都以一次提交與推送作結。
 
+## 介面截圖
+
+六個視窗，從工作區到設定 —— 和[介紹頁](docs/index.html)用的是同一批圖。全部是真實視窗，不是效果圖。
+
+| 工作區 | 連線管理 |
+| --- | --- |
+| ![工作區](docs/images/main.png) | ![連線管理](docs/images/connections.png) |
+| **資料產生** | **資料庫比對** |
+| ![資料產生](docs/images/data-generation.png) | ![資料庫比對](docs/images/database-compare.png) |
+| **變更日誌** | **設定** |
+| ![變更日誌](docs/images/change-log.png) | ![設定](docs/images/settings.png) |
+
 ## 下載
 
 每個版本都產出三個**免安裝可執行檔**：前端資源已經編譯進去，那一個檔案就是整個程式。到 [最新發佈](https://github.com/freewu/db-manager/releases/latest) 取自己平臺的那一個（下表 `<version>` 是你下載的版本號，例如 `0.1.0`）：
@@ -106,7 +118,8 @@ internal/service/        manager、設計器、匯出、比較、變更日誌、
 internal/config/         JSON 儲存、資料目錄指標、變更日誌檔案
 frontend/src/            React 介面：components、lib、i18n、store、styles
 docs/                    介紹頁（靜態，沒有建置步驟）
-scripts/                 version.mjs、package.mjs、i18n.mjs、docs-check.mjs、release-notes.sh
+scripts/                 version.mjs、package.mjs、i18n.mjs、docs-check.mjs、
+                         readme-check.mjs、pages-build.sh、release-notes.sh
 ```
 
 動手前值得知道的四條約定：
@@ -123,7 +136,9 @@ just test                        # go test ./...
 npm --prefix frontend run build  # tsc --noEmit + vite build
 node scripts/i18n.mjs verify     # 譯文與英文原文對得上
 node scripts/docs-check.mjs      # 介紹頁的文案、截圖與相對路徑
-node scripts/readme-check.mjs    # 三份 README：結構一致、連結有效、下載檔名一致
+node scripts/readme-check.mjs    # 三份 README：結構一致、連結、截圖與下載檔名一致
+bash scripts/pages-build.sh _site          # 拼出 GitHub Pages 會發佈的那份副本
+node scripts/docs-check.mjs --site _site # …再檢查這份副本裡的引用沒跑出網站
 ```
 
 Go 測試不需要 cgo，也不需要起任何服務容器 —— SQLite 是純 Go 的。MongoDB、TiDB、Doris 的整合測試在不給它伺服器位址時會自己略過：
@@ -149,6 +164,10 @@ just notes v0.2.0   # 預覽某個標籤的 release message
 ## 介紹頁
 
 [`docs/index.html`](docs/index.html) 是一張靜態介紹頁：一個 HTML、一份樣式表、一支腳本，再加上裝著同樣三種語言的 `i18n.js`。沒有建置步驟，雙擊就能開啟；`docs/images/` 裡那六張截圖同時供輪播與相簿使用。`scripts/docs-check.mjs` 盯著三份字典、截圖引用與相對路徑別走偏，CI 裡也會跑。
+
+同一張頁面也作為專案首頁發佈：<https://freewu.github.io/db-manager/>，由 [`.github/workflows/pages.yml`](.github/workflows/pages.yml) 負責。專案網站掛在子路徑下，頁面裡那些 `../asserts/…`、`../wails.json` 引用會爬出網站根目錄，所以 `scripts/pages-build.sh` 會拼出一份發佈副本，把品牌素材與版本清單放到頁面旁邊；上傳前由 `node scripts/docs-check.mjs --site _site` 檢查這份副本。CI 裡也會拼一遍，讓「引用跑到網站外面」這種事在 PR 階段就被發現，而不是等上線之後。
+
+只需啟用一次：**Settings → Pages → Build and deployment → Source 選 GitHub Actions**。
 
 ## 發展藍圖
 

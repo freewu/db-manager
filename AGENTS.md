@@ -142,12 +142,22 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
   **加功能就三份一起改**：英文是原文，另外两份是它的镜像。繁中用台湾习惯（資料庫 / 資料表 / 欄位 /
   資料列），简中沿用本仓库既有的用词（数据库 / 表 / 字段 / 行）。README 只留「用户视角」的一句话说明，
   深挖设计取舍的内容写进 `AGENTS.md` 或代码注释，不再往 README 里堆。
-  `node scripts/readme-check.mjs`（CI 里也跑）会比对三份的结构、相对链接与下载文件名 —— 但它只保证
-  「形状一致」，措辞是否准确还得自己看。
+  `node scripts/readme-check.mjs`（CI 里也跑）会比对三份的结构、相对链接、下载文件名，以及
+  `docs/images/` 里的每张截图是否三份都展示了 —— 但它只保证「形状一致」，措辞是否准确还得自己看。
+  截图表格里的图与标题直接沿用 `docs/images/` 与介绍页的 `shot.*.title`，换图或改标题时两边一起改。
+- **介绍页 `docs/` 有两副面孔：仓库里那份，和发到 GitHub Pages 的那份。** 仓库里那份是按「从仓库根目录
+  提供服务、或者直接双击打开」写的，所以引擎图标与版本清单写成 `../asserts/icon/…`、`../wails.json`；
+  而项目站点在子路径下（<https://freewu.github.io/db-manager/>），`../` 会直接爬出站点根目录。
+  因此 `scripts/pages-build.sh` 会把 `docs/` 复制一份、把 `asserts/` 与 `wails.json` 摆到页面旁边、
+  再抹掉那两处前缀，`.github/workflows/pages.yml` 发的是这份副本（CI 里也会拼一遍）。
+  **新增一个 `../` 引用就同时改这个脚本**，否则线上就是 404；`node scripts/docs-check.mjs --site _site`
+  （在 `_site` 上跑）会抓住漏改。页面上不要再出现指向仓库里 markdown 的相对链接 —— README 那类
+  一律写成 GitHub 绝对地址。启用 Pages 只需一次：Settings → Pages → Source 选 GitHub Actions
+  （`configure-pages` 想代为开启需要非 `GITHUB_TOKEN` 的令牌，所以这一步得手工做一次）。
 - **品牌素材唯一来源是 `asserts/`**（注意目录名就是 `asserts`，不是 `assets`，不要"顺手改正"）。
-  `frontend/public/logo.png` 与 `build/appicon.png` 是它的副本，由 `just icons` 生成；
+  `frontend/public/logo.png`、`build/appicon.png` 与 `docs/logo.png` 是它的副本，由 `just icons` 生成；
   `build/windows/icon.ico` 被 gitignore —— Wails 只在它**不存在**时才由 `appicon.png` 重新生成，
-  所以换了 logo 必须删掉它。CI 会用 `cmp` 检查副本是否漂移。
+  所以换了 logo 必须删掉它。CI 会用 `cmp` 检查三份副本是否漂移。
   新的引擎图标放 `asserts/icon/`，在 `frontend/src/lib/assets.ts` 注册（`@asserts` 别名指向该目录）。
 - **主题色 `#36ab60` 写在两处，必须同步**：`frontend/src/App.tsx` 的 `colorPrimary`，
   与 `frontend/src/styles/global.css` 的 `--dm-accent*`。
@@ -243,15 +253,20 @@ scripts/version.mjs     版本号同步 / 校验（wails.json 是权威值）
 scripts/package.mjs     本地打包：把 build/bin 的产物归档到 release/ + checksums.txt
 scripts/release-notes.sh 生成 GitHub Release message
 scripts/docs-check.mjs  校验 docs/ 介绍页的词典、截图引用与相对路径
-scripts/readme-check.mjs 校验三份 README 的结构、相对链接与下载文件名
+                        （`--site <目录>` 改校验 Pages 发布出来的那份副本）
+scripts/readme-check.mjs 校验三份 README 的结构、相对链接、截图与下载文件名
+scripts/pages-build.sh  拼出 GitHub Pages 的发布目录（默认 _site）
 README.md               英文主文档；README_CN.md / README_TC.md 是简繁镜像（三份同改）
-docs/                   介绍页（静态、无构建步骤）
+docs/                   介绍页（静态、无构建步骤），也是 Pages 的源
+docs/logo.png           介绍页自己的 logo（`asserts/logo.png` 的副本，`just icons` 同步）
+docs/images/            六张截图（README 截图表格、轮播与画廊共用）
 asserts/                品牌素材唯一来源（logo.png、icon/*.png）
 build/                  appicon.png、windows/darwin 打包资源（icon.ico 已 gitignore）
 release/                本地打包产物（just release，已 gitignore）
 internal/               后端：驱动契约、sqlbase、服务层
 frontend/src/           React 前端（api 手写、store 用 zustand、样式在 styles/global.css）
-.github/workflows/      ci.yml（main/PR）、release.yml（tag → 三平台产物 + Release）
+.github/workflows/      ci.yml（main/PR）、release.yml（tag → 三平台产物 + Release）、
+                        pages.yml（docs/ → GitHub Pages）
 ```
 
 更细的架构说明见 `README.md`（三份 README 里只有英文那份带完整细节）与各处的代码注释。

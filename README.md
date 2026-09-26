@@ -10,6 +10,18 @@ The driver layer does not assume a relational model: document engines go through
 
 > Working in this repository? Read [`AGENTS.md`](AGENTS.md) first — every task ends with a commit and a push.
 
+## Screenshots
+
+Six windows, from the workspace to settings — the same images the [introduction page](docs/index.html) shows. Every one is a real window, not a mock-up.
+
+| Workspace | Connections |
+| --- | --- |
+| ![Workspace](docs/images/main.png) | ![Connections](docs/images/connections.png) |
+| **Data generation** | **Database comparison** |
+| ![Data generation](docs/images/data-generation.png) | ![Database comparison](docs/images/database-compare.png) |
+| **Change log** | **Settings** |
+| ![Change log](docs/images/change-log.png) | ![Settings](docs/images/settings.png) |
+
 ## Download
 
 Every release ships three **portable executables**. Nothing to install: the frontend bundle is embedded, so the single file *is* the application. Take the one for your platform from the [latest release](https://github.com/freewu/db-manager/releases/latest) — `<version>` below is the release you are downloading, for example `0.1.0`:
@@ -106,7 +118,8 @@ internal/service/        manager, design, export, compare, changelog, data gener
 internal/config/         JSON stores, the data folder pointer, change log files
 frontend/src/            React UI: components, lib, i18n, store, styles
 docs/                    the introduction page (static, no build step)
-scripts/                 version.mjs, package.mjs, i18n.mjs, docs-check.mjs, release-notes.sh
+scripts/                 version.mjs, package.mjs, i18n.mjs, docs-check.mjs,
+                         readme-check.mjs, pages-build.sh, release-notes.sh
 ```
 
 Four invariants are worth knowing before changing something:
@@ -123,7 +136,9 @@ just test                        # go test ./...
 npm --prefix frontend run build  # tsc --noEmit + vite build
 node scripts/i18n.mjs verify     # translations match their English source
 node scripts/docs-check.mjs      # the introduction page, its copy and its screenshots
-node scripts/readme-check.mjs    # the three READMEs: same shape, live links, same downloads
+node scripts/readme-check.mjs    # the three READMEs: same shape, links, screenshots, downloads
+bash scripts/pages-build.sh _site          # assemble the copy the Pages workflow publishes
+node scripts/docs-check.mjs --site _site # …and check that every reference stays inside it
 ```
 
 The Go suite needs no cgo and no service containers — SQLite is pure Go. The MongoDB, TiDB and Doris integration tests skip themselves unless you point them at a server:
@@ -149,6 +164,10 @@ just notes v0.2.0   # preview the release message for a tag
 ## Introduction page
 
 [`docs/index.html`](docs/index.html) is a static introduction page: one HTML file, one stylesheet, one script, and an `i18n.js` holding the copy in the same three languages. There is no build step, so it opens straight from disk, and the six screenshots in `docs/images/` drive both the carousel and the gallery. `scripts/docs-check.mjs` keeps the three dictionaries, the screenshot references and the relative paths honest, and CI runs it.
+
+It is also published as the project site, <https://freewu.github.io/db-manager/>, by [`.github/workflows/pages.yml`](.github/workflows/pages.yml). A project site lives under a sub-path, where the page's `../asserts/…` and `../wails.json` references would climb past the site root, so `scripts/pages-build.sh` assembles a published copy with the brand artwork and the version manifest beside the page — and `node scripts/docs-check.mjs --site _site` checks that copy before it goes up. CI builds it as well, so a reference that escapes the site is caught on the pull request rather than on the live page.
+
+One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
 
 ## Roadmap
 

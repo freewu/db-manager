@@ -1,0 +1,88 @@
+name: Pages
+
+# Publish the introduction page in docs/ as the project site:
+#
+#   https://freewu.github.io/db-manager/
+#
+# The same page is also served straight out of the repository (open
+# docs/index.html, or point any static server at the repository root), which is
+# why it refers to the engine artwork and the version manifest as
+# `../asserts/icon/…` and `../wails.json`. A project site lives under a
+# sub-path, so `../` there climbs past the site root — so
+# `scripts/pages-build.sh` republishes the page into a directory of its own,
+# with those files copied next to it and the paths rewritten, and
+# `node scripts/docs-check.mjs --site` checks the result.
+#
+# Enabling it once: Settings → Pages → Build and deployment → Source:
+# "GitHub Actions". Nothing here can do it for the repository — the
+# `configure-pages` action needs a token other than GITHUB_TOKEN for that — so
+# until it is switched on, the build job stops at that step.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'asserts/**'
+      - 'wails.json'
+      - 'scripts/docs-check.mjs'
+      - 'scripts/pages-build.sh'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Deployments run one after another rather than cancelling each other: a deploy
+# that is interrupted halfway is worse than a slightly stale page, and the run
+# that follows replaces it a few seconds later anyway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build the site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # Fail before publishing rather than after: a language that lost a key or
+      # a screenshot that was renamed should never reach the site.
+      - name: The site is consistent
+        run: node scripts/docs-check.mjs
+
+      # `docs/` is the page as the repository keeps it; what a browser gets is
+      # the directory `scripts/pages-build.sh` assembles (see its header for
+      # why the `../` references have to be rewritten). It counts the files it
+      # wrote, so an empty `docs/` cannot be published quietly.
+      - name: Assemble the published directory
+        run: bash scripts/pages-build.sh _site
+
+      - name: The published directory is self-contained
+        run: node scripts/docs-check.mjs --site _site
+
+      - uses: actions/configure-pages@v5
+
+      # The versions are the ones GitHub's own Pages template pins. Note that
+      # this action drops dotfiles, so nothing here may rely on a `.nojekyll`.
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Publish
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
