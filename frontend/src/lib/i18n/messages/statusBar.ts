@@ -33,4 +33,9 @@ export const statusBar = {
     '在淺色與深色之間切換',
   ],
   'statusBar.interface-language': ['Interface language', '界面语言', '介面語言'],
+  'statusBar.interface-language-click-to-switch': [
+    'Interface language: {language} — click to switch to {next}',
+    '界面语言：{language} —— 点击切换到{next}',
+    '介面語言：{language} —— 按一下切換為{next}',
+  ],
 } satisfies AreaMessages

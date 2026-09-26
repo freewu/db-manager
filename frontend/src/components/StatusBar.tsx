@@ -16,12 +16,13 @@ import { LANGUAGE_CHOICES, t, tn, useLanguage } from '../lib/i18n'
  * preferences worth reaching without leaving the window — the theme and the
  * interface language.
  *
- * The theme entry is the two-way flip rather than the settings page's three-way
- * choice: it names the theme that is painted, and "follow the system" is not a
- * third colour to show but a reason for the one being shown, so it belongs in
- * the tooltip instead of in the label. Clicking therefore pins the other theme —
- * including when the stored preference is `system`, where the click is what ends
- * the following.
+ * Both are one-line flip-throughs rather than lists of what is on offer: the
+ * strip is 26px of readouts, and three lit-up alternatives would be the only
+ * thing there asking to be read. So each entry names its *current* value — the
+ * theme being painted, the language being spoken — and clicking moves to the
+ * next one. The tooltips carry the part a single word cannot: for the theme that
+ * "follow the system" is why it says what it says, for the language that the
+ * next click lands on 繁體中文.
  */
 export function StatusBar() {
   const sessions = useAppStore((s) => s.sessions)
@@ -48,6 +49,13 @@ export function StatusBar() {
   // makes a click mean something while the preference is following the system.
   const nextTheme: ResolvedTheme = resolvedTheme === 'dark' ? 'light' : 'dark'
   const toggleTheme = () => setTheme(nextTheme)
+
+  // Three languages, so the cycle wraps. The label stays the two-character form
+  // the strip has room for; the tooltip spells the language out in full, since
+  // `简` is not a language to anyone who cannot read it.
+  const languageIndex = LANGUAGE_CHOICES.findIndex((choice) => choice.value === language)
+  const nextLanguage = LANGUAGE_CHOICES[(languageIndex + 1) % LANGUAGE_CHOICES.length]
+  const spoken = LANGUAGE_CHOICES[languageIndex]
 
   return (
     <div className="dm-statusbar">
@@ -145,29 +153,32 @@ export function StatusBar() {
           {themeLabel(resolvedTheme)}
         </span>
       </Tooltip>
-      {/* The language switch sits next to the theme because the two are the same
-          kind of thing — a preference about the window itself — and both are
-          wanted without opening the settings page. Three one-word targets, the
-          one in use in the accent colour; the full names live in the tooltips,
-          each already written in the language it selects. */}
-      <span
-        className="dm-statusbar-item dm-statusbar-langs"
-        role="group"
-        aria-label={t('statusBar.interface-language')}
+      {/* The language entry is the theme entry's twin: the word shown is the
+          language in use, written in that language, and a click moves to the
+          next of the three. The tooltip names it in full, because `简` would not
+          be a language to anyone who cannot read it. */}
+      <Tooltip
+        title={t('statusBar.interface-language-click-to-switch', {
+          language: spoken.label,
+          next: nextLanguage.label,
+        })}
       >
-        {LANGUAGE_CHOICES.map((choice) => (
-          <button
-            key={choice.value}
-            type="button"
-            className={`dm-statusbar-lang${choice.value === language ? ' is-active' : ''}`}
-            title={choice.hint}
-            aria-pressed={choice.value === language}
-            onClick={() => setUiLanguage(choice.value)}
-          >
-            {choice.short}
-          </button>
-        ))}
-      </span>
+        <span
+          className="dm-statusbar-item"
+          role="button"
+          tabIndex={0}
+          aria-label={t('statusBar.interface-language')}
+          style={{ cursor: 'pointer' }}
+          onClick={() => setUiLanguage(nextLanguage.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              setUiLanguage(nextLanguage.value)
+            }
+          }}
+        >
+          {spoken.short}
+        </span>
+      </Tooltip>
     </div>
   )
 }
