@@ -30,17 +30,25 @@ export const LANGUAGES: readonly Language[] = ['en', 'zh-CN', 'zh-TW']
 export const DEFAULT_LANGUAGE: Language = 'en'
 
 /**
- * The choices the settings page offers, each written in its own language.
+ * The choices the settings page offers, each written in its own language, plus
+ * the one- or two-character form the status bar shows.
  *
  * These are the one set of strings that is not in the message tables: a language
  * picker that spells 简体中文 in English is useless to the person who needs it, so
  * each entry is already in the language it selects and translating it would be
- * the bug.
+ * the bug. `short` is the same name cut down to fit a 26px status bar — `简` is
+ * not an abbreviation of an English word, it is the opening of the name this
+ * language calls itself.
  */
-export const LANGUAGE_CHOICES: { value: Language; label: string; hint: string }[] = [
-  { value: 'en', label: 'English', hint: 'The interface is written in English' },
-  { value: 'zh-CN', label: '简体中文', hint: '界面使用简体中文' },
-  { value: 'zh-TW', label: '繁體中文', hint: '介面使用繁體中文' },
+export const LANGUAGE_CHOICES: {
+  value: Language
+  label: string
+  short: string
+  hint: string
+}[] = [
+  { value: 'en', label: 'English', short: 'EN', hint: 'The interface is written in English' },
+  { value: 'zh-CN', label: '简体中文', short: '简', hint: '界面使用简体中文' },
+  { value: 'zh-TW', label: '繁體中文', short: '繁', hint: '介面使用繁體中文' },
 ]
 
 /**

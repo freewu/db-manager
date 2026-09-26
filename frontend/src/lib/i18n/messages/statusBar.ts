@@ -23,18 +23,14 @@ export const statusBar = {
     '後端 {version} · {goVersion}',
   ],
   'statusBar.following-the-system-theme-click-to-switch': [
-    'Following the system theme ({resolvedTheme}) — click to switch',
-    '跟随系统主题（{resolvedTheme}）—— 点击切换',
-    '跟隨系統主題（{resolvedTheme}）—— 按一下切換',
+    'Following the system theme ({resolvedTheme}) — click to switch to {next}',
+    '跟随系统主题（{resolvedTheme}）—— 点击切换到{next}',
+    '跟隨系統主題（{resolvedTheme}）—— 按一下切換為{next}',
   ],
-  'statusBar.switch-theme-light-dark-or-follow-the-system': [
-    'Switch theme: light, dark, or follow the system',
-    '切换主题：浅色、深色或跟随系统',
-    '切換主題：淺色、深色或跟隨系統',
+  'statusBar.switch-between-light-and-dark': [
+    'Switch between light and dark',
+    '在浅色与深色之间切换',
+    '在淺色與深色之間切換',
   ],
-  'statusBar.system-theme-suffix': [
-    ' ({resolvedTheme})',
-    ' （{resolvedTheme}）',
-    ' （{resolvedTheme}）',
-  ],
+  'statusBar.interface-language': ['Interface language', '界面语言', '介面語言'],
 } satisfies AreaMessages

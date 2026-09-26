@@ -410,6 +410,40 @@ body {
   opacity: 0.85;
 }
 
+/* The status bar's language switch: three one-word targets in a 26px strip, so
+   they borrow the bar's own type instead of antd's chrome. A plain button with
+   the theme's reset rather than a `Segmented`, which would be twice as tall as
+   everything around it. */
+.dm-statusbar-langs {
+  flex: 0 0 auto;
+  gap: 1px;
+}
+
+.dm-statusbar-lang {
+  padding: 0 4px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.dm-statusbar-lang:hover {
+  background: var(--dm-hot-bg);
+}
+
+/* The language in use: the accent colour is the whole marker. There is no room
+   for a check mark here, and a solid word next to two ordinary ones already
+   reads as a choice. It is also the one entry at full opacity, which is what
+   the other two fade against. */
+.dm-statusbar-lang.is-active {
+  color: var(--dm-accent-text);
+  font-weight: 600;
+  opacity: 1;
+}
+
 /* ------------------------------------------------------------------ misc */
 
 .mono {

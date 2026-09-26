@@ -825,6 +825,11 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   setUiLanguage(language) {
+    // Being asked for the language already in use is not a change: the status
+    // bar's three buttons fire on every press, including the one that is
+    // already lit, and rewriting every open window's title for nothing would be
+    // work done to arrive where we already are.
+    if (language === getLanguage()) return
     // The words change first and are stored second: a failed write must not
     // leave the interface in the language the user just moved away from.
     applyLanguage(language)
