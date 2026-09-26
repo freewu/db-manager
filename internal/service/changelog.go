@@ -184,6 +184,11 @@ func (m *Manager) logStatement(
 
 // logScript records the write statements of a script that was just run.
 //
+// source is the window the script came from, which is what the entry says about
+// where it was written: a query window and a file being imported both run text
+// this application did not write, and the log is the only place that tells them
+// apart afterwards.
+//
 // A read is not a change and is not logged, and neither is a statement this build
 // does not recognise (a session variable, a `USE`, a transaction boundary): the
 // log answers "what was done to this database", and lines that cannot be read as
@@ -195,12 +200,12 @@ func (m *Manager) logStatement(
 // the rows, and a number on the wrong line is worse than no number at all.
 // Nothing is lost from the record itself: a statement that changed rows says so,
 // it just says it without a figure.
-func (m *Manager) logScript(s *session, req models.ExecRequest, res *models.QueryResult, runErr error) {
+func (m *Manager) logScript(s *session, req models.ExecRequest, source string, res *models.QueryResult, runErr error) {
 	place := statementPlace{
 		database: req.Database,
 		schema:   req.Schema,
 		object:   req.Object,
-		source:   models.ChangeSourceScript,
+		source:   source,
 	}
 	writes := make([]models.ScriptStatement, 0, 4)
 	for _, statement := range statementsOf(s, req.SQL) {

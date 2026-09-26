@@ -20,6 +20,7 @@ import {
   MinusSquareOutlined,
   NumberOutlined,
   PartitionOutlined,
+  PlayCircleOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
@@ -60,6 +61,7 @@ import { ConnectionTypeDropdown, connectionTypeItems, driverFromKey } from './Co
 import { CopyTableModal, type CopyTableSource } from './CopyTableModal'
 import { ExportModal, type ExportScope } from './ExportModal'
 import { NamePromptModal } from './NamePromptModal'
+import { RunSqlFileModal, type RunSqlFileScope } from './RunSqlFileModal'
 import { objectIcon } from './objectIcon'
 import { SqlCode } from './SqlCode'
 import {
@@ -192,6 +194,8 @@ export function ConnectionSidebar() {
   const [copyTable, setCopyTable] = useState<CopyTableSource | null>(null)
   /** Database (or schema) the export window is dumping, if it is open. */
   const [exportScope, setExportScope] = useState<ExportScope | null>(null)
+  /** Database the run-SQL-file window is pointing at, if it is open. */
+  const [sqlFileScope, setSqlFileScope] = useState<RunSqlFileScope | null>(null)
   /**
    * Connection whose runtime page a double-click asked for. A profile without a
    * stored password connects through a prompt that finishes later, so the page
@@ -1024,8 +1028,17 @@ export function ConnectionSidebar() {
           // The whole database can be dumped from here, which is the one thing
           // this row offers: the schemas underneath it have menus of their own,
           // and a database on this engine has no DDL of its own to open.
+          //
+          // A file of statements is run against the database rather than one of
+          // its schemas, so it is offered here and not on the rows below.
           title: relational ? (
-            <NodeMenu items={exportMenuItems(session, database)}>
+            <NodeMenu
+              items={[
+                ...runSqlFileMenuItems(session, database),
+                { type: 'divider' as const },
+                ...exportMenuItems(session, database),
+              ]}
+            >
               <span>{database}</span>
             </NodeMenu>
           ) : (
@@ -1057,6 +1070,12 @@ export function ConnectionSidebar() {
                       icon: <CodeOutlined />,
                       label: t('connectionSidebar.new-ddl-script'),
                       onClick: () => openDdlTab(session.id, database, database),
+                    },
+                    {
+                      key: 'run-sql-file',
+                      icon: <PlayCircleOutlined />,
+                      label: t('connectionSidebar.run-sql-file'),
+                      onClick: () => setSqlFileScope({ sessionId: session.id, database }),
                     },
                   ]
                 : []),
@@ -2049,6 +2068,8 @@ export function ConnectionSidebar() {
 
       <ExportModal scope={exportScope} onClose={() => setExportScope(null)} />
 
+      <RunSqlFileModal scope={sqlFileScope} onClose={() => setSqlFileScope(null)} />
+
       <GroupNameModal request={groupDialog} onClose={() => setGroupDialog(null)} />
 
       <QueryNameModal
@@ -2134,6 +2155,29 @@ export function ConnectionSidebar() {
         icon: <UnorderedListOutlined />,
         label: t('connectionSidebar.export-data'),
         onClick: () => setExportScope(scope('data')),
+      },
+    ]
+  }
+
+  /**
+   * The entry that runs a file of statements against a database.
+   *
+   * It sits beside the DDL script rather than with the exports: both are about
+   * writing SQL by hand and sending it, and this one is the other way of doing
+   * it — the file is written elsewhere and read from disk. The file is not held
+   * here, and the window that runs it is told which database it belongs to,
+   * because a file names its own objects.
+   */
+  function runSqlFileMenuItems(
+    session: SessionInfo,
+    database: string,
+  ): NonNullable<MenuProps['items']> {
+    return [
+      {
+        key: 'run-sql-file',
+        icon: <PlayCircleOutlined />,
+        label: t('connectionSidebar.run-sql-file'),
+        onClick: () => setSqlFileScope({ sessionId: session.id, database }),
       },
     ]
   }

@@ -2836,3 +2836,36 @@ body.dm-col-resizing * {
   margin: 6px 0 0;
   padding-left: 18px;
 }
+
+/* -------------------------------------------------------- run SQL file window */
+
+/* The sections are the export window's (`.dm-export-section`, `-head`, `-hint`,
+   `-list`): a head line, the sentence under it, and a box that scrolls on its
+   own so the window keeps its height. What is new here is the file of
+   statements, which is read before it is run. */
+
+.dm-sqlfile-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+/* The statement's position in the file: it is how a failure is reported, so a
+   number that is listed has to be findable in the file it came from. */
+.dm-sqlfile-number {
+  flex: none;
+  min-width: 32px;
+  color: var(--dm-null);
+  text-align: right;
+}
+
+.dm-sqlfile-sql {
+  overflow-wrap: anywhere;
+}
+
+/* A statement that can lose schema or data reads as one at a glance, before the
+   button is pressed. */
+.dm-sqlfile-sql.is-destructive {
+  color: #d4380d;
+}

@@ -45,6 +45,7 @@ import { queryFavorites } from './queryFavorites'
 import { queryPane } from './queryPane'
 import { resizableHeader } from './resizableHeader'
 import { rowDetail } from './rowDetail'
+import { runSqlFile } from './runSqlFile'
 import { runtimePane } from './runtimePane'
 import { settingsPane } from './settingsPane'
 import { statusBar } from './statusBar'
@@ -96,6 +97,7 @@ export const MESSAGES = {
   ...queryPane,
   ...resizableHeader,
   ...rowDetail,
+  ...runSqlFile,
   ...runtimePane,
   ...settingsPane,
   ...statusBar,

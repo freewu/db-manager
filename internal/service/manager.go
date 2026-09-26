@@ -35,12 +35,12 @@ type Manager struct {
 	sessions map[string]*session
 	store    *config.Store
 
-	// exportsMu guards the runs in flight, which is a separate lock from the
-	// session lock on purpose: an export is stopped from the window's thread
-	// while the export itself is reading a table, and neither has anything to
+	// runsMu guards the long runs in flight, which is a separate lock from the
+	// session lock on purpose: a run is stopped from the window's thread while
+	// the run itself is reading a table or a file, and neither has anything to
 	// do with the other.
-	exportsMu sync.Mutex
-	exports   map[string]func()
+	runsMu sync.Mutex
+	runs   map[string]func()
 }
 
 type session struct {
@@ -63,7 +63,7 @@ func New() (*Manager, error) {
 		baseCtx:  context.Background(),
 		sessions: map[string]*session{},
 		store:    store,
-		exports:  map[string]func(){},
+		runs:     map[string]func(){},
 	}, nil
 }
 
@@ -712,6 +712,17 @@ func (m *Manager) Fetch(req models.FetchRequest) (*models.FetchResult, error) {
 
 // Execute runs a script.
 func (m *Manager) Execute(req models.ExecRequest) (*models.QueryResult, error) {
+	return m.executeScript(m.baseCtx, req, models.ChangeSourceScript)
+}
+
+// executeScript is Execute with the caller saying where the statements came
+// from, and with a context that lets it stop them.
+//
+// parent is the caller's own context rather than the manager's: a window that
+// runs a file statement by statement has to be able to stop the statement that
+// is running, and the log has to say that the file, not a query window, is what
+// asked for it.
+func (m *Manager) executeScript(parent context.Context, req models.ExecRequest, source string) (*models.QueryResult, error) {
 	s, err := m.session(req.SessionID)
 	if err != nil {
 		return nil, err
@@ -719,7 +730,7 @@ func (m *Manager) Execute(req models.ExecRequest) (*models.QueryResult, error) {
 	if strings.TrimSpace(req.SQL) == "" {
 		return nil, apperr.New(apperr.CodeInvalidConfig, "nothing to execute")
 	}
-	ctx, cancel := m.ctx(QueryTimeout(req.TimeoutMS))
+	ctx, cancel := context.WithTimeout(parent, QueryTimeout(req.TimeoutMS))
 	defer cancel()
 
 	readOnly := req.ReadOnly || s.readOnly
@@ -734,7 +745,7 @@ func (m *Manager) Execute(req models.ExecRequest) (*models.QueryResult, error) {
 	// reached the server is not recorded as a change; the failure itself is
 	// recorded, on the entry, because a script that stopped halfway is part of
 	// what happened to the database.
-	m.logScript(s, req, res, err)
+	m.logScript(s, req, source, res, err)
 	return res, err
 }
 

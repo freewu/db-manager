@@ -217,4 +217,5 @@ export const connectionSidebar = {
     '匯出結構和資料',
   ],
   'connectionSidebar.export-data': ['Export data', '导出数据', '匯出資料'],
+  'connectionSidebar.run-sql-file': ['Run SQL file…', '运行 SQL 文件…', '執行 SQL 檔案…'],
 } satisfies AreaMessages

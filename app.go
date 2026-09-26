@@ -637,6 +637,38 @@ func (a *App) CancelExport(id string) error {
 	return a.manager.CancelExport(id)
 }
 
+// --- running a SQL file -----------------------------------------------------
+
+// sqlFileProgressEvent carries one tick of a file being run.
+const sqlFileProgressEvent = "sqlfile:progress"
+
+// AnalyzeSQLFile reports what a chosen file holds without running any of it: the
+// window shows this before the user commits to the import.
+func (a *App) AnalyzeSQLFile(req models.SQLFileRequest) (*models.SQLFileAnalysis, error) {
+	return a.manager.AnalyzeSQLFile(req)
+}
+
+// RunSQLFile runs a file statement by statement and answers with a summary when
+// it is done. The file never crosses the bridge — the backend reads it, because
+// a dump is routinely larger than an event wants to carry — and progress travels
+// the other way, as events, so the window can show a bar while the call is still
+// running.
+func (a *App) RunSQLFile(req models.SQLFileRequest) (*models.SQLFileResult, error) {
+	return a.manager.RunSQLFile(req, func(p models.SQLFileProgress) {
+		if a.ctx == nil {
+			return
+		}
+		wruntime.EventsEmit(a.ctx, sqlFileProgressEvent, p)
+	})
+}
+
+// CancelSQLFile stops a running file. Cancelling one that has already finished is
+// not an error — the window may ask in the same instant the run reports that it is
+// done.
+func (a *App) CancelSQLFile(id string) error {
+	return a.manager.CancelSQLFile(id)
+}
+
 // PickFile opens a native file chooser (used for SQLite files and TLS
 // material).
 func (a *App) PickFile(title string, patterns []string) (string, error) {

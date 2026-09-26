@@ -108,49 +108,56 @@ func (m *Manager) ExportDatabase(req models.ExportRequest, progress func(models.
 		total:     len(req.Tables),
 		jsonFirst: true,
 	}
-	m.registerExport(run.id(), run.stop)
-	defer m.unregisterExport(run.id())
+	m.registerRun(run.id(), run.stop)
+	defer m.unregisterRun(run.id())
 
 	return run.run(ctx, progress)
 }
 
-// CancelExport stops the run with this id, if it is still going.
-//
-// Cancelling a run that has already finished is not an error: the window and the
-// run are not in step — the window may ask to stop in the same instant the run
-// reports that it is done — and "that export is no longer running" is exactly
-// what the caller wanted to hear.
+// CancelExport stops the export with this id, if it is still going. See
+// cancelRun for what "still going" is allowed to mean.
 func (m *Manager) CancelExport(id string) error {
 	if strings.TrimSpace(id) == "" {
 		return apperr.New(apperr.CodeInvalidConfig, "no export id")
 	}
-	m.exportsMu.Lock()
-	cancel := m.exports[id]
-	m.exportsMu.Unlock()
-	if cancel != nil {
-		cancel()
-	}
+	m.cancelRun(id)
 	return nil
 }
 
-// registerExport remembers how to stop one run, so CancelExport can find it
-// while it is going.
-func (m *Manager) registerExport(id string, cancel func()) {
-	if cancel == nil {
+// registerRun remembers how to stop one long run — an export writing a file, a
+// SQL file being imported — so the matching Cancel… can find it while it is
+// going.
+func (m *Manager) registerRun(id string, cancel func()) {
+	if cancel == nil || id == "" {
 		return
 	}
-	m.exportsMu.Lock()
-	defer m.exportsMu.Unlock()
-	if m.exports == nil {
-		m.exports = map[string]func(){}
+	m.runsMu.Lock()
+	defer m.runsMu.Unlock()
+	if m.runs == nil {
+		m.runs = map[string]func(){}
 	}
-	m.exports[id] = cancel
+	m.runs[id] = cancel
 }
 
-func (m *Manager) unregisterExport(id string) {
-	m.exportsMu.Lock()
-	defer m.exportsMu.Unlock()
-	delete(m.exports, id)
+func (m *Manager) unregisterRun(id string) {
+	m.runsMu.Lock()
+	defer m.runsMu.Unlock()
+	delete(m.runs, id)
+}
+
+// cancelRun stops the run with this id, if it is still going.
+//
+// Cancelling a run that has already finished is not an error: the window and the
+// run are not in step — the window may ask to stop in the same instant the run
+// reports that it is done — and "that run is no longer going" is exactly what
+// the caller wanted to hear.
+func (m *Manager) cancelRun(id string) {
+	m.runsMu.Lock()
+	cancel := m.runs[id]
+	m.runsMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
 
 // exportPlan reads the request as a decision, refusing anything the window

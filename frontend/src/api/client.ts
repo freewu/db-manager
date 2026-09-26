@@ -53,6 +53,10 @@ import type {
   ScriptAnalysis,
   ServerOverview,
   SessionInfo,
+  SQLFileAnalysis,
+  SQLFileProgress,
+  SQLFileRequest,
+  SQLFileResult,
   SyncDatabaseRequest,
   TableDesign,
   TableOpRequest,
@@ -330,6 +334,24 @@ export const api = {
   exportDatabase: (req: ExportRequest) => invoke<ExportResult>('ExportDatabase', req),
   /** Stops a run. A run that has already finished is not an error. */
   cancelExport: (id: string) => invoke<void>('CancelExport', id),
+
+  // --- running a SQL file -------------------------------------------------
+  /**
+   * Reads a file and reports what is in it, without running any of it.
+   *
+   * It is the dry run the window shows before the user commits: what the file
+   * says about itself, worked out without contacting the engine.
+   */
+  analyzeSqlFile: (req: SQLFileRequest) => invoke<SQLFileAnalysis>('AnalyzeSQLFile', req),
+  /**
+   * Runs a file statement by statement and answers what it did.
+   *
+   * Progress arrives as `sqlfile:progress` events carrying the run's id (see
+   * `sqlFileProgressEvent`), and the run can be stopped with `cancelSqlFile`.
+   */
+  runSqlFile: (req: SQLFileRequest) => invoke<SQLFileResult>('RunSQLFile', req),
+  /** Stops a run. A run that has already finished is not an error. */
+  cancelSqlFile: (id: string) => invoke<void>('CancelSQLFile', id),
 }
 
 /** The event a running export reports itself on. */
@@ -344,6 +366,14 @@ export const exportProgressEvent = 'export:progress'
  */
 export function onExportProgress(callback: (progress: ExportProgress) => void): () => void {
   return runtime.onEvent(exportProgressEvent, (payload) => callback(payload as ExportProgress))
+}
+
+/** The event a file being run reports itself on. */
+export const sqlFileProgressEvent = 'sqlfile:progress'
+
+/** Watches every running file, the way `onExportProgress` watches every dump. */
+export function onSqlFileProgress(callback: (progress: SQLFileProgress) => void): () => void {
+  return runtime.onEvent(sqlFileProgressEvent, (payload) => callback(payload as SQLFileProgress))
 }
 
 /**

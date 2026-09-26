@@ -812,6 +812,92 @@ export interface ExportResult {
   warnings?: string[]
 }
 
+/* --- running a SQL file -------------------------------------------------- */
+
+/**
+ * One run of the "run SQL file" window.
+ *
+ * The file is named rather than sent: a dump is routinely larger than the bridge
+ * wants to carry, and it is on the same machine as the engine. The backend reads
+ * it statement by statement as it runs them.
+ */
+export interface SQLFileRequest {
+  /** Identifies this run, for progress events and for stopping it. */
+  id: string
+  sessionId: string
+  /** The database to run against, unless the file switches it with a USE. */
+  database?: string
+  path: string
+  /** Stop at the first failing statement instead of carrying on past it. */
+  stopOnError: boolean
+  /** Bounds one statement, not the file: a file is many queries. */
+  timeoutMs?: number
+}
+
+/**
+ * What a chosen file holds, worked out without contacting the engine.
+ *
+ * It is a reading of the text — the same dry run the DDL editor shows — so it
+ * says what the file claims to do, not whether the server will accept it.
+ */
+export interface SQLFileAnalysis {
+  path: string
+  size: number
+  /** Every statement in the file, not only the ones listed below. */
+  statements: number
+  /** The first statements of the file, with their real positions in it. */
+  shown: ScriptStatement[]
+  /** How many statements can lose schema or data. */
+  destructive: number
+  /** The positions of the first few of those, one-based. */
+  destructiveIndexes?: number[]
+  /** How many statements a read-only connection will refuse. */
+  refused: number
+  warnings?: string[]
+}
+
+/**
+ * How far a run has got.
+ *
+ * `bytes`/`size` measure the file, which is the only total there is before the
+ * file has been read to its end; `done`/`failed`/`rows` count up beside it.
+ */
+export interface SQLFileProgress {
+  id: string
+  bytes: number
+  size: number
+  done: number
+  failed: number
+  /** A one-line preview of the statement just run; empty before the first. */
+  statement?: string
+  rows: number
+}
+
+/** One statement that failed, with the engine's own words about it. */
+export interface SQLFileError {
+  /** The statement's one-based number in the file. */
+  index: number
+  statement: string
+  message: string
+}
+
+/** What a finished run did, and where it stopped. */
+export interface SQLFileResult {
+  path: string
+  statements: number
+  failed: number
+  rows: number
+  /** True when the user stopped it: what ran is in the database and stays. */
+  cancelled: boolean
+  /** True when the run ended at a failure because it was told to stop there. */
+  stoppedOnError?: boolean
+  durationMs: number
+  /** The failures, up to a cap, in the order they happened. */
+  errors?: SQLFileError[]
+  /** True when more statements failed than the list holds. */
+  errorsTruncated?: boolean
+}
+
 export interface AppInfo {
   name: string
   version: string

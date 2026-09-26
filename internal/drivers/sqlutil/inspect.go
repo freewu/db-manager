@@ -60,26 +60,12 @@ func Analyze(sql string, readOnly bool) models.ScriptAnalysis {
 	}
 
 	for i, statement := range SplitStatements(sql) {
-		cleaned := stripComments(statement)
-		word := strings.ToLower(leadingWord(cleaned))
+		entry := Inspect(statement, i)
 
-		entry := models.ScriptStatement{
-			Index:   i,
-			Preview: preview(statement),
-			// A fragment that is only comments cannot normally reach this point,
-			// since SplitStatements drops those; it would come back unknown.
-			Kind: KindOf(statement),
-			// The statement as written, for the change log to record if a window
-			// runs it.
-			SQL: strings.TrimSpace(statement),
-		}
-
-		entry.Destructive, entry.Reason = destructive(cleaned)
 		if entry.Destructive {
 			analysis.Destructive = true
 		}
-
-		if entry.Kind == KindUnknown && word != "" {
+		if entry.Kind == KindUnknown && strings.TrimSpace(stripComments(statement)) != "" {
 			analysis.Warnings = append(analysis.Warnings,
 				"statement "+strconv.Itoa(i+1)+": unrecognised statement, it will be sent to the server as-is")
 		}
@@ -100,6 +86,29 @@ func Analyze(sql string, readOnly bool) models.ScriptAnalysis {
 		}, analysis.Warnings...)
 	}
 	return analysis
+}
+
+// Inspect is what Analyze works out about one statement it has already split
+// out of a script.
+//
+// index is the statement's zero-based position in that script, which is what
+// the warnings and the preview list number their lines by. Callers that read a
+// script from a file rather than a string use it to look at statements one at a
+// time, without building the whole analysis in memory.
+func Inspect(statement string, index int) models.ScriptStatement {
+	entry := models.ScriptStatement{
+		Index:   index,
+		Preview: preview(statement),
+		// A fragment that is only comments cannot normally reach this point,
+		// since SplitStatements drops those; it would come back unknown.
+		Kind: KindOf(statement),
+		// The statement as written, for the change log to record if a window
+		// runs it.
+		SQL: strings.TrimSpace(statement),
+	}
+
+	entry.Destructive, entry.Reason = destructive(stripComments(statement))
+	return entry
 }
 
 // KindOf classifies a single statement the way Analyze does: KindQuery, KindDDL,

@@ -619,6 +619,107 @@ type ExportResult struct {
 	Warnings []string `json:"warnings,omitempty"`
 }
 
+// --- running a SQL file ----------------------------------------------------
+
+// SQLFileRequest is one run of the "run SQL file" window.
+//
+// Path is a path and not the text of the script on purpose: a dump is routinely
+// larger than the bridge wants to carry, and the file is on the same machine as
+// the engine being written to. The backend reads it statement by statement as
+// it runs them, so the whole file is never in memory either.
+type SQLFileRequest struct {
+	// ID is the window's own name for this run, the way ExportRequest's is: it
+	// comes back on every progress tick and is what cancels the run.
+	ID        string `json:"id"`
+	SessionID string `json:"sessionId"`
+	// Database is the namespace every statement is sent to, unless the file
+	// switches it with a USE — which the run follows, because it names the
+	// database with every statement it sends.
+	Database string `json:"database,omitempty"`
+	Path     string `json:"path"`
+	// StopOnError says the run ends at the first statement that fails. With it
+	// off, a failing statement is recorded and the next one is tried, which is
+	// how a dump that half-applies is usually dealt with: the errors are listed
+	// at the end rather than stopping the import at the first duplicate key.
+	StopOnError bool `json:"stopOnError"`
+	// TimeoutMS bounds one statement, not the file: a file with a thousand
+	// statements is a thousand queries, and the window's timeout is a per-query
+	// setting everywhere else in the application.
+	TimeoutMS int `json:"timeoutMs,omitempty"`
+}
+
+// SQLFileAnalysis is what the window is shown about a file before running it.
+//
+// It is produced without contacting the engine, like the DDL editor's dry run:
+// it says what the file holds, not whether the server will accept it.
+type SQLFileAnalysis struct {
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+	// Statements counts every statement in the file, not only the listed ones.
+	Statements int `json:"statements"`
+	// Shown are the first statements of the file, so a window does not have to
+	// hold a hundred thousand previews to show what is coming. Index is the
+	// statement's real position in the file either way.
+	Shown []ScriptStatement `json:"shown"`
+	// Destructive counts the statements that can lose schema or data, and
+	// DestructiveIndexes lists the first few of them.
+	Destructive        int   `json:"destructive"`
+	DestructiveIndexes []int `json:"destructiveIndexes,omitempty"`
+	// Refused counts the statements a read-only connection will not run.
+	Refused int `json:"refused"`
+	// Warnings are the reasons a statement is worth a second look —
+	// unrecognised statements, statements that lose data, a file that switches
+	// database. They are capped: a dump of a thousand INSERTs does not need a
+	// thousand lines saying so.
+	Warnings []string `json:"warnings,omitempty"`
+}
+
+// SQLFileProgress is one tick of a running file.
+type SQLFileProgress struct {
+	ID string `json:"id"`
+	// Bytes and Size measure the file, which is the only total a run can draw a
+	// bar from: the statement count is not known until the file has been read,
+	// so it is reported as it grows instead.
+	Bytes int64 `json:"bytes"`
+	Size  int64 `json:"size"`
+	// Done is how many statements have run and Failed how many of them failed.
+	Done   int `json:"done"`
+	Failed int `json:"failed"`
+	// Statement is a one-line preview of the statement just run, empty before
+	// the first one.
+	Statement string `json:"statement,omitempty"`
+	// Rows is how many rows the statements run so far changed between them.
+	Rows int64 `json:"rows"`
+}
+
+// SQLFileError is one statement that failed, kept for the summary.
+type SQLFileError struct {
+	// Index is the statement's one-based number in the file, which is what the
+	// window shows next to the message.
+	Index     int    `json:"index"`
+	Statement string `json:"statement"`
+	Message   string `json:"message"`
+}
+
+// SQLFileResult is what one run did.
+type SQLFileResult struct {
+	Path       string `json:"path"`
+	Statements int    `json:"statements"`
+	Failed     int    `json:"failed"`
+	Rows       int64  `json:"rows"`
+	// Cancelled says the user stopped the run, and StoppedOnError that it ended
+	// at a failed statement because it was told to. The statements already run
+	// are not undone — there is no transaction around the file — so the count is
+	// what the run got through before it stopped.
+	Cancelled      bool  `json:"cancelled"`
+	StoppedOnError bool  `json:"stoppedOnError,omitempty"`
+	DurationMS     int64 `json:"durationMs"`
+	// Errors are the failures, up to a cap, in the order they happened, and
+	// ErrorsTruncated says whether more failed than are listed.
+	Errors          []SQLFileError `json:"errors,omitempty"`
+	ErrorsTruncated bool           `json:"errorsTruncated,omitempty"`
+}
+
 // --- databases -------------------------------------------------------------
 
 // DatabaseCharset is one character set (MySQL family) or encoding (PostgreSQL)
@@ -1219,6 +1320,10 @@ const (
 	// ChangeSourceDataGen is the data generation window appending rows it made
 	// up: one entry per batch, because a batch is what the engine is handed.
 	ChangeSourceDataGen = "datagen"
+	// ChangeSourceSQLFile is a script being run from a file: the statements were
+	// not written in this application, and the file is the only place they are
+	// kept, so the log is what says they ran here.
+	ChangeSourceSQLFile = "sqlfile"
 )
 
 // ChangeLogEntry is one statement this application ran that changed schema or
