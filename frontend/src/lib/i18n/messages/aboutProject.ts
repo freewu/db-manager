@@ -8,9 +8,9 @@ import type { AreaMessages } from '../types'
 
 export const aboutProject = {
   'aboutProject.lead': [
-    'An offline-first MySQL / PostgreSQL / SQLite client: browse, edit, design and query without a server-side agent. Connections and favourites stay on this machine, in {path}.',
-    '一个离线优先的 MySQL / PostgreSQL / SQLite 客户端：无需服务端代理即可浏览、编辑、设计和查询。连接和收藏都保存在本机，位于 {path}。',
-    '一個離線優先的 MySQL / PostgreSQL / SQLite 用戶端：無需伺服器端代理即可瀏覽、編輯、設計和查詢。連線和收藏都保存在本機，位於 {path}。',
+    'A MySQL / PostgreSQL / SQLite / MongoDB / Apache Doris / TiDB client with data generation, database comparison, code generation and other tools, and a log of every statement it runs. Connections and favourites stay on this machine, in {path}.',
+    'MySQL / PostgreSQL / SQLite / MongoDB / Doris / TiDB 客户端，提供数据生成、数据库比对、代码生成等工具，支持操作日志记录和查询。连接和收藏都保存在本机，位于 {path}。',
+    'MySQL / PostgreSQL / SQLite / MongoDB / Doris / TiDB 用戶端，提供資料生成、資料庫比對、程式碼產生等工具，支援操作日誌記錄與查詢。連線和收藏都保存在本機，位於 {path}。',
   ],
   'aboutProject.the-app-config-folder': ['the app config folder', '应用配置目录', '應用程式設定目錄'],
   'aboutProject.repository': ['Repository', '仓库', '儲存庫'],
