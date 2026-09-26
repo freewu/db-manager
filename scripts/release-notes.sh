@@ -132,30 +132,34 @@ if [ -n "$previous" ] && [ -n "$slug" ]; then
   printf '**完整变更**：https://github.com/%s/compare/%s...%s\n\n' "$slug" "$previous" "$tag"
 fi
 
-cat <<'EOF'
+win="db-manager-${version}-windows-amd64.exe"
+mac="db-manager-${version}-macos-universal.zip"
+lin="db-manager-${version}-linux-amd64"
+
+cat <<EOF
 ## 下载
 
 | 平台 | 文件 | 运行方式 |
 | --- | --- | --- |
-| Windows x64 | `db-manager.exe` | 免安装，双击即可。需要 WebView2 运行时（Windows 10/11 自带） |
-| macOS（Intel + Apple Silicon 通用） | `db-manager-macos-universal.zip` | 解压后把 `db-manager.app` 拖入「应用程序」 |
-| Linux x64 | `db-manager` | `chmod +x db-manager && ./db-manager` |
+| Windows x64 | \`${win}\` | 免安装，双击即可。需要 WebView2 运行时（Windows 10/11 自带） |
+| macOS（Intel + Apple Silicon 通用） | \`${mac}\` | 解压后把 \`db-manager.app\` 拖入「应用程序」 |
+| Linux x64 | \`${lin}\` | \`chmod +x ${lin} && ./${lin}\` |
 
 前端资源已经编译进可执行文件，无需另外安装 Node.js / Go，也不依赖任何运行时目录。
 
 macOS 包未做代码签名与公证，首次打开若被 Gatekeeper 拦下，请右键「打开」，或执行：
 
-```sh
+\`\`\`sh
 xattr -cr /Applications/db-manager.app
-```
+\`\`\`
 
-Linux 需要 GTK3 与 WebKitGTK 4.0（Debian/Ubuntu：`libgtk-3-0 libwebkit2gtk-4.0-37`）。
+Linux 需要 GTK3 与 WebKitGTK 4.0（Debian/Ubuntu：\`libgtk-3-0 libwebkit2gtk-4.0-37\`）。
 
 ## 校验
 
-下载后可比对本页附带的 `checksums.txt`：
+下载后可比对本页附带的 \`checksums.txt\`：
 
-```sh
+\`\`\`sh
 sha256sum -c checksums.txt
-```
+\`\`\`
 EOF

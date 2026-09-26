@@ -79,15 +79,18 @@ jobs:
           - name: windows-amd64
             os: windows-latest
             platform: windows/amd64
-            artifact: build/bin/db-manager.exe
+            built: db-manager.exe
+            suffix: windows-amd64.exe
           - name: macos-universal
             os: macos-latest
             platform: darwin/universal
-            artifact: build/bin/db-manager-macos-universal.zip
+            built: db-manager.app
+            suffix: macos-universal.zip
           - name: linux-amd64
             os: ubuntu-22.04
             platform: linux/amd64
-            artifact: build/bin/db-manager
+            built: db-manager
+            suffix: linux-amd64
     steps:
       - uses: actions/checkout@v4
         with:
@@ -138,19 +141,28 @@ jobs:
           wails build -clean -platform ${{ matrix.platform }} \
             -ldflags "-X main.Version=${{ steps.version.outputs.value }}"
 
-      # A .app is a directory; a zip keeps the executable bit and the bundle
-      # layout intact, and is what users expect from a macOS download.
-      - name: Package the macOS bundle
-        if: runner.os == 'macOS'
+      # The asset name is what a user reads in the release list, so it names the
+      # platform and the version — the same shape `scripts/package.mjs` gives a
+      # local build. Windows and Linux ship the bare executable (the frontend
+      # bundle is embedded, so the file is standalone); a .app is a directory,
+      # so macOS gets a zip, which keeps the bundle layout and the executable
+      # bit intact.
+      - name: Name the artefact after the platform
         shell: bash
         run: |
-          cd build/bin
-          zip -qry db-manager-macos-universal.zip db-manager.app
+          asset="db-manager-${{ steps.version.outputs.value }}-${{ matrix.suffix }}"
+          mkdir -p build/dist
+          if [ "${{ matrix.built }}" = "db-manager.app" ]; then
+            (cd build/bin && zip -qry "../dist/${asset}" db-manager.app)
+          else
+            mv "build/bin/${{ matrix.built }}" "build/dist/${asset}"
+          fi
+          ls -lh build/dist
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: ${{ matrix.artifact }}
+          path: build/dist/*
           if-no-files-found: error
 
   release:
@@ -178,10 +190,24 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # A matrix leg that quietly produced nothing would otherwise turn into a
+      # release with a missing or empty download, so count and weigh them
+      # before publishing. Every real build is well over 20 MB.
+      - name: All three platforms arrived
+        working-directory: dist
+        run: |
+          ls -lh
+          test "$(ls db-manager-* | wc -l)" -eq 3
+          for file in db-manager-*; do
+            bytes=$(stat -c%s "$file")
+            echo "${file}: ${bytes} bytes"
+            test "$bytes" -gt 5000000
+          done
+
       - name: Generate checksums
         working-directory: dist
         run: |
-          sha256sum db-manager db-manager-macos-universal.zip db-manager.exe >checksums.txt
+          sha256sum db-manager-* >checksums.txt
           cat checksums.txt
 
       - name: Generate the release notes
@@ -196,9 +222,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           assets=(
-            dist/db-manager.exe
-            dist/db-manager-macos-universal.zip
-            dist/db-manager
+            dist/db-manager-*
             dist/checksums.txt
           )
           if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
