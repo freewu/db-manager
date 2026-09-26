@@ -1,8 +1,8 @@
 # db-manager
 
-使用 **Wails v2 + React + Vite + Justfile** 开发的关系型数据库管理工具，打包为 Windows 桌面应用。
+使用 **Wails v2 + React + Vite + Justfile** 开发的关系型 / 文档型数据库客户端，打包为 Windows 桌面应用。
 
-支持 **MySQL / TiDB / Apache Doris / PostgreSQL / SQLite / MongoDB**；驱动层不假设关系模型，文档型引擎走的是同一套 `Driver / Conn / Dialect` 契约，service 与 UI 只问能力、不问引擎名。Oracle / SQL Server 的占位仍在（见 `internal/drivers/planned`），但暂不上菜单。
+**MySQL / PostgreSQL / SQLite / MongoDB / Apache Doris / TiDB** 六种引擎，除了浏览、编辑、设计与查询，还带着一整套干活的工具：整库 / 整表的**导出**（结构、结构与数据、或单表的 CSV / JSON / JSONL，带进度与 Stop）、按 mock.js 模板**数据生成**、两个库之间的**数据库比对**与同步脚本、按表的字段翻出 18 种语言的**代码生成**、以及把这个程序跑过的每一句写语句记下来的**变更日志**（操作日志，一天一个文件，没连库也能查）。驱动层不假设关系模型，文档型引擎走的是同一套 `Driver / Conn / Dialect` 契约，service 与 UI 只问能力、不问引擎名 —— 所以工具也是按能力长出来的：引擎给不出的入口（文档型引擎的表设计器、数据生成与 Explain，Doris 的表设计器）不摆出来，而不是点了才报错。Oracle / SQL Server 的占位仍在（见 `internal/drivers/planned`），但暂不上菜单。
 
 > 在本仓库写代码前先读 [`AGENTS.md`](AGENTS.md)：每次开发完成必须 commit + push，本地打包用 `just release`，发版走 `just publish <x.y.z>` 触发 GitHub Actions 打出三平台免安装可执行文件。
 
@@ -40,7 +40,6 @@
   右键要么什么都不做，要么就是应用自己的菜单（连接树等）；文本框与 SQL 编辑器是例外 —— 那里保留系统菜单，
   右键粘贴照旧可用，其它地方用 `Ctrl+C` / `Ctrl+V`。
 - **运行情况**：双击连接节点即可打开该连接的「运行情况」页（未连接会先连上，密码框填完再自动打开）；页面上半部分是会话事实与快照时间，下面按引擎各画各的 —— MySQL 给进程列表、连接数、InnoDB 缓冲池与命中率（TiDB 走同一页，外加集群成员表；Doris 也尽力取这一套，取不到的项挂进警告里），PostgreSQL 给后端/活动会话/数据库体积与提交率、缓存命中率，SQLite 则是「这是一个文件」的视角（路径、落盘大小、pragma、对象清单与 ATTACH 进来的库）。读不到的项一律显示 `—` 并附一条警告（缺权限、缺统计视图），不会拿 0 冒充；工具条的刷新按钮重新取一次快照。
-- **项目信息**：没连库时右侧只有一页项目信息，标题就是 `DB Manager` 加当前版本（`v0.1.0`，字号比正文大一档）—— 标题下面一排徽章（`license MIT`、`build just 1.58.0`、`running windows/amd64`），再按组列出 **`Build`**（一枚可点的 `justfile` 徽章，值就是三条常用配方，点开是仓库里的 Justfile）、技术栈（`Runtime`、`Desktop and UI`）与 **`Platforms`**（`windows amd64` / `macos universal` / `linux amd64`，和 `.github/workflows/release.yml` 的构建矩阵一一对应）—— 徽章是 shields 样式的灰标签 + 品牌色值，前端库版本直接读 `frontend/package.json`，Go 版本取自运行中的二进制，再下面依次是项目地址 / Releases / Issues 和开发者（只画一个 GitHub 头像，悬停显示昵称、点一下打开 `github.com/freewu`）。徽章用本地 CSS 画，离线也能渲染；链接交给系统浏览器（`window.runtime.BrowserOpenURL`），不把整个窗口导航走。连库的入口在命令条的 Connection，以及连接树的右键菜单。
 - **导出查询结果**：CSV / JSON / INSERT 脚本（MongoDB 下是 `insertMany` 脚本，按列的 BSON 类型还原 `$oid` / `$date` / 文档字面量），可写入文件或复制到剪贴板 —— 这一份是**窗口里已经拿到的那一页（或选中的那些行）**，序列化在前端做。
 - **数据库导出**：库节点（有 schema 层的引擎，schema 节点上也有）右键里是**三个一组、用分隔线归置在一起**的入口 —— `Export structure` / `Export structure and data` / `Export data`。前两个写**整份 `.sql` 脚本**：每张表先出**引擎自己的 `CREATE`**（不是本程序另拼的），带数据的那档再逐行补 `INSERT`，表与表之间一句 `-- Table: <库.表>` 的注释，文件头上写明库、引擎与导出的时刻。`Export data` 写的是**一张表**的行，**字段可以自己勾**（默认全勾；勾哪几个就只写哪几个，顺序按目录里的声明 —— CSV 的表头、`INSERT` 的列清单、JSON 的键就是这一份清单），勾出一个表里没有的字段会被后端**点名拒绝**，而不是少写一列了事；格式有 **CSV / JSON / JSONL / SQL** 四档，只有 SQL 装得下多张表 —— 另外三种是一张表的行，没地方说哪一行属于哪张表，所以那三档下选表是**单选**。窗口里能按名字搜表、全选 / 全不选、改档、挑目标文件，**整个导出在后端一边读一边直接写进磁盘**（行不过桥、也不按 OFFSET 翻页），于是进度条、已写的行数与字节数、随时能按的 **Stop** 都是真的；停下来**保留**已经写出去的那半份（要删是用户的决定），跑完会说明写了几张表、几行、多少字节，**读不出来的那张表进警告**（不连累其它表），而**磁盘写失败当场停下**（后面每张表都会同样失败，攒一屏警告没有意义）。表结构、行编辑与这一份导出都只对**关系型引擎**出现 —— 文档型引擎没有 `CREATE TABLE` 可写，也没有行可列。
 - **外观**：Navicat 式窗口骨架（icon-over-label 命令条 + 最左那条五页图标栏 + 连接树 + 标签页工作区 + 状态栏）、明暗主题、品牌绿 `#36ab60`、可拖拽分栏、紧凑的表格与状态栏 —— 表格的表头**固定不动**：数据网格、对象列表、设计器的字段表都一样，纵向滚动时表头留在容器顶上，横向滚动也带不走它（钉住的列仍旧钉在原处）。主题有三档：`Light` / `Dark` / `System`，在设置页的 **Appearance** 里选，状态栏那格点一下也能循环切换，Windows 上托盘菜单的 **`Display theme`** 是同一个偏好的第三个入口（见「托盘只有 Windows 有」）（跟随系统时它会写成 `system (dark)`，把当前系统给的那一档一起说出来）；选**跟随系统**时窗口真的跟着操作系统走 —— 操作系统在运行期间切深浅色，界面当场就变，不用重启也不用再点一次。命令条上目前只有 **Connection**、**Open**、**Close**、**New Query**、**Refresh**、**Table** 与 **View** 是活的，其余按钮保持原来的位置但禁用并在提示里说明 —— 摆着的空位比消失的按钮更好认。切**页面**的命令不在命令条上，而在最左边那条图标栏里（见「页面栏与五个页面」）：命令条只管**作用在当前连接上的事**。
