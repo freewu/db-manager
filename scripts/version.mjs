@@ -6,6 +6,10 @@
  * file that carries a version mirrors it, so cutting a release is one command:
  *
  *   node scripts/version.mjs 0.2.0     # sync every mirror
+ *
+ * A mirror is any file that records the version but is not the canonical one;
+ * `frontend/package-lock.json` counts because `npm install` would otherwise
+ * write the old version back into it on the next dependency change.
  *   node scripts/version.mjs --check   # fail if the mirrors drifted apart
  *   node scripts/version.mjs --get     # print the current version
  *
@@ -39,6 +43,18 @@ const MIRRORS = [
     file: 'frontend/package.json',
     describe: 'frontend package',
     pattern: /(^[ \t]*"version"\s*:\s*")[^"]*(")/m,
+    value: (version) => version,
+  },
+  {
+    file: 'frontend/package-lock.json',
+    describe: 'lockfile, top level',
+    pattern: /(\n  "name": "[^"]*",\n  "version": ")[^"]*(")/,
+    value: (version) => version,
+  },
+  {
+    file: 'frontend/package-lock.json',
+    describe: 'lockfile, `packages` root',
+    pattern: /(\n    "": \{\n      "name": "[^"]*",\n      "version": ")[^"]*(")/,
     value: (version) => version,
   },
   {

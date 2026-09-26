@@ -22,7 +22,7 @@ const appName = "DB Manager"
 // Version is overridden at build time:
 //
 //	wails build -ldflags "-X main.Version=1.2.3"
-var Version = "0.1.0-dev"
+var Version = "0.2.0-dev"
 
 // App is the object bound to the frontend. Every exported method becomes a
 // callable function on window.go.main.App in the webview.

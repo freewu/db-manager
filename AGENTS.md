@@ -138,10 +138,11 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
 | --- | --- | --- |
 | `wails.json` | `info.productVersion` | 权威值 |
 | `frontend/package.json` | `version` | |
+| `frontend/package-lock.json` | `version`（顶层与 `packages.""` 各一处） | `npm install` 会跟着 `package.json` 改它，所以也得当成镜像盯着 |
 | `Justfile` | `version := "…"` | `just build` / `just release` 的 ldflags 来源 |
 | `app.go` | `var Version = "…-dev"` | 开发期兜底；发布构建用 ldflags 覆盖 |
 
-`just check-version`（CI 里也跑）会在四处不一致时报错。
+`just check-version`（CI 里也跑）会在五处不一致时报错。
 **不要手改这些字段**，一律走 `just publish` 或 `node scripts/version.mjs <x.y.z>`
 （`just release` 只读取它，不修改）。
 

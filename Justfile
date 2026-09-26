@@ -13,7 +13,7 @@ set shell := ["sh", "-cu"]
 web := "frontend"
 bin := "build/bin"
 exe := "db-manager"
-version := "0.1.0"
+version := "0.2.0"
 
 # List the available recipes.
 default:

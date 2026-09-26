@@ -14,7 +14,7 @@
   "info": {
     "companyName": "db-manager",
     "productName": "DB Manager",
-    "productVersion": "0.1.0",
+    "productVersion": "0.2.0",
     "copyright": "MIT",
     "comments": "Relational database management tool"
   }

@@ -24,7 +24,7 @@ Six windows, from the workspace to settings — the same images the [introductio
 
 ## Download
 
-Every release ships three **portable executables**. Nothing to install: the frontend bundle is embedded, so the single file *is* the application. Take the one for your platform from the [latest release](https://github.com/freewu/db-manager/releases/latest) — `<version>` below is the release you are downloading, for example `0.1.0`:
+Every release ships three **portable executables**. Nothing to install: the frontend bundle is embedded, so the single file *is* the application. Take the one for your platform from the [latest release](https://github.com/freewu/db-manager/releases/latest) — `<version>` below is the release you are downloading, for example `0.2.0`:
 
 | Platform | File | How to run |
 | --- | --- | --- |
