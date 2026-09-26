@@ -21,6 +21,9 @@ git push origin HEAD
 
 **不允许留下未提交的改动。** 任务结束时工作区必须是干净的（`git status --short` 无输出）。
 
+如果这一轮的指令本身就是「改版本号 / 发版」，收尾不算结束：还要按 §1 的
+「收到「改版本号 / 发版」的指令时」把版本改掉、把附注 tag 打上、把 tag push 出去。
+
 git 操作要在 **Windows 侧**跑（或在 Windows 终端里执行）：WSL 里的 `git push` 到不了外网，原因见 §3。
 如果 `/mnt/e/work/github/db-manager` 已经在 Windows 那边跑过 `git config user.name/user.email`，提交可以直接在 WSL 里做，只把 `push` 交给 Windows。
 
@@ -97,6 +100,20 @@ push tag 会触发 [`.github/workflows/release.yml`](.github/workflows/release.y
 
 这套命名在 `release.yml` 的改名步骤和 `scripts/release-notes.sh` 的下载表格里各写了一次，
 **改一处要改两处**（`docs/i18n.js` 的下载说明里不写具体文件名，所以不用跟着改）。
+
+### 收到「改版本号 / 发版」的指令时（硬性要求）
+
+用户说「版本改成 x.y.z」「发版 x.y.z」时，顺序是固定的：**先把这一轮的工作提交干净 → 改版本号 →
+打附注 tag → push**。
+
+1. `git status --short` 要是空的：脏工作区上打的 tag，release 里就会少东西；
+2. `node scripts/version.mjs <x.y.z>` 同步版本号，提交 `chore(release): v<x.y.z>`；
+3. `git tag -a v<x.y.z> -m "<本版总结>"` —— 必须是**附注** tag（`-a` 不能省，轻量 tag 没有 message）；
+   总结写「这个版本开发了什么」，中文、用户视角，它就是 release message 的第一段；
+4. push 分支与 tag（WSL 里 `git push` 到不了外网，走 §3 的 `cmd.exe`）。
+
+`just publish <x.y.z> "<总结>"` 把第 2–4 步合成一条命令，**优先用它**；只有需要手工介入时才拆开跑。
+tag 已经存在就停下来问，**不要**用 `-f` 覆盖已经发布出去的 tag。**别自作主张改版本号** —— 只在收到指令时动。
 
 ### release message 怎么来的
 
