@@ -56,6 +56,7 @@ The macOS build is not signed or notarised, so Gatekeeper blocks the first launc
 - **Settings** — one page for theme (light / dark / system), interface language, code-generation language, mock placeholders, the data folder (open it, move it, set how many log entries a file holds) and project information. Every change applies immediately.
 - **Interface languages** — English, 简体中文 and 繁體中文, English by default. The status bar and the Windows tray menu switch the same preference.
 - **Tray (Windows)** — closing the window hides it. The menu brings the window back, switches the display theme and the interface language, links to the project, and quits.
+- **One copy at a time** — a second launch does not open the same profiles twice: it asks the copy that is already running to bring its window to the front, and leaves.
 
 ## Supported engines
 
@@ -106,6 +107,8 @@ Connection profiles, saved queries, connection order, window state, the password
 
 Passwords are encrypted with AES-256-GCM under a key generated on first use (`secret.key`, mode 0600). Nothing is sent anywhere: there is no telemetry, and the app talks only to the databases you configured.
 
+The claim that keeps the app to one running copy is deliberately outside that folder, in the per-user cache directory (`%LOCALAPPDATA%\db-manager` on Windows, `~/Library/Caches/db-manager` on macOS, `~/.cache/db-manager` on Linux): it has to stay put while the data folder moves, and nothing in it is data — it is the claim itself, plus one line telling the next launch how to reach the window.
+
 ## How it is put together
 
 Wails v2 hosts a React 19 + Vite frontend in a WebView2 / WebKit window; `app.go` is the binding layer the frontend calls. The frontend is written by hand against `frontend/src/api/{types,client}.ts` rather than the generated bindings, and keeps its state in one zustand store. UI copy lives in `frontend/src/lib/i18n/messages/<area>.ts` as `[English, 简体, 繁體]` and is checked by `scripts/i18n.mjs verify`; backend Go strings are still English.
@@ -116,6 +119,7 @@ tray*.go                 Windows tray menu (theme + language) and the no-op stub
 internal/drivers/        Driver / Conn / Dialect contracts, sqlbase, one package per engine
 internal/service/        manager, design, export, compare, changelog, data generation
 internal/config/         JSON stores, the data folder pointer, change log files
+internal/singleinstance/ one copy at a time: the claim, and the request that shows the window
 frontend/src/            React UI: components, lib, i18n, store, styles
 docs/                    the introduction page (static, no build step)
 scripts/                 version.mjs, package.mjs, i18n.mjs, docs-check.mjs,

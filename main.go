@@ -7,6 +7,7 @@ package main
 
 import (
 	"embed"
+	"errors"
 	"log"
 
 	"github.com/wailsapp/wails/v2"
@@ -16,16 +17,35 @@ import (
 
 	// Registers every database driver into the registry.
 	_ "dbmanager/internal/drivers/all"
+	"dbmanager/internal/singleinstance"
 )
 
 //go:embed all:frontend/dist
 var assets embed.FS
 
 func main() {
+	// One copy at a time. A second launch must not open the same profiles, change
+	// log and state file as the copy that is running, so it asks that copy to come
+	// to the front and leaves — the window is usually hidden behind the
+	// notification-area icon, and a launch that did nothing at all would look like
+	// a launch that failed. The claim is taken before anything of the store is
+	// opened, so a copy that starts is the only one holding it open.
+	instance, err := singleinstance.Acquire()
+	if errors.Is(err, singleinstance.ErrAlreadyRunning) {
+		if err := singleinstance.Activate(); err != nil {
+			log.Printf("db-manager: %v", err)
+		}
+		return
+	}
+	if err != nil {
+		log.Fatalf("db-manager: %v", err)
+	}
+
 	app, err := NewApp()
 	if err != nil {
 		log.Fatalf("db-manager: %v", err)
 	}
+	app.instance = instance
 
 	err = wails.Run(&options.App{
 		Title:     appName,

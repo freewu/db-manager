@@ -13,6 +13,7 @@ import (
 	"dbmanager/internal/apperr"
 	"dbmanager/internal/models"
 	"dbmanager/internal/service"
+	"dbmanager/internal/singleinstance"
 )
 
 // appName is what the window title, the notification-area tooltip and the
@@ -33,6 +34,11 @@ type App struct {
 	// tray is the notification-area icon; nil until startup, and a no-op stub on
 	// platforms that have no notification area.
 	tray *tray
+
+	// instance is this copy's claim on being the only copy that runs. It is taken
+	// in main before the store is opened, and it is the way a later launch can ask
+	// this copy to come to the front (see startup).
+	instance *singleinstance.Lock
 
 	// quitting is what the tray's Quit sets, so the close hook can tell "the user
 	// closed the window" (hide it, stay running) from "the user is done" (go
@@ -63,6 +69,13 @@ func (a *App) startup(ctx context.Context) {
 	// the frontend has stored anything on a fresh install, so it is seeded here.
 	a.refreshTrayPrefs()
 	a.tray = newTray(a.trayActions())
+	// A launch that is refused the claim asks this copy to come to the front
+	// instead of starting a second one, and the request arrives over the address
+	// the claim published. It is answered only from here: it is the window that
+	// has to be shown, and there is one only now.
+	if a.instance != nil {
+		a.instance.Serve(a.showWindow)
+	}
 }
 
 // trayActions is what the notification-area menu can ask of the app.
@@ -119,6 +132,11 @@ func (a *App) shutdown(context.Context) {
 		a.tray.close()
 	}
 	a.manager.Shutdown()
+	// Last, and deliberately: while the claim is held no other copy can start, and
+	// the pools above are still being closed.
+	if a.instance != nil {
+		_ = a.instance.Close()
+	}
 }
 
 // --- window and tray -------------------------------------------------------

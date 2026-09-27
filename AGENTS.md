@@ -217,6 +217,20 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
   - 引擎表达不了的变更写进 `Plan.Warnings` **而不是静默跳过**（尤其 SQLite）。
   - 字段改名时索引跟着改：前端在重命名时同步索引列，后端把只写了旧名字的索引列也重映射到新名字。
 - 后端新增能力时按 `drivers.Driver` → `Conn` → `Dialect` 契约落地，并在 `init()` 里 `drivers.Register`。
+- **同时只允许跑一个实例**，判定依据是 **OS 锁**，不是文件里写没写东西：`internal/singleinstance`
+  在用户缓存目录（`os.UserCacheDir()/db-manager/`）里锁住 `instance.lock`（Windows `LockFileEx`、其它
+  `flock`），拿不到锁就说明已有副本在跑 → `main()` 调 `Activate()` 请它把窗口叫到前台，然后自己退出
+  （退出码 0）。`instance.json` 只是「怎么敲门」的提示（loopback 临时端口 + 随机 token），可能是崩溃
+  留下的过期地址，所以敲门失败只记一条日志，绝不能因此挡住启动。几条硬规则：
+  - 锁与记录**不放在数据目录**：数据目录会被「数据文件夹」搬家搬走，而一个进程正持有的文件搬不动
+    （Windows 上直接搬失败）。它们也不是数据，**不要**加进 `dataFiles`。
+  - 请求只有一条命令 `show <token>`（见 `commandShow`），处理顺序是**先叫窗口、后回 `ok`**；
+    回 `ok` 之后发起方才知道自己敲对了门。
+  - 别改成「固定端口」或「拿不到锁就 `log.Fatal`」：前者会被别的进程占住而误伤启动，后者会把
+    正常的重复启动变成报错。
+  - 副作用（有意接受）：发行版跑着的时候再跑 `wails dev`（或反过来）会被当成「已有实例」而直接
+    退出 —— 日志里会有一行 `db-manager: ...`；要同时开就先把上一个关掉。所有构建共用同一把锁，
+    没有按版本 / `-dev` 分开。
 - **数据目录不由「写死的路径」决定，而是由默认位置里的指针 `location.json` 决定**（见
   `internal/config/location.go`）。**新增一份数据文件必须同时加进 `dataFiles`**，否则用户换目录时它会被
   落在原处。搬家的顺序是复制 → 逐字节校验 → 改指针 → 删旧文件，不要改成先删后拷。
@@ -266,7 +280,7 @@ cmd.exe /c "cd /d E:\work\github\db-manager && C:\Users\24358\go\bin\wails.exe b
 
 ```
 app.go                  Wails 绑定层（前端调用的入口就是这里的方法名）
-main.go                 入口：embed frontend/dist、窗口参数
+main.go                 入口：单实例 claim、embed frontend/dist、窗口参数
 scripts/version.mjs     版本号同步 / 校验（wails.json 是权威值）
 scripts/package.mjs     本地打包：把 build/bin 的产物归档到 release/ + checksums.txt
 scripts/release-notes.sh 生成 GitHub Release message
@@ -281,7 +295,7 @@ docs/images/            六张截图（README 截图表格、轮播与画廊共�
 asserts/                品牌素材唯一来源（logo.png、icon/*.png）
 build/                  appicon.png、windows/darwin 打包资源（icon.ico 已 gitignore）
 release/                本地打包产物（just release，已 gitignore）
-internal/               后端：驱动契约、sqlbase、服务层
+internal/               后端：驱动契约、sqlbase、服务层、单实例 claim
 frontend/src/           React 前端（api 手写、store 用 zustand、样式在 styles/global.css）
 .github/workflows/      ci.yml（main/PR）、release.yml（tag → 三平台产物 + Release）、
                         pages.yml（docs/ → GitHub Pages）

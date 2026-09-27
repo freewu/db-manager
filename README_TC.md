@@ -56,6 +56,7 @@ macOS 版沒有簽章與公證，第一次開啟會被 Gatekeeper 攔下：按�
 - **設定** —— 一頁管住主題（淺色 / 深色 / 跟隨系統）、介面語言、程式碼產生語言、mock 佔位符、資料目錄（開啟、搬移、設定單一日誌檔記幾筆）以及專案資訊。改完立即生效。
 - **介面語言** —— English / 简体中文 / 繁體中文，預設英文；狀態列與 Windows 系統匣選單切的是同一份偏好。
 - **系統匣（Windows）** —— 關視窗只是隱藏；選單可以把視窗叫回來、切換顯示主題與介面語言、開啟專案首頁、結束。
+- **一次只跑一個實例** —— 再次啟動不會開出第二份設定檔：它把已在執行的那個視窗叫到最前面，然後結束。
 
 ## 支援的引擎
 
@@ -106,6 +107,8 @@ wails build
 
 密碼用 AES-256-GCM 加密，金鑰在第一次執行時產生（`secret.key`，權限 0600）。不往任何地方送資料：沒有追蹤，程式只連你自己設定的那些資料庫。
 
+把程式限制成一個實例的那把鎖刻意放在這個目錄之外：在使用者快取目錄裡（Windows 是 `%LOCALAPPDATA%\db-manager`，macOS 是 `~/Library/Caches/db-manager`，Linux 是 `~/.cache/db-manager`）。資料目錄搬移時它得留在原處，而且裡面的東西都不是資料：一個是鎖本身，一個是告訴下次啟動怎麼找到視窗的一行位址。
+
 ## 程式碼結構
 
 Wails v2 把 React 19 + Vite 的前端裝進 WebView2 / WebKit 視窗，`app.go` 是前端呼叫的綁定層。前端是照著手寫的 `frontend/src/api/{types,client}.ts` 寫的（不用產生的綁定），狀態集中在一個 zustand store 裡。介面文案放在 `frontend/src/lib/i18n/messages/<area>.ts`，每筆形如 `[English, 简体, 繁體]`，由 `scripts/i18n.mjs verify` 把關；後端 Go 的文案目前還是英文。
@@ -116,6 +119,7 @@ tray*.go                 Windows 系統匣選單（主題 + 語言）及其空�
 internal/drivers/        Driver / Conn / Dialect 契約、sqlbase、每個引擎一個套件
 internal/service/        manager、設計器、匯出、比較、變更日誌、資料產生
 internal/config/         JSON 儲存、資料目錄指標、變更日誌檔案
+internal/singleinstance/ 只跑一個實例的鎖，以及「把視窗叫到最前面」的要求
 frontend/src/            React 介面：components、lib、i18n、store、styles
 docs/                    介紹頁（靜態，沒有建置步驟）
 scripts/                 version.mjs、package.mjs、i18n.mjs、docs-check.mjs、
