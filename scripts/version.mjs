@@ -9,7 +9,10 @@
  *
  * A mirror is any file that records the version but is not the canonical one;
  * `frontend/package-lock.json` counts because `npm install` would otherwise
- * write the old version back into it on the next dependency change.
+ * write the old version back into it on the next dependency change, and
+ * `docs/version.json` counts because the introduction page has no build step and
+ * is published on its own, so it cannot read `wails.json` from the repository
+ * root.
  *   node scripts/version.mjs --check   # fail if the mirrors drifted apart
  *   node scripts/version.mjs --get     # print the current version
  *
@@ -68,6 +71,12 @@ const MIRRORS = [
     describe: 'development fallback',
     pattern: /(^var Version = ")[^"]*(")/m,
     value: (version) => version + DEV_SUFFIX,
+  },
+  {
+    file: 'docs/version.json',
+    describe: 'introduction page',
+    pattern: /("version"\s*:\s*")[^"]*(")/,
+    value: (version) => version,
   },
 ]
 

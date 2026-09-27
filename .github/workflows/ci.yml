@@ -74,20 +74,20 @@ jobs:
           cmp asserts/logo.png frontend/public/logo.png
           cmp asserts/logo.png docs/logo.png
 
+      # The engine marks the introduction page shows are copies too: they sit
+      # beside the page so that docs/ can be published — and opened — on its own.
+      - name: Engine marks are in sync
+        run: |
+          for icon in docs/engine/*.png; do
+            cmp "$icon" "asserts/icon/$(basename "$icon")"
+          done
+
       # The introduction page in docs/ is plain HTML, so nothing compiles it.
       # This is what notices a language that lost a key, a screenshot that was
-      # renamed, or a relative path that no longer resolves.
+      # renamed, or a reference that no longer resolves — including one that
+      # climbs out of docs/ and would 404 once the directory is published.
       - name: Introduction site is consistent
         run: node scripts/docs-check.mjs
-
-      # The published copy of that page is a different directory (the Pages
-      # workflow builds it the same way), and a reference that escapes it would
-      # only 404 once it is online. Building it here is what makes a PR that
-      # breaks it go red before the merge.
-      - name: The published site would be self-contained
-        run: |
-          bash scripts/pages-build.sh _site
-          node scripts/docs-check.mjs --site _site
 
       # README.md is English, README_CN.md and README_TC.md are its mirrors, and
       # their download tables repeat the asset names the release workflow

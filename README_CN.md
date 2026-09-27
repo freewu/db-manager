@@ -121,9 +121,9 @@ internal/service/        manager、设计器、导出、比较、变更日志、
 internal/config/         JSON 存储、数据目录指针、变更日志文件
 internal/singleinstance/ 只跑一个实例的锁，以及「把窗口叫到前台」的请求
 frontend/src/            React 界面：components、lib、i18n、store、styles
-docs/                    介绍页（静态，没有构建步骤）
+docs/                    介绍页（静态，原样发布）
 scripts/                 version.mjs、package.mjs、i18n.mjs、docs-check.mjs、
-                         readme-check.mjs、pages-build.sh、release-notes.sh
+                         readme-check.mjs、release-notes.sh
 ```
 
 动手前值得知道的四条约定：
@@ -131,7 +131,7 @@ scripts/                 version.mjs、package.mjs、i18n.mjs、docs-check.mjs�
 - **表设计器发的是「完整目标定义」，不是 diff。** 后端拿实时 catalog 结构去 plan，所以预览与保存走的是同一条代码；引擎表达不了的变更写成 `Plan.Warnings`，而不是静默跳过。
 - **每次写操作都先问、后记。** 确认框里显示的语句就是真正发出去的那条，变更日志记的是引擎报告的影响行数。
 - **不在自己兜不住的事务里跑。** DDL 本来就不可回滚，运行 SQL 文件那条路径会直说，而不是假装安全。
-- **品牌素材只有一个来源** `asserts/`；`frontend/public/logo.png` 与 `build/appicon.png` 都是 `just icons` 生成的副本。
+- **品牌素材只有一个来源** `asserts/`；`frontend/public/logo.png` 与 `build/appicon.png` 都是 `just icons` 生成的副本，介绍页里那几个引擎标志是 `docs/engine/` 里的副本，CI 逐个逐字节对比。
 
 ## 测试
 
@@ -139,10 +139,8 @@ scripts/                 version.mjs、package.mjs、i18n.mjs、docs-check.mjs�
 just test                        # go test ./...
 npm --prefix frontend run build  # tsc --noEmit + vite build
 node scripts/i18n.mjs verify     # 译文与英文原文对得上
-node scripts/docs-check.mjs      # 介绍页的文案、截图与相对路径
+node scripts/docs-check.mjs      # 介绍页的文案、截图，以及不外跑的相对路径
 node scripts/readme-check.mjs    # 三份 README：结构一致、链接、截图与下载文件名一致
-bash scripts/pages-build.sh _site          # 拼出 GitHub Pages 会发布的那份副本
-node scripts/docs-check.mjs --site _site # …再检查这份副本里的引用没跑出站点
 ```
 
 Go 测试不需要 cgo，也不需要起任何服务容器 —— SQLite 是纯 Go 的。MongoDB、TiDB、Doris 的集成测试在不给它服务器地址时会自己跳过：
@@ -167,11 +165,9 @@ just notes v0.2.0   # 预览某个标签的 release message
 
 ## 介绍页
 
-[`docs/index.html`](docs/index.html) 是一张静态介绍页：一个 HTML、一个样式表、一个脚本，再加上装着同样三档语言的 `i18n.js`。没有构建步骤，双击就能打开；`docs/images/` 里那六张截图同时供轮播和画廊使用。`scripts/docs-check.mjs` 盯着三份词典、截图引用和相对路径别走歪，CI 里也会跑。
+[`docs/index.html`](docs/index.html) 是一张静态介绍页：一个 HTML、一个样式表、一个脚本，一个装着同样三档语言的 `i18n.js`，再加上 `docs/engine/` 里的引擎标志与 `docs/version.json` 里的版本号。它展示的东西都归它自己所有，也没有构建步骤 —— 从仓库里双击打开 `docs/index.html`，或者把这一个目录挂成静态站点，看到的就是发布的页面。`docs/images/` 里那六张截图同时供轮播和画廊使用；`scripts/docs-check.mjs` 盯着三份词典、截图引用与路径别走歪：每条引用都必须留在 `docs/` 里，因为爬出去的那种一旦发布就是 404。CI 里也会跑。
 
-同一张页面也作为项目主页发布：<https://freewu.github.io/db-manager/>，由 [`.github/workflows/pages.yml`](.github/workflows/pages.yml) 负责。项目站点挂在子路径下，页面里那些 `../asserts/…`、`../wails.json` 引用会爬出站点根目录，所以 `scripts/pages-build.sh` 会拼出一份发布副本，把品牌素材和版本清单放到页面旁边；上传前由 `node scripts/docs-check.mjs --site _site` 检查这份副本。CI 里也会拼一遍，好让「引用跑到站点外面」这种事在 PR 阶段就被发现，而不是等上线之后。
-
-只需启用一次：**Settings → Pages → Build and deployment → Source 选 GitHub Actions**。
+同一个目录就是项目主页 <https://freewu.github.io/db-manager/>：GitHub 直接拿分支里的 `docs/` 去发布，推上去就算部署，没有东西要构建。[`.github/workflows/pages.yml`](.github/workflows/pages.yml) 只是把字节相同的这一份改走 GitHub Actions 发布，如果哪天把站点来源换成它的话（**Settings → Pages → Build and deployment → Source 选 GitHub Actions**）。
 
 ## 路线图
 

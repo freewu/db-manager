@@ -121,9 +121,9 @@ internal/service/        manager, design, export, compare, changelog, data gener
 internal/config/         JSON stores, the data folder pointer, change log files
 internal/singleinstance/ one copy at a time: the claim, and the request that shows the window
 frontend/src/            React UI: components, lib, i18n, store, styles
-docs/                    the introduction page (static, no build step)
+docs/                    the introduction page (static, published as it stands)
 scripts/                 version.mjs, package.mjs, i18n.mjs, docs-check.mjs,
-                         readme-check.mjs, pages-build.sh, release-notes.sh
+                         readme-check.mjs, release-notes.sh
 ```
 
 Four invariants are worth knowing before changing something:
@@ -131,7 +131,7 @@ Four invariants are worth knowing before changing something:
 - **A table design is a complete target definition, not a diff.** The backend plans it against the live catalog, so preview and save run the same code; an engine limitation becomes a `Plan.Warnings` entry rather than a silent skip.
 - **Every write asks first, then says what it changed.** The statement in the confirmation dialog is the statement that is sent, and the change log records the rows the engine reported.
 - **Nothing runs inside a transaction it cannot honour.** DDL is not rollback-safe and the SQL-file runner says so instead of pretending.
-- **Brand artwork has exactly one source**, `asserts/`; `frontend/public/logo.png` and `build/appicon.png` are copies made by `just icons`.
+- **Brand artwork has exactly one source**, `asserts/`; `frontend/public/logo.png` and `build/appicon.png` are copies made by `just icons`, and the engine marks the introduction page shows are copies in `docs/engine/`. CI compares every one of them byte for byte.
 
 ## Tests
 
@@ -139,10 +139,8 @@ Four invariants are worth knowing before changing something:
 just test                        # go test ./...
 npm --prefix frontend run build  # tsc --noEmit + vite build
 node scripts/i18n.mjs verify     # translations match their English source
-node scripts/docs-check.mjs      # the introduction page, its copy and its screenshots
+node scripts/docs-check.mjs      # the introduction page: copy, screenshots and paths that stay inside docs/
 node scripts/readme-check.mjs    # the three READMEs: same shape, links, screenshots, downloads
-bash scripts/pages-build.sh _site          # assemble the copy the Pages workflow publishes
-node scripts/docs-check.mjs --site _site # …and check that every reference stays inside it
 ```
 
 The Go suite needs no cgo and no service containers — SQLite is pure Go. The MongoDB, TiDB and Doris integration tests skip themselves unless you point them at a server:
@@ -167,11 +165,9 @@ just notes v0.2.0   # preview the release message for a tag
 
 ## Introduction page
 
-[`docs/index.html`](docs/index.html) is a static introduction page: one HTML file, one stylesheet, one script, and an `i18n.js` holding the copy in the same three languages. There is no build step, so it opens straight from disk, and the six screenshots in `docs/images/` drive both the carousel and the gallery. `scripts/docs-check.mjs` keeps the three dictionaries, the screenshot references and the relative paths honest, and CI runs it.
+[`docs/index.html`](docs/index.html) is a static introduction page: one HTML file, one stylesheet, one script, an `i18n.js` holding the copy in the same three languages, plus the engine marks in `docs/engine/` and the version in `docs/version.json`. It owns everything it shows and has no build step, so opening `docs/index.html` from a checkout — or serving that one directory — is the page as published. The six screenshots in `docs/images/` drive both the carousel and the gallery, and `scripts/docs-check.mjs` keeps the three dictionaries, the screenshot references and the paths honest: every reference has to stay inside `docs/`, because one that climbs out of it would 404 once the directory is published. CI runs it.
 
-It is also published as the project site, <https://freewu.github.io/db-manager/>, by [`.github/workflows/pages.yml`](.github/workflows/pages.yml). A project site lives under a sub-path, where the page's `../asserts/…` and `../wails.json` references would climb past the site root, so `scripts/pages-build.sh` assembles a published copy with the brand artwork and the version manifest beside the page — and `node scripts/docs-check.mjs --site _site` checks that copy before it goes up. CI builds it as well, so a reference that escapes the site is caught on the pull request rather than on the live page.
-
-One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+That same directory is the project site, <https://freewu.github.io/db-manager/>: GitHub serves `docs/` from the branch, so a push to it is a deploy and there is nothing to build. [`.github/workflows/pages.yml`](.github/workflows/pages.yml) publishes those very bytes through GitHub Actions instead, if the repository is ever switched to that source (**Settings → Pages → Build and deployment → Source: GitHub Actions**).
 
 ## Roadmap
 

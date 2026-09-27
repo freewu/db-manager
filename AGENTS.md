@@ -141,8 +141,9 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
 | `frontend/package-lock.json` | `version`（顶层与 `packages.""` 各一处） | `npm install` 会跟着 `package.json` 改它，所以也得当成镜像盯着 |
 | `Justfile` | `version := "…"` | `just build` / `just release` 的 ldflags 来源 |
 | `app.go` | `var Version = "…-dev"` | 开发期兜底；发布构建用 ldflags 覆盖 |
+| `docs/version.json` | `version` | 介绍页没有构建步骤、要能单独发布，所以版本号得抄一份摆在页面旁边 |
 
-`just check-version`（CI 里也跑）会在五处不一致时报错。
+`just check-version`（CI 里也跑）会在六处不一致时报错。
 **不要手改这些字段**，一律走 `just publish` 或 `node scripts/version.mjs <x.y.z>`
 （`just release` 只读取它，不修改）。
 
@@ -163,19 +164,19 @@ just notes v0.2.0      # tag 还不存在时自动回退到 HEAD
   `node scripts/readme-check.mjs`（CI 里也跑）会比对三份的结构、相对链接、下载文件名，以及
   `docs/images/` 里的每张截图是否三份都展示了 —— 但它只保证「形状一致」，措辞是否准确还得自己看。
   截图表格里的图与标题直接沿用 `docs/images/` 与介绍页的 `shot.*.title`，换图或改标题时两边一起改。
-- **介绍页 `docs/` 有两副面孔：仓库里那份，和发到 GitHub Pages 的那份。** 仓库里那份是按「从仓库根目录
-  提供服务、或者直接双击打开」写的，所以引擎图标与版本清单写成 `../asserts/icon/…`、`../wails.json`；
-  而项目站点在子路径下（<https://freewu.github.io/db-manager/>），`../` 会直接爬出站点根目录。
-  因此 `scripts/pages-build.sh` 会把 `docs/` 复制一份、把 `asserts/` 与 `wails.json` 摆到页面旁边、
-  再抹掉那两处前缀，`.github/workflows/pages.yml` 发的是这份副本（CI 里也会拼一遍）。
-  **新增一个 `../` 引用就同时改这个脚本**，否则线上就是 404；`node scripts/docs-check.mjs --site _site`
-  （在 `_site` 上跑）会抓住漏改。页面上不要再出现指向仓库里 markdown 的相对链接 —— README 那类
-  一律写成 GitHub 绝对地址。启用 Pages 只需一次：Settings → Pages → Source 选 GitHub Actions
-  （`configure-pages` 想代为开启需要非 `GITHUB_TOKEN` 的令牌，所以这一步得手工做一次）。
+- **介绍页 `docs/` 必须自包含，因为它就是发出去的那一份。** 页面没有构建步骤，GitHub 直接拿分支里的
+  `docs/` 当站点发（<https://freewu.github.io/db-manager/>），`.github/workflows/pages.yml` 只是把
+  字节相同的这一份改走 GitHub Actions 发。所以它引用的东西都得在 `docs/` 里：引擎标志在
+  `docs/engine/`（`asserts/icon/` 的副本），版本号在 `docs/version.json`（`wails.json` 的镜像，由
+  `scripts/version.mjs` 同步）。**不要写 `../` 引用** —— 从仓库里看是通的，一发布就是 404；
+  `node scripts/docs-check.mjs`（CI 里也跑）会把「跑出 `docs/` 的引用」当成错误抓出来。页面上也不要
+  出现指向仓库里 markdown 的相对链接 —— README 那类一律写成 GitHub 绝对地址。
 - **品牌素材唯一来源是 `asserts/`**（注意目录名就是 `asserts`，不是 `assets`，不要"顺手改正"）。
   `frontend/public/logo.png`、`build/appicon.png` 与 `docs/logo.png` 是它的副本，由 `just icons` 生成；
   `build/windows/icon.ico` 被 gitignore —— Wails 只在它**不存在**时才由 `appicon.png` 重新生成，
   所以换了 logo 必须删掉它。CI 会用 `cmp` 检查三份副本是否漂移。
+  介绍页要展示的引擎图标再加一份 `docs/engine/` 的副本（`asserts/icon/` 的副本，`cp` 一份就行）；
+  CI 的 “Engine marks are in sync” 会逐个 `cmp`，漏了或写错了都会红。
   新的引擎图标放 `asserts/icon/`，在 `frontend/src/lib/assets.ts` 注册（`@asserts` 别名指向该目录）。
 - **主题色 `#36ab60` 写在两处，必须同步**：`frontend/src/App.tsx` 的 `colorPrimary`，
   与 `frontend/src/styles/global.css` 的 `--dm-accent*`。
@@ -284,13 +285,13 @@ main.go                 入口：单实例 claim、embed frontend/dist、窗口�
 scripts/version.mjs     版本号同步 / 校验（wails.json 是权威值）
 scripts/package.mjs     本地打包：把 build/bin 的产物归档到 release/ + checksums.txt
 scripts/release-notes.sh 生成 GitHub Release message
-scripts/docs-check.mjs  校验 docs/ 介绍页的词典、截图引用与相对路径
-                        （`--site <目录>` 改校验 Pages 发布出来的那份副本）
+scripts/docs-check.mjs  校验 docs/ 介绍页的词典、截图引用与路径（引用必须留在 docs/ 里）
 scripts/readme-check.mjs 校验三份 README 的结构、相对链接、截图与下载文件名
-scripts/pages-build.sh  拼出 GitHub Pages 的发布目录（默认 _site）
 README.md               英文主文档；README_CN.md / README_TC.md 是简繁镜像（三份同改）
-docs/                   介绍页（静态、无构建步骤），也是 Pages 的源
+docs/                   介绍页（静态、无构建步骤），原样发布，也是 Pages 的源
 docs/logo.png           介绍页自己的 logo（`asserts/logo.png` 的副本，`just icons` 同步）
+docs/engine/*.png       介绍页展示的引擎标志（`asserts/icon/` 的副本，CI 逐个 cmp）
+docs/version.json       介绍页上的版本号（`wails.json` 的镜像，`version.mjs` 同步）
 docs/images/            六张截图（README 截图表格、轮播与画廊共用）
 asserts/                品牌素材唯一来源（logo.png、icon/*.png）
 build/                  appicon.png、windows/darwin 打包资源（icon.ico 已 gitignore）

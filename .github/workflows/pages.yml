@@ -4,19 +4,20 @@ name: Pages
 #
 #   https://freewu.github.io/db-manager/
 #
-# The same page is also served straight out of the repository (open
-# docs/index.html, or point any static server at the repository root), which is
-# why it refers to the engine artwork and the version manifest as
-# `../asserts/icon/…` and `../wails.json`. A project site lives under a
-# sub-path, so `../` there climbs past the site root — so
-# `scripts/pages-build.sh` republishes the page into a directory of its own,
-# with those files copied next to it and the paths rewritten, and
-# `node scripts/docs-check.mjs --site` checks the result.
+# The page is plain HTML with no build step, and it owns everything it shows:
+# the engine marks live in docs/engine/ and the version it prints in
+# docs/version.json. So what gets published is `docs/` exactly as committed —
+# which is also why the same directory works when it is opened from a checkout.
 #
-# Enabling it once: Settings → Pages → Build and deployment → Source:
-# "GitHub Actions". Nothing here can do it for the repository — the
-# `configure-pages` action needs a token other than GITHUB_TOKEN for that — so
-# until it is switched on, the build job stops at that step.
+# A workflow is not what makes it work: with Settings → Pages → Source set to
+# "Deploy from a branch" and the folder set to `/docs`, GitHub builds and serves
+# the directory on every push to it. This workflow is the other source "GitHub
+# Actions", publishing the same bytes; keep the two from disagreeing by never
+# publishing anything that is not in `docs/`. Enabling it once: Settings → Pages
+# → Build and deployment → Source: "GitHub Actions". Nothing here can do it for
+# the repository — the `configure-pages` action needs a token other than
+# GITHUB_TOKEN for that — so until it is switched on, the build job stops at
+# that step.
 
 on:
   push:
@@ -25,8 +26,8 @@ on:
       - 'docs/**'
       - 'asserts/**'
       - 'wails.json'
+      - 'scripts/version.mjs'
       - 'scripts/docs-check.mjs'
-      - 'scripts/pages-build.sh'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
@@ -53,20 +54,11 @@ jobs:
         with:
           node-version: '24'
 
-      # Fail before publishing rather than after: a language that lost a key or
-      # a screenshot that was renamed should never reach the site.
+      # Fail before publishing rather than after: a language that lost a key, a
+      # screenshot that was renamed, or a reference that escapes docs/ should
+      # never reach the site.
       - name: The site is consistent
         run: node scripts/docs-check.mjs
-
-      # `docs/` is the page as the repository keeps it; what a browser gets is
-      # the directory `scripts/pages-build.sh` assembles (see its header for
-      # why the `../` references have to be rewritten). It counts the files it
-      # wrote, so an empty `docs/` cannot be published quietly.
-      - name: Assemble the published directory
-        run: bash scripts/pages-build.sh _site
-
-      - name: The published directory is self-contained
-        run: node scripts/docs-check.mjs --site _site
 
       - uses: actions/configure-pages@v5
 
@@ -74,7 +66,7 @@ jobs:
       # this action drops dotfiles, so nothing here may rely on a `.nojekyll`.
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: _site
+          path: docs
 
   deploy:
     name: Publish

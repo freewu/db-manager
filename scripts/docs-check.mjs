@@ -3,17 +3,17 @@
 // Check the introduction site in docs/.
 //
 //   node scripts/docs-check.mjs
-//   node scripts/docs-check.mjs --site _site
 //
-// The site is four static files (index.html, site.css, i18n.js, site.js) with
-// no build step, so nothing else would notice a language that lost a key, a
-// `data-i18n` pointing at a key that no longer exists, or a screenshot that was
-// renamed. This script is that notice: it fails, with the list of problems, in
-// CI and before a commit.
+// The site is a handful of static files (index.html, site.css, i18n.js,
+// site.js, version.json) with no build step, so nothing else would notice a
+// language that lost a key, a `data-i18n` pointing at a key that no longer
+// exists, or a screenshot that was renamed. This script is that notice: it
+// fails, with the list of problems, in CI and before a commit.
 //
-// `--site <directory>` checks the other shape of the same site: the directory
-// the Pages workflow publishes, where the page sits at the site root. See the
-// comment above that block.
+// `docs/` is what gets published, and it is also what you get by opening
+// docs/index.html — so every reference it makes has to stay inside it. A `../`
+// reference would work from a checkout and 404 once the directory is published,
+// which is why one is a failure here rather than a path to resolve.
 //
 // Only the Node standard library is used, so it runs anywhere `node` does.
 
@@ -49,7 +49,7 @@ function report(label, summary) {
 /**
  * Every reference to a local file in a document, as written: `src`/`href`
  * attributes, `url(…)` in a stylesheet, and single-quoted strings that name a
- * file (`fetch('wails.json')`). Absolute URLs, fragments and data URIs are none
+ * file (`fetch('version.json')`). Absolute URLs, fragments and data URIs are none
  * of our business. Quoted *double* strings are left alone: they are what an
  * attribute value already looks like, and reporting those twice would only
  * make the list harder to read.
@@ -62,70 +62,6 @@ function localRefs(text) {
       (m) => m[1],
     ),
   ].filter((url) => url && !/^(https?:|\/\/|#|mailto:|data:)/.test(url))
-}
-
-/** Every file below a directory, so a published site can be counted. */
-function filesIn(dir, list = []) {
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) filesIn(full, list)
-    else list.push(full)
-  }
-  return list
-}
-
-/* ----------------------------------------------------------- published site */
-
-// The Pages workflow publishes `docs/` as the project site. The same page is
-// also served straight from the repository root, where `../asserts/icon/…` and
-// `../wails.json` land in the repository — but on a project site, which lives
-// under a sub-path, `../` climbs past the site and 404s. So the workflow copies
-// the engine artwork and the version manifest next to the page and rewrites
-// those two prefixes; this checks that it did, and that nothing else points
-// outside the published directory either.
-
-const siteFlag = process.argv.indexOf('--site')
-if (siteFlag !== -1) {
-  const given = process.argv[siteFlag + 1]
-  if (!given || !existsSync(given)) {
-    console.error('usage: node scripts/docs-check.mjs --site <directory>')
-    process.exit(1)
-  }
-  const dir = resolve(given)
-  let checked = 0
-
-  const page = join(dir, 'index.html')
-  if (!existsSync(page)) {
-    fail(`${given}/index.html is missing`)
-  } else {
-    const published = [
-      ['index.html', read(page)],
-      ...['site.css', 'site.js']
-        .filter((name) => existsSync(join(dir, name)))
-        .map((name) => [name, read(join(dir, name))]),
-    ]
-    for (const [name, text] of published) {
-      for (const url of new Set(localRefs(text))) {
-        checked += 1
-        if (url.startsWith('../')) fail(`${name} points outside the site: ${url}`)
-        else if (!existsSync(join(dir, url.split('#')[0]))) {
-          fail(`${name} points at ${url}, which was not published`)
-        }
-      }
-    }
-  }
-
-  // The two things the page reaches with `../` in the repository, and which the
-  // workflow therefore has to lift next to it: the engine artwork and the
-  // version manifest.
-  for (const needed of ['asserts', 'wails.json']) {
-    if (!existsSync(join(dir, needed))) fail(`${needed} was not copied next to the page`)
-  }
-
-  report('site', `${filesIn(dir).length} files, ${checked} references all inside the directory`)
-  // The published directory is not the repository's docs/; the checks below
-  // are about the latter, and this run is done.
-  process.exit(0)
 }
 
 /* ------------------------------------------------------------ dictionaries */
@@ -254,10 +190,16 @@ for (const [name, text] of documents) {
   for (const url of localRefs(text)) {
     if (referenced.has(url)) continue
     referenced.add(url)
-    // The page is served from the repository root, so `../asserts/icon/…`
-    // leaves docs/ and lands in the repository — which is where it lives.
-    const target = url.startsWith('../') ? join(root, url.slice(3)) : join(docs, url.split('#')[0])
-    if (!existsSync(target)) fail(`${name} points at ${url}, which does not exist`)
+    // Everything the page needs is beside it — the engine marks in engine/, the
+    // screenshots in images/, the version in version.json — so a reference that
+    // climbs out of docs/ is a file the published site would not have.
+    if (url.startsWith('../')) {
+      fail(`${name} points outside docs/: ${url}`)
+      continue
+    }
+    if (!existsSync(join(docs, url.split('#')[0]))) {
+      fail(`${name} points at ${url}, which does not exist`)
+    }
   }
 }
 
@@ -266,5 +208,5 @@ for (const [name, text] of documents) {
 report(
   'docs',
   `${baseKeys.length} keys in ${languages.length} languages, ` +
-    `${shotIds.length} screenshots, ${referenced.size} files referenced`,
+    `${shotIds.length} screenshots, ${referenced.size} references, all inside docs/`,
 )

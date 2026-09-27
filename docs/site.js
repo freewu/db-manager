@@ -406,21 +406,23 @@
 
   /* ------------------------------------------------------------- version -- */
 
-  // The product version lives in wails.json, the single source of truth for it.
-  // Read at run time so the site never needs regenerating for a release; when
-  // the file is not reachable (file://, or a host that only serves docs/) the
+  // The product version lives in wails.json, the single source of truth for it;
+  // docs/version.json is the copy this page reads, so that the directory can be
+  // published — or opened — on its own. scripts/version.mjs writes it along with
+  // the other mirrors. Read at run time so the site never needs regenerating for
+  // a release; when the file is not reachable (opened as a file:// page, say) the
   // badge is simply left out instead of showing a stale number.
   function loadVersion() {
     var badge = document.querySelector('[data-version]')
     if (!badge) return
     if (window.location.protocol === 'file:' || typeof window.fetch !== 'function') return
     window
-      .fetch('../wails.json', { cache: 'no-store' })
+      .fetch('version.json', { cache: 'no-store' })
       .then(function (response) {
         return response.ok ? response.json() : null
       })
       .then(function (data) {
-        var version = data && data.info && data.info.productVersion
+        var version = data && data.version
         if (!version) return
         badge.textContent = 'v' + version
         badge.hidden = false
